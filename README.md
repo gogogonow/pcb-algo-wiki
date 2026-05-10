@@ -1,75 +1,72 @@
-# 功放PCB单层自动布局布线算法 v2
+# 功放PCB单层自动布局布线算法 v3
 
-> 固定尺寸微带线 + **固定路由边** + **大量并联RLC接地** | 高密度 RLC | 无交叉硬约束
+> 固定微带线 + 灵活走线 | 拓扑分裂结构 | 大量并联RLC shunt接地 | 无交叉硬约束
 
 ---
 
-## 总体架构
+## 核心改进（v2 → v3）
 
-**迭代协同 v2（增强版）**：
+**约束分离原则**：SA 能量函数极简化，所有硬约束全部移交给 CP-SAT。
+
+| v2 问题 | v3 解决方案 |
+|---------|-----------|
+| 6个参数相互耦合 | **SA只保留3个物理参数**（HPWL+边界+热） |
+| β·C_cross 是软惩罚，可能违反硬约束 | **删除，改用 CP-SAT AddNoOverlap（强制）** |
+| ε·C_congestion 与HPWL反向耦合 | **删除，改用 CP-SAT AddCumulative（强制）** |
+| ζ·C_ground 量纲不一致 | **删除，改用 CP-SAT AddCumulative（强制）** |
+
+---
+
+## v3 架构
 
 ```
-Placement SA（增强能量函数） ⇄ Routing CP-SAT（增强约束）
-         ↑ 反哺冲突约束            ↓ 报告拥塞
+Placement SA（极简化能量函数）：
+E = α·HPWL + γ·C_boundary + δ·C_thermal
+
+Routing CP-SAT（强制约束）：
+· AddCircuit（连通性）
+· AddLinearExpression（目标长度）
+· AddNoOverlap（无交叉）← 删除SA的C_cross
+· AddCumulative（过孔密度）← 删除SA的C_congestion/ζ
+· occupied_cells（预布线障碍）
 ```
 
 详见 [ALGORITHM-OVERVIEW.md](ALGORITHM-OVERVIEW.md)
 
 ---
 
-## 场景扩展
+## YAML Schema（拓扑分裂对齐）
 
-| 边类型 | CP-SAT 处理 |
-|--------|------------|
-| `fixed_microstrip` | `Var.SetValue(1)`，不参与求解 |
-| `fixed_route` | 转为 `occupied_cells` 集合，灵活边禁止进入 |
-| `flexible` | 正常 CP-SAT 求解 |
-| `ground_branch` | 与灵活走线同等处理，**含 NoOverlap** |
-| `via_to_ground` | 计入 `AddCumulative` 容量约束 |
+```yaml
+nodes:
+  node_shunt_tap_001:
+    type: "component_pad_junction"   # RLC吸附点
+    parent_edge: "tl_main"
+    position_along_parent: 0.4
 
----
+edges:
+  tl_main:
+    type: "microstrip_parent"       # 父边（逻辑分组）
+    children: [part1, part2, part3]
 
-## 能量函数（Placement SA）
+  part1: { type: "microstrip", parent: "tl_main", ... }
+  part2: { type: "microstrip", parent: "tl_main", ... }
 
+  c_shunt_001:
+    type: "lumped_capacitor"         # RLC shunt
+    connections: [node_shunt_tap_001, GND_REF]
+    shunt_tap_of: "tl_main"          # 吸附到父边
 ```
-E = α·HPWL + β·C_cross + γ·C_boundary + δ·C_thermal + ε·C_congestion + ζ·C_ground_congestion
-                                                                                ↑
-                                                                          新增：接地拥塞
-```
-
----
-
-## 迭代协同 v2 关键增强
-
-| 增强项 | 实现方式 |
-|--------|---------|
-| 固定路由边（预布线） | `occupied_cells` 集合，灵活边 `SetValue(0)` 禁止进入 |
-| 接地分支 | 与灵活走线同等处理，`AddNoOverlap` 含信号走线 |
-| 星型接地板 | 独立zone，`AddCumulative(via_vars, capacity=N)` |
-| 接地拥塞反哺 | `C_ground_congestion` 加入能量函数 |
-| 自适应区域分解 | 探测拥塞热点 → 自动细分该区域 |
-
----
-
-## 典型Doherty功放量化
-
-| 参数 | 典型值 |
-|------|--------|
-| RLC shunt总数 | 23-42 个 |
-| 接地过孔 | ~40 个汇聚到 GND 区域 |
-| 每子区域平均接地孔（4×4分解） | ~2.5 个 |
-| 变量规模 | ~10⁶ |
-| CP-SAT求解时间 | 30s内 |
 
 ---
 
 ## 文件结构
 
 ```
-├── ALGORITHM-OVERVIEW.md          # 总体架构 v2（推荐先读）
+├── ALGORITHM-OVERVIEW.md          # 总体架构 v3（推荐先读）
 ├── concepts/
-│   ├── placement-problem-formulation.md   # 布局建模
-│   ├── routing-algorithm-comparison.md    # 布线 CP-SAT 实现
-│   └── microstrip-topology-matching.md   # 微带线拓扑 + mitered
+│   ├── placement-problem-formulation.md
+│   ├── routing-algorithm-comparison.md
+│   └── microstrip-topology-matching.md
 └── README.md
 ```

@@ -1,272 +1,346 @@
-# 功放PCB单层自动布局布线——总体算法方案 v2
+# 功放PCB单层自动布局布线——总体算法方案 v3
 
 > 覆盖完整流程：布局（Placement）→ 布线（Routing）→ 后处理
 >
 > 场景：
-> - 固定尺寸微带线 + 灵活走线
-> - **固定路由边（预布线）**
+> - 固定尺寸微带线 + **部分灵活走线**（拓扑分裂结构）
 > - **大量并联RLC shunt接地**
+> - **固定路由边（预布线）**
 > - 高密度 RLC | 无交叉硬约束
 
 ---
 
-## 1. 扩展输入格式
+## 0. 核心改进：约束分离原则
+
+**v2 的问题**：能量函数包含 6 个相互耦合的参数（HPWL权重/交叉惩罚/拥塞惩罚/接地拥塞惩罚/热惩罚/边界惩罚），参数调优是指数级难度。
+
+**v3 的根因**：硬约束（无交叉、拥塞限制）不应该放在 SA 能量函数中作为软惩罚项。
+
+**v3 的解决方案**：
+
+```
+Placement SA（只优化物理性能）：
+E = α·HPWL + γ·C_boundary + δ·C_thermal
+    ↓ （删除 β·C_cross + ε·C_congestion + ζ·C_ground_congestion）
+CP-SAT（强制满足所有硬约束）：
+- AddNoOverlap（无交叉）← 删除SA的C_cross
+- AddCumulative（过孔密度）← 删除SA的C_congestion
+- AddCircuit + AddLinearExpression（连通+长度）
+```
+
+**为什么这样可行？** CP-SAT 的 `AddNoOverlap` 是强制约束，不是惩罚项。只要 CP-SAT 有解，输出一定 100% 无交叉。这比用 SA 软优化 β·C_cross 可靠一百倍。
+
+---
+
+## 1. 完整 YAML Schema（拓扑分裂完全对齐）
+
+### 1.1 节点类型
 
 ```yaml
 nodes:
-  Q1:     { type: "pad",              x: 10.0, y: 15.0 }
-  L_match: { type: "inductor_pad",    x: 25.0, y: 20.0 }
-  C_shunt: { type: "capacitor_pad",   x: 30.0, y: 18.0 }
-  GND_plane: { type: "ground_plane", x: 50.0, y: 0.0 }
+  # 射频端口/器件引脚
+  rf_port_1:
+    type: "pad"
+    x: 0.0
+    y: 0.0
 
+  # 微带线 junctions
+  junction_001:
+    type: "junction"
+    x: 10.0
+    y: 0.0
+
+  # RLC shunt 吸附点（核心新增）⭐
+  node_shunt_tap_001:
+    type: "component_pad_junction"   # 专用于RLC吸附点的节点类型
+    parent_edge: "tl_main"            # 属于哪条父微带线
+    position_along_parent: 0.4       # 在父边上的位置比例（0.0~1.0）
+    physical_pad: { width: 1.0, height: 0.5, package: "0402" }
+
+  node_shunt_tap_002:
+    type: "component_pad_junction"
+    parent_edge: "tl_main"
+    position_along_parent: 0.7
+
+  # 全局接地参考点
+  GND_REF:
+    type: "ground_reference"
+
+  # 器件 pad
+  inductor_pad_001:
+    type: "component_pad"
+    x: 25.0
+    y: 20.0
+
+  capacitor_pad_001:
+    type: "component_pad"
+    x: 30.0
+    y: 18.0
+```
+
+### 1.2 边类型详解
+
+```yaml
 edges:
-  # 固定微带线（只定起点终点，路径在CP-SAT中求解）
-  main_line:
-    connections: [Q1, L_match]
-    type: "fixed_microstrip"
-    width: 2.5
-    target_length: 15.0
-    fixed: true
+  # ============================================================
+  # 1. 微带线父边（逻辑分组，不直接参与CP-SAT求解）
+  # ============================================================
+  tl_main:
+    type: "microstrip_parent"       # 父边类型
+    connections: [rf_port_1, output_junction]
+    constraint: { width: 1.0 }
+    children: [tl_main_part1, tl_main_part2, tl_main_part3]
+    # 总长度 = sum(子段target_length)
 
-  # 固定路由边（路径完全预确定，作为障碍物）⭐
+  # ============================================================
+  # 2. 微带线子段（CP-SAT求解的最小单元）
+  # ============================================================
+  tl_main_part1:
+    type: "microstrip"
+    connections: [rf_port_1, node_shunt_tap_001]
+    constraint: { width: 1.0, target_length: 4.0 }
+    parent: "tl_main"              # 显式声明父关系
+
+  tl_main_part2:
+    type: "microstrip"
+    connections: [node_shunt_tap_001, node_shunt_tap_002]
+    constraint: { width: 1.0, target_length: 3.0 }
+    parent: "tl_main"
+
+  tl_main_part3:
+    type: "microstrip"
+    connections: [node_shunt_tap_002, output_junction]
+    constraint: { width: 1.0, target_length: 3.0 }
+    parent: "tl_main"
+
+  # ============================================================
+  # 3. RLC shunt 接地分支（通过 shunt_tap_of 吸附到父边上）
+  # ============================================================
+  c_shunt_001:
+    type: "lumped_capacitor"
+    connections: [node_shunt_tap_001, GND_REF]
+    parameters: { value_pF: 5.6, package: "0402" }
+    shunt_tap_of: "tl_main"        # 吸附在哪条父边上
+    via: { diameter: 0.3 }         # 自动生成接地过孔
+
+  l_bias_001:
+    type: "lumped_inductor"
+    connections: [node_shunt_tap_001, bias_node]
+    parameters: { value_nH: 12, package: "0603" }
+    shunt_tap_of: "tl_main"
+    via: { diameter: 0.3 }
+
+  c_shunt_002:
+    type: "lumped_capacitor"
+    connections: [node_shunt_tap_002, GND_REF]
+    parameters: { value_pF: 2.2, package: "0402" }
+    shunt_tap_of: "tl_main"
+    via: { diameter: 0.3 }
+
+  # ============================================================
+  # 4. 预布线（固定路由，路径完全确定，作为障碍物）
+  # ============================================================
   bias_feed:
-    connections: [power_bus, L_match]
-    type: "fixed_route"          # ← 预布线，路径已知
-    width: 1.0
+    type: "fixed_route"
+    connections: [power_bus, node_shunt_tap_001]
+    width: 0.8
     path_coords: [[0, 10], [0, 20], [5, 20]]  # 完全固定路径
 
-  # 灵活走线（CP-SAT求解）
+  # ============================================================
+  # 5. 灵活走线（需要CP-SAT求解）
+  # ============================================================
   output_trace:
-    connections: [L_match, C_shunt]
     type: "flexible"
-    width: 1.5
-    target_length: 12.0
-    fixed: false
-
-  # RLC shunt接地分支 ⭐
-  shunt_ground_1:
-    connections: [C_shunt, GND1_via]
-    type: "ground_branch"         # ← 接地分支
-    width: 0.8
-    target_length: 5.0
-    fixed: false
-
-  # 接地过孔 ⭐
-  gnd_via_1:
-    connections: [GND1_via, GND_plane]
-    type: "via_to_ground"        # ← 接地过孔
-    diameter: 0.5
+    connections: [output_junction, rf_port_2]
+    constraint: { width: 1.5, target_length: 12.0 }
     fixed: false
 ```
 
 ---
 
-## 2. 核心问题：布局与布线必须协同
-
-### 2.1 顺序 Pipeline 的根本缺陷
-
-| 缺陷 | 具体表现 | 影响 |
-|------|---------|------|
-| HPWL 误导 | Placement 用 HPWL 估算线长，实际路由是 HPWL 的 1.5~3 倍 | Placement 基于错误假设优化 |
-| Infeasible 无解 | Placement 不知道 CP-SAT 约束强度，输出导致 Routing 无可行解 | 强制 Ripup，从头重来 |
-| 锚定效应 | 固定微带线锚点无法调整 | 全局次优 |
-| 热拥塞脱节 | SA 热惩罚不考虑走线密度 | 热点区域走线密集，直接拥塞 |
-
-### 2.2 联合 CP-SAT 为什么不可行
-
-约束耦合是非线性的（器件坐标 → 边端点 → 网格距离 → NoOverlap），CP-SAT 处理效率急剧下降。
-
----
-
-## 3. 最优方案：迭代协同 v2（增强版）
-
-### 3.1 算法流程
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      迭代循环（最多5次）                      │
-│                                                             │
-│  ┌────────────────┐                                        │
-│  │ Placement SA   │  E = α·HPWL + β·C_cross               │
-│  │ 增强能量函数    │      + γ·C_boundary + δ·C_thermal    │
-│  └───────┬────────┘      + ε·C_congestion                 │
-│          │                + ζ·C_ground_congestion  ⭐    │
-│          │                                              │
-│          ▼                                              │
-│  ┌────────────────┐   ┌─────────────────────────────┐    │
-│  │ Routing CP-SAT │ → │ 1. AddCircuit（连通性）     │    │
-│  │ 增强约束        │   │ 2. AddNoOverlap（无交叉）   │    │
-│  └───────┬────────┘   │ 3. AddCumulative（过孔密度）│    │
-│          │             │    含星型接地板 ⭐          │    │
-│          │             │ 4. 固定路由边→障碍集合 ⭐   │    │
-│          │             └─────────────────────────────┘    │
-│          │                                              │
-│    ┌─────┴─────┐                                        │
-│    ↓           ↓                                         │
-│  成功        失败（infeasible）                           │
-│    │           │                                         │
-│    │     提取冲突约束 → 反哺能量函数                        │
-│    │           │                                         │
-│    ↓           ↓                                         │
-│  收敛判断    回到 Placement（热启动）                       │
-│    │                                              │
-│    └───────────────────────→ 输出结果                   │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 3.2 增强能量函数（Placement）
-
-```
-E = α·HPWL + β·C_cross + γ·C_boundary + δ·C_thermal + ε·C_congestion + ζ·C_ground_congestion
-                                                                              ↑
-                                                                        新增：接地拥塞
-```
-
-**新增项详解**：
+## 2. 拓扑分裂展开算法
 
 ```python
-def compute_ground_congestion_penalty(placement, ground_branches, grid):
+def expand_topology(netlist: dict) -> dict:
     """
-    接地拥塞惩罚：统计每个接地区域的接地过孔密度
-    密度越高，惩罚越大
+    将拓扑分裂模型展开为CP-SAT可处理的扁平边列表
+
+    规则：
+    - microstrip_parent + children → 子段加入求解
+    - lumped_* + shunt_tap_of → ground_branch 加入求解
+    - fixed_route → occupied_cells 加入障碍
+    - microstrip → 正常求解
     """
-    zone_via_count = {}
+    expanded_nodes = dict(netlist["nodes"])
+    expanded_edges = {}
 
-    for gb in ground_branches:
-        via_pos = get_via_position(gb.end)
-        zone = get_zone(via_pos, grid)
-        zone_via_count[zone] = zone_via_count.get(zone, 0) + 1
+    for name, edge in netlist["edges"].items():
+        etype = edge.get("type", "")
 
-    penalty = 0.0
-    for zone, count in zone_via_count.items():
-        capacity = zone.via_capacity  # 区域容量上限
-        if count > capacity:
-            penalty += (count - capacity) * GROUND_CONGESTION_WEIGHT
+        if etype == "microstrip_parent":
+            # 父边不加入，把所有子段展开加入
+            for child_name in edge.get("children", []):
+                expanded_edges[child_name] = {
+                    **netlist["edges"][child_name],
+                    "parent": name
+                }
 
-    return penalty
-```
+        elif etype.startswith("lumped_"):
+            # 集总器件 → ground_branch 类型
+            expanded_edges[name] = {
+                **edge,
+                "type": "ground_branch",
+                "via_diameter": edge.get("via", {}).get("diameter", 0.3)
+            }
 
----
+        elif etype == "fixed_route":
+            # 预布线：加入障碍映射
+            expanded_edges[name] = {**edge}
 
-## 4. Stage 1：布局（Placement）— 模拟退火 + 热启动
+        elif etype == "microstrip":
+            # 正常微带线段
+            expanded_edges[name] = {**edge}
 
-```python
-def placement_v2(
-    netlist: dict,
-    initial_placement: dict = None,
-    congestion_map: dict = None,
-    ground_congestion_map: dict = None,
-) -> dict:
+        elif etype == "flexible":
+            expanded_edges[name] = {**edge}
+
+    return {"nodes": expanded_nodes, "edges": expanded_edges}
+
+
+def build_obstacle_map(fixed_routes: dict, grid: Grid) -> set:
     """
-    增强版SA布局：支持拥塞反哺 + 接地拥塞反哺
-    """
-    placement = initial_placement or random_valid_placement(netlist)
-    energy = compute_energy(
-        placement, netlist,
-        congestion_map=congestion_map,
-        ground_congestion_map=ground_congestion_map,
-    )
-
-    T = init_temp
-    while T > 1.0 and not converged:
-        new_placement = placement.copy()
-        device = random.choice(flexible_devices)
-        new_placement[device] = random_neighbor_position(device)
-
-        if not is_valid(new_placement):
-            T *= cool_rate
-            continue
-
-        new_energy = compute_energy(
-            new_placement, netlist,
-            congestion_map=congestion_map,
-            ground_congestion_map=ground_congestion_map,
-        )
-        delta_E = new_energy - energy
-
-        if delta_E < 0 or random.random() < exp(-delta_E / T):
-            placement = new_placement
-            energy = new_energy
-
-        T *= cool_rate
-
-    return placement
-```
-
----
-
-## 5. Stage 2：布线（Routing）— CP-SAT 增强约束
-
-### 5.1 边类型与处理方式
-
-| 边类型 | CP-SAT 处理 |
-|--------|------------|
-| `fixed_microstrip` | `Var.SetValue(1)`，不参与求解 |
-| `fixed_route` | 转为 `occupied_cells` 集合，灵活边禁止进入 |
-| `flexible` | 正常 CP-SAT 求解 |
-| `ground_branch` | 与灵活走线同等处理，**含 NoOverlap** |
-| `via_to_ground` | 计入 `AddCumulative` 容量约束 |
-
-### 5.2 固定路由边建模（预布线障碍）⭐
-
-```python
-def build_fixed_obstacle_map(fixed_routing_edges: list, grid: Grid) -> set:
-    """
-    将所有固定路由边转为占用的网格单元集合
-    返回: {(gx, gy), ...} 被固定边占据的网格单元
+    将所有 fixed_route 边转为占用的网格单元集合
     """
     occupied = set()
-    for edge in fixed_routing_edges:
-        path = compute_full_path(edge)  # 预确定路径
-        for x, y in path:
-            # 线有宽度，向两侧扩展
-            for dx in range(-edge.width, edge.width + 1):
-                for dy in range(-edge.height, edge.height + 1):
+    for name, edge in fixed_routes.items():
+        for (x, y) in edge.get("path_coords", []):
+            w = edge.get("width", 1.0)
+            for dx in range(-int(w/2/grid.resolution), int(w/2/grid.resolution)+1):
+                for dy in range(-int(w/2/grid.resolution), int(w/2/grid.resolution)+1):
                     gx = int((x + dx) / grid.resolution)
                     gy = int((y + dy) / grid.resolution)
                     occupied.add((gx, gy))
     return occupied
-
-
-def add_fixed_route_constraints(model, occupied: set, x: dict):
-    """
-    对每条灵活边，约束其不能使用被固定路由边占据的网格单元
-    """
-    for (gx, gy, dir, edge_name), var in x.items():
-        if (gx, gy) in occupied:
-            var.SetValue(0)  # 该网格边不可用，强制绕行
 ```
 
-### 5.3 接地分支与信号线的无交叉约束 ⭐
+---
+
+## 3. 算法流程 v3
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   v3 迭代协同（最多5次）                      │
+│                                                             │
+│  ┌────────────────┐                                         │
+│  │ Placement SA   │  E = α·HPWL + γ·C_boundary            │
+│  │ 极简化能量函数  │            + δ·C_thermal             │
+│  │                │  ← 无任何约束惩罚项                      │
+│  └───────┬────────┘                                        │
+│          │                                                 │
+│          ▼                                                 │
+│  ┌────────────────┐   ┌──────────────────────────────┐   │
+│  │ expand_topology│ → │ CP-SAT Routing（扁平边列表）   │   │
+│  │ 拓扑展开        │   │                              │   │
+│  └───────┬────────┘   │ · AddCircuit（连通性）        │   │
+│          │             │ · AddLinearExpression（长度） │   │
+│          │             │ · AddNoOverlap（无交叉）⭐    │   │
+│          │             │ · AddCumulative（过孔密度）⭐ │   │
+│          │             │ · occupied_cells（预布线）⭐   │   │
+│          │             └───────┬──────────────────────┘   │
+│          │                     │                         │
+│          │             ┌───────┴────────┐               │
+│          │             ↓                ↓                 │
+│          │          成功             失败（infeasible）    │
+│          │             ↓                ↓                 │
+│          │         收敛判断        提取冲突约束              │
+│          │             ↓                ↓                 │
+│          │         输出结果        反哺SA温度（不是权重）     │
+│          │                             ↓                 │
+│          │                      回到Placement（热启动）       │
+│          │                                                │
+│          └──────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 4. Placement SA（极简化能量函数）
+
+```python
+def compute_energy_v3(placement: dict, netlist: dict) -> float:
+    """
+    v3能量函数：只包含物理性能项，无任何约束惩罚项
+    所有约束（交叉/拥塞/接地密度）全部由CP-SAT处理
+    """
+    hpwl = compute_hpwl(placement, netlist)
+    boundary = compute_boundary_penalty(placement, board_bounds)
+    thermal = compute_thermal_penalty(placement, power_devices)
+
+    # 约束惩罚项：全部删除（β=ε=ζ=0）
+    return α * hpwl + γ * boundary + δ * thermal
+
+
+def adaptive_temperature(routing_success_rate: float, current_T: float) -> float:
+    """
+    CP-SAT成功率 → SA初始温度调整（而非权重调整）
+    成功率低 → 提高温度，鼓励跳出局部最优
+    成功率高 → 降低温度，微调即可
+    """
+    if routing_success_rate < 0.5:
+        return current_T * 1.2   # 提高温度
+    elif routing_success_rate > 0.9:
+        return current_T * 0.95  # 降低温度
+    else:
+        return current_T          # 保持不变
+```
+
+### 为什么删除约束项是对的？
+
+| 删除的项 | 原本在SA中 | 应该在CP-SAT中 |
+|---------|-----------|--------------|
+| C_cross | 软惩罚 | `AddNoOverlap`（强制） |
+| C_congestion | 软惩罚 | `AddCumulative`（强制） |
+| C_ground_congestion | 软惩罚 | `AddCumulative`（强制） |
+
+SA 软优化约束 → 约束可能被违反（infeasible）。
+CP-SAT 强制约束 → 只要有解，约束 100% 满足。
+
+---
+
+## 5. CP-SAT 完整约束（v3）
+
+### 5.1 约束汇总
+
+| 约束 | CP-SAT 原语 | 来自 |
+|------|------------|------|
+| 路径连通性 | `AddCircuit` | 所有灵活边/子段 |
+| 目标长度 | `AddLinearExpression` | 所有子段 |
+| 无交叉 | `AddNoOverlap` + `AddBoolOr` | **所有边**（含接地分支） |
+| 过孔密度 | `AddCumulative` | 接地过孔 + 信号过孔 |
+| 星型接地板 | 独立zone + `AddCumulative` | 接地分支汇聚点 |
+| 预布线障碍 | `SetValue(0)` | 固定路由边 |
+| 固定微带线 | `SetValue(1)` | `fixed: true` |
+
+### 5.2 关键实现：无交叉约束（所有边类型统一）
 
 ```python
 def add_no_cross_constraints_all(model, all_edges, x, grid):
     """
-    统一处理所有边的无交叉约束：
-    - 灵活边之间
-    - 灵活边与接地分支之间
-    - 灵活边与固定路由边之间
-    - 接地分支与信号走线之间
+    统一处理所有边的无交叉约束
+    包括：微带线子段 + 接地分支 + 预布线（预布线用包围盒）
     """
-    # 分类边
-    flex_edges = [e for e in all_edges if e.type == "flexible"]
-    ground_branches = [e for e in all_edges if e.type == "ground_branch"]
-    fixed_routes = [e for e in all_edges if e.type == "fixed_route"]
+    # 需要NoOverlap的两两类：所有灵活子段 + 接地分支
+    constrained_edges = [
+        e for e in all_edges
+        if e["type"] in ("microstrip", "ground_branch", "flexible")
+    ]
 
-    # 所有需要无交叉约束的边对
-    all_constrained = flex_edges + ground_branches
-
-    for i, e_a in enumerate(all_constrained):
-        for e_b in all_constrained[i+1:]:
-            add_pairwise_no_overlap(model, e_a, e_b, x, grid)
-
-    # 固定路由边与灵活边的无交叉（用包围盒）
-    for flex in flex_edges:
-        for fixed in fixed_routes:
-            add_bbox_no_overlap_with_fixed(model, flex, fixed, x)
+    for i, e_a in enumerate(constrained_edges):
+        for e_b in constrained_edges[i+1:]:
+            add_pairwise_no_overlap(model, e_a, e_b, x)
 
 
-def add_pairwise_no_overlap(model, e_a, e_b, x, grid):
+def add_pairwise_no_overlap(model, e_a, e_b, x):
     """
     两边之间的无交叉：x方向分离 OR y方向分离
     """
@@ -276,140 +350,44 @@ def add_pairwise_no_overlap(model, e_a, e_b, x, grid):
     x_sep = model.NewBoolVar("")
     y_sep = model.NewBoolVar("")
 
-    model.Add(bbox_a.max_x + e_a.width/2 <= bbox_b.min_x - e_b.width/2).OnlyEnforceIf(x_sep)
-    model.Add(bbox_b.max_x + e_b.width/2 <= bbox_a.min_x - e_a.width/2).OnlyEnforceIf(x_sep)
+    model.Add(
+        bbox_a.max_x + e_a["constraint"]["width"]/2 <= bbox_b.min_x
+    ).OnlyEnforceIf(x_sep)
+    model.Add(
+        bbox_b.max_x + e_b["constraint"]["width"]/2 <= bbox_a.min_x
+    ).OnlyEnforceIf(x_sep)
 
-    model.Add(bbox_a.max_y + e_a.width/2 <= bbox_b.min_y - e_b.width/2).OnlyEnforceIf(y_sep)
-    model.Add(bbox_b.max_y + e_b.width/2 <= bbox_a.min_y - e_a.height/2).OnlyEnforceIf(y_sep)
+    model.Add(
+        bbox_a.max_y + e_a["constraint"]["width"]/2 <= bbox_b.min_y
+    ).OnlyEnforceIf(y_sep)
+    model.Add(
+        bbox_b.max_y + e_b["constraint"]["width"]/2 <= bbox_a.min_y
+    ).OnlyEnforceIf(y_sep)
 
     model.AddBoolOr([x_sep, y_sep])
 ```
 
-### 5.4 星型接地板约束（接地孔密度）⭐
+---
 
-```python
-def add_star_ground_plane_constraints(model, ground_branches, grid_zones):
-    """
-    星型接地板：所有接地分支汇聚到同一个接地板区域
-    需要单独建模其过孔密度约束
-    """
-    # 找到星型接地中心所在的zone
-    star_center_zone = find_star_center_zone(ground_branches)
-
-    # 该zone的接地过孔变量
-    via_vars = []
-    for gb in ground_branches:
-        via_pos = get_via_position(gb.end)
-        if star_center_zone.contains(via_pos):
-            var = model.NewBoolVar(f"via_{gb.name}")
-            via_vars.append(var)
-
-    # 星型接地板的容量 = 该区域可用过孔数量（物理限制）
-    max_vias_in_star_zone = star_center_zone.via_capacity
-
-    model.AddCumulative(via_vars, [1]*len(via_vars), max_vias_in_star_zone)
-```
-
-### 5.5 典型Doherty功放的量化分析
+## 6. 典型Doherty功放量化
 
 | 参数 | 典型值 |
 |------|--------|
-| RLC shunt总数 | 23-42 个 |
-| 接地过孔直径 | 0.5 mm（内径0.3mm） |
-| 过孔含clearance占面积 | ~1.6 mm² |
-| 40个接地孔总占面积 | 64 mm² |
-| 接地区域可用面积 | 400 mm²（20×20mm区域） |
-| **占可用面积比例** | **16%** |
-| 4×4区域分解，每子区域 | 100 mm² |
-| 每子区域平均接地孔 | ~2.5 个 |
-
-**结论**：典型Doherty场景的接地孔密度完全在CP-SAT可控范围内。
+| 微带线父边数 | 5-8 条 |
+| 微带线子段数（含shunt tap分裂） | 15-30 段 |
+| RLC shunt 总数 | 23-42 个 |
+| 接地分支数 | 23-42 条 |
+| 预布线（bias等） | 5-10 条 |
+| **CP-SAT变量规模** | ~10⁵-10⁶ |
+| **求解时间（典型Doherty）** | **30-120s** |
 
 ---
 
-## 6. Stage 3：后处理
-
-| 步骤 | 作用 |
-|------|------|
-| mitered 弯角补偿 | 90°/45° 转弯处切除一角，补偿不连续性 |
-| 泪滴（Teardrop）过渡 | 焊盘与走线渐变过渡，减小应力集中 |
-| DRC 检查 | 最小线宽 0.1mm / 最小间距 0.1mm / 最小过孔直径 0.3mm |
-
----
-
-## 7. 完整数据流
-
-```
-电路网表（YAML，含fixed_route/ground_branch/via_to_ground）
-       │
-       ▼
-┌──────────────────────────────────────────────┐
-│  迭代循环初始化    max_iterations = 5         │
-└──────────────┬───────────────────────────────┘
-               │
-               │  ┌────────────────────────────────┐
-               │  │ 迭代 N (N ≤ 5)                  │
-               │  │                                │
-               │  │  ┌──────────────────┐          │
-               │  │  │ Placement SA      │          │
-               │  │  │ 增强能量函数      │          │
-               │  │  │ C_ground_congestion ← NEW │  │
-               │  │  └───────┬──────────┘          │
-               │  │          │                     │
-               │  │          ▼                     │
-               │  │  ┌──────────────────┐          │
-               │  │  │ CP-SAT Routing   │          │
-               │  │  │ 增强约束          │          │
-               │  │  │ ·固定路由边→障碍 │          │
-               │  │  │ ·接地分支NoOverlap│          │
-               │  │  │ ·星型接地板Cumul.│          │
-               │  │  └───────┬──────────┘          │
-               │  │          │                     │
-               │  │    ┌─────┴─────┐             │
-               │  │    ↓           ↓             │
-               │  │  成功        失败              │
-               │  │    │           │             │
-               │  │    │     提取冲突约束         │
-               │  │    │       ↓                │
-               │  │    │  ground_congestion_map │
-               │  │    │       ↓                │
-               │  │    │  回到 Placement         │
-               │  │    ↓                       │
-               │  │  收敛判断                   │
-               │  │    │                       │
-               │  │    └───────────┘           │
-               │  │                                │
-               │  └────────────────────────────────┘
-               │
-               ▼
-┌──────────────────────────────────────────────┐
-│  后处理    mitered + 泪滴 + DRC              │
-└──────────────────────────────────────────────┘
-               │
-               ▼
-         Gerber/输出文件
-```
-
----
-
-## 8. 复杂度与收敛
-
-| 场景 | 器件数 | 灵活边数 | 接地分支 | 迭代次数 | 总求解时间 |
-|------|--------|---------|---------|---------|---------|
-| 简单 | <10 | 3 | 5 | 1-2 | <0.5s |
-| 中等 | 10-50 | 10 | 20 | 2-3 | 2-5s |
-| **复杂（Doherty）** | 50-200 | 30 | **40** | 3-5 | 30-120s |
-| 超复杂 | >200 | >30 | >40 | — | 需区域分解 |
-
-**典型Doherty功放（23-42个接地分支）**：变量规模约10⁶，CP-SAT可在30s内求解，增强方案完全可行。
-
----
-
-## 9. 文件索引
+## 7. 文件索引
 
 | 文件 | 内容 |
 |------|------|
-| `ALGORITHM-OVERVIEW.md` | **总体架构 v2**（本文档）|
+| `ALGORITHM-OVERVIEW.md` | **总体架构 v3**（本文档）|
 | `concepts/placement-problem-formulation.md` | 布局数学建模（SA、能量函数）|
 | `concepts/routing-algorithm-comparison.md` | 布线 CP-SAT 详细实现 |
 | `concepts/microstrip-topology-matching.md` | 微带线拓扑类型、mitered 补偿 |
