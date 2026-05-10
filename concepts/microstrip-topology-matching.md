@@ -1,34 +1,80 @@
-# 微带线拓扑与匹配网络自动化综合
+# 微带线拓扑与匹配网络自动化综合（v4）
 
 ## 微带线宽度计算
 
 给定基片参数（介电常数 $\varepsilon_r$、厚度 $h$）和工作频率 $f$，微带线特性阻抗：
 
-$$Z_0 = \frac{60}{\sqrt{\varepsilon_e}} \ln\left(\frac{8h}{W} + \frac{W}{4h}\right), \quad W/h > 1$$
+$$Z_0 = \frac{60}{\sqrt{\varepsilon_e}} \ln\!\Big(\frac{8h}{W} + \frac{W}{4h}\Big),\quad W/h > 1$$
 
-$$Z_0 = \frac{120\pi}{\sqrt{\varepsilon_e} \left[ \frac{W}{h} + 1.393 + 0.667\ln\left(\frac{W}{h} + 1.444\right) \right]}, \quad W/h \leq 1$$
+$$Z_0 = \frac{120\pi}{\sqrt{\varepsilon_e} \big[\frac{W}{h} + 1.393 + 0.667\ln\!\big(\frac{W}{h} + 1.444\big)\big]},\quad W/h \le 1$$
 
-宽度 $W$ 由目标阻抗反算得出，本项目中宽度预先给定，不再优化。
+宽度 $W$ 由目标阻抗反算给出，本项目中宽度（YAML `constraint.width`）预先给定，不再优化。
+
+---
 
 ## 微带拓扑类型
 
 | 类型 | 适用场景 | 描述 |
-|------|----------|------|
+|---|---|---|
 | 直线型 | 短连接 | 最简单，插损最小 |
-| U形 | 需要延长线长 | 两端平行，弯角需mitered补偿 |
-| L形 | 90°转向 | 占用面积小 |
-| T形 | 分支网络 | 一分多结构 |
-| 十字形 | 交叉网络 | 多端口匹配 |
+| U 形 | 需要延长线长 | 两端平行，弯角需 mitered 补偿 |
+| L 形 | 90° 转向 | 占用面积小 |
+| T 形 | 分支网络 | YAML 中通过 `t_junction` 节点表达 |
+| 阶跃阻抗 | 宽—窄过渡 | YAML 中通过 `stepped_impedance` 节点表达，可带 `custom_offset` |
 
-## Mitered弯角补偿
+---
+
+## 边几何：`bend_style`（v4 schema 新增）
+
+每条 RF 边在 `geometry.bend_style` 字段声明拐角风格，由布线后处理器实施：
+
+```yaml
+edges:
+  tl_rf_main:
+    type: "microstrip"
+    geometry: { bend_style: "mitered_45" }
+```
+
+| `bend_style` | 几何处理 |
+|---|---|
+| `square` | 直角，不补偿（仅低频或非射频路径用）|
+| `mitered_45` | 45° 切角，按下式补偿 |
+| `arc` | 圆弧过渡，半径 $R \ge 3W$ |
+
+### Mitered 补偿公式
 
 弯角切除宽度：
 
-$$d = W \cdot mitered\_factor \cdot \sin(\theta/2)$$
+$$d = W \cdot \text{mitered\_factor} \cdot \sin(\theta/2)$$
 
-其中 $mitered\_factor$ 通常取 $0.5 \sim 1.0$，$\theta$ 为转弯角度。
+其中 $\text{mitered\_factor}$ 通常取 $0.5 \sim 1.0$，$\theta$ 为转弯角度。补偿后传输线反射系数显著下降。
 
-补偿后的传输线反射系数显著降低。
+---
+
+## 阶跃阻抗（`stepped_impedance` 节点）
+
+用于宽窄微带过渡。YAML 节点声明：
+
+```yaml
+nodes:
+  node_rf_step:
+    type: "stepped_impedance"
+    connections_rule:
+      alignment_type: "custom_offset"
+      offset_from_center: 0.25     # 偏移量（mm）或归一化比例
+```
+
+### 对齐模式
+
+| `alignment_type` | 几何含义 |
+|---|---|
+| `centerline` | 宽窄段中心线对齐（默认对称跳变）|
+| `edge` | 一侧边缘对齐（避免一侧应力集中）|
+| `custom_offset` | 通过 `offset_from_center` 指定相对中心线的物理偏移 |
+
+求解器在解 `stepped_impedance` 节点坐标时，会把偏移量作为线性约束注入 CP-SAT，使两侧子段的中心线按声明偏移对齐。
+
+---
 
 ## 匹配网络自动化综合
 
@@ -36,18 +82,29 @@ $$d = W \cdot mitered\_factor \cdot \sin(\theta/2)$$
 
 对于低损耗匹配，利用传输线段实现阻抗变换：
 
-$$Z_{in} = Z_0 \frac{Z_L + jZ_0 \tan(\beta l)}{Z_0 + jZ_L \tan(\beta l)}$$
+$$Z_{in} = Z_0 \frac{Z_L + jZ_0 \tan(\beta l)}{Z_0 + jZ_L \tan(\beta l)},\quad \beta = 2\pi/\lambda_g$$
 
-其中 $\beta = 2\pi/\lambda_g$ 为相位常数。
+### 拓扑分裂下的综合
+
+v4 中"匹配电容 + 微带线段"组合通过**共享节点**自动表达：
+
+```yaml
+edges:
+  tl_rf_up_p1: { connections: [..., node_rf_shunt_tap], target_length: 6.0 }
+  c_rf_match:  { connections: [node_rf_shunt_tap, GND_REF] }   # 自动接地分支
+  tl_rf_up_p2: { connections: [node_rf_shunt_tap, ...], target_length: 12.0 }
+```
+
+综合算法只需输出 `target_length` 与电容 `value_pF`，**位置由两段长度联立解出**——无需再写 `position_along_parent: 0.4` 这类与长度互相打架的字段。
 
 ### 遗传算法优化
 
 1. 初始化随机拓扑和线长种群
-2. 计算S参数（ADS仿真或解析模型）
-3. 适应度 = $1 / (1 + |S_{11}|^2 + |S_{22}|^2)$
+2. 计算 S 参数（ADS 仿真或解析模型）
+3. 适应度 $= 1 / (1 + \lvert S_{11}\rvert^2 + \lvert S_{22}\rvert^2)$
 4. 选择、交叉、变异
 5. 迭代至收敛
 
 ### 目标
 
-自动化综合给定输入阻抗 $Z_{in}$ 到 $50\Omega$ 的匹配网络拓扑和微带线尺寸。
+自动化综合给定输入阻抗 $Z_{in}$ 到 $50\,\Omega$ 的匹配网络拓扑、微带线尺寸（`width` / `target_length`）以及阶跃阻抗的 `custom_offset`。
