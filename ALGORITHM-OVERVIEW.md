@@ -6,90 +6,132 @@
 
 ---
 
-## 1. 系统架构
+## 1. 核心问题：布局与布线必须协同
+
+### 1.1 顺序 Pipeline 的根本缺陷
 
 ```
-输入：电路网表（YAML）
-        │
-        ▼
-┌─────────────────────────────────────────┐
-│          Stage 1: 布局（Placement）      │
-│                                         │
-│   模拟退火 + HPWL + 禁入区域约束          │
-│   输出：每个器件的 (x, y) 坐标           │
-└────────────────┬────────────────────────┘
-                 │ 器件坐标
-                 ▼
-┌─────────────────────────────────────────┐
-│          Stage 2: 布线（Routing）        │
-│                                         │
-│   CP-SAT 单一模型 + AddNoOverlap         │
-│   输出：每条边的 (x,y) 路径坐标           │
-└────────────────┬────────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────────┐
-│       Stage 3: 后处理（Post-Processing） │
-│                                         │
-│   弯角mitered补偿 + 泪滴过渡 + DRC检查    │
-└─────────────────────────────────────────┘
+Placement (SA) ──→ Routing (CP-SAT) ──→ Post-processing
+   ❌ HPWL 误导       ❌ 拥塞不可知      ❌ 全局次优
+   ❌ 锚定效应       ❌ infeasible 无解
 ```
 
-**为什么分两阶段而不是联合优化？**
+| 缺陷 | 具体表现 | 影响 |
+|------|---------|------|
+| HPWL 误导 | Placement 用 HPWL 估算线长，但实际路由是 HPWL 的 1.5~3 倍（绕路、对齐网格） | Placement 优化的"最优"其实是错误假设下次优 |
+| Infeasible 无解 | Placement 不知道 CP-SAT 的约束强度，输出导致 Routing 无可行解 | 强制 Ripup，从头重来 |
+| 锚定效应 | 固定微带线的锚点由工程师经验设定，Placement 无法调整 | 全局次优 |
+| 热拥塞脱节 | SA 热惩罚只考虑器件距离，不考虑走线密度 | 热点区域走线密集，直接拥塞 |
 
-联合优化（placement + routing 联合求解）规模太大，目前没有求解器能实时完成。业界标准做法是解耦：先放置器件，再布线。Placement 决定"在哪"，Routing 决定"怎么走"。
+### 1.2 联合 CP-SAT 为什么不可行
+
+联合优化（Placement + Routing 用一个 CP-SAT 模型）的变量规模：
+
+```
+Placement: N_devices × 2 坐标变量
+Routing:   N_edges × N_grid × 2 方向变量
+总计:      ~10^6 变量（可行）
+
+但约束耦合是非线性的：
+  器件坐标 (x_i, y_i) → 边起点/终点位置 → 网格距离计算
+  → 绕路长度 → NoOverlap 约束有效性
+
+这形成高度耦合的非线性约束图，CP-SAT 的 SAT 求解技术
+在处理这种耦合时效率急剧下降。
+```
+
+**结论**：联合 CP-SAT 理论上可探索，但工程实现成本极高，不推荐。
 
 ---
 
-## 2. Stage 1：布局（Placement）
+## 2. 最优方案：迭代协同（Iterative Co-design）
 
-### 2.1 问题定义
-
-已知：
-- 功率管位置（**固定**）
-- 匹配网络器件初始位置（**可移动**，但宽高已知）
-- 板框尺寸（x_max, y_max）
-- 禁入区域（散热器、装配孔、过孔禁止区）
-
-求解：每个可移动器件的 (x, y) 坐标，使总成本最小。
-
-### 2.2 成本函数
+### 2.1 算法流程
 
 ```
-E = α·HPWL + β·C_cross + γ·C_boundary + δ·C_thermal
+┌─────────────────────────────────────────────────────────┐
+│                      迭代循环                            │
+│                                                         │
+│  ┌──────────────┐     ┌────────────────┐               │
+│  │ Placement SA │────→│ Routing CP-SAT │               │
+│  │  (热启动)     │     │                │               │
+│  └──────┬───────┘     └───────┬────────┘               │
+│         │                      │                        │
+│         │              ┌───────┴────────┐               │
+│         │              │  结果评估       │               │
+│         │              └───┬────────┬───┘               │
+│         │                  │        │                   │
+│         │           成功    │        │  失败（infeasible）│
+│         │                  ▼        ▼                   │
+│         │              收敛判断    提取冲突约束            │
+│         │                  │        │                   │
+│         │                  │   反哺到能量函数              │
+│         │                  │        │                   │
+│         └──────────────────┴────────┘                   │
+│                         │                                │
+│                    收敛? ──→ 输出结果                    │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 2.2 关键机制
+
+**热启动（Hot Start）**：
+- 每次迭代的 Placement 从上次结果继续，不需要从头随机
+- 冲突信息作为额外的惩罚项加入能量函数，加速收敛
+
+**拥塞反哺（ Congestion Feedback）**：
+- CP-SAT 求解失败时，用 `server.SufficientAssumptionForProblemContradiction()` 提取最小冲突集
+- 冲突区域在 Placement 能量函数里加入惩罚项（拥塞惩罚 = 该区域器件数量 × 权重）
+
+**收敛判断**：
+- 连续 3 次迭代，Routing 成功率 > 95%
+- 或迭代次数达到上限（默认 5 次，防止无限循环）
+
+### 2.3 能量函数（Placement）
+
+```
+E = α·HPWL + β·C_cross + γ·C_boundary + δ·C_thermal + ε·C_congestion
 ```
 
 | 项 | 含义 |
 |----|------|
-| HPWL | 半周长线长（电气性能指标） |
-| C_cross | 预估交叉惩罚（布局阶段的近似） |
-| C_boundary | 器件出界惩罚 |
-| C_thermal | 热感知惩罚（大功率器件相互远离） |
+| HPWL | 半周长线长（电气性能） |
+| C_cross | 预估交叉惩罚 |
+| C_boundary | 出界惩罚 |
+| C_thermal | 热感知（大功率器件相互远离） |
+| C_congestion | **拥塞反哺惩罚**（来自上次 Routing 失败信息）⭐ |
 
-### 2.3 模拟退火算法
+---
+
+## 3. Stage 详解
+
+### 3.1 Stage 1：布局（Placement）— 模拟退火 + 热启动
 
 ```python
-def simulated_annealing_placement(netlist, init_temp=10000, cool_rate=0.9995):
-    # 初始布局：随机放置（避开固定器件和禁入区）
-    placement = random_valid_placement(netlist)
-    energy = compute_energy(placement)
+def placement_with_congestion_feedback(
+    netlist: dict,
+    initial_placement: dict = None,
+    congestion_map: dict = None,
+) -> dict:
+    """
+    热启动 SA 布局，支持拥塞反哺
+    """
+    placement = initial_placement or random_valid_placement(netlist)
+    energy = compute_energy(placement, congestion_map)
 
     T = init_temp
-    while T > 1.0:
-        # 随机扰动：一个器件移动 Δx, Δy
+    while T > 1.0 and not converged:
         new_placement = placement.copy()
         device = random.choice(flexible_devices)
         new_placement[device] = random_neighbor_position(device)
 
-        # 检查硬约束（边界、禁入区、最小间距）
         if not is_valid(new_placement):
             T *= cool_rate
             continue
 
-        new_energy = compute_energy(new_placement)
+        new_energy = compute_energy(new_placement, congestion_map)
         delta_E = new_energy - energy
 
-        # Metropolis 准则
         if delta_E < 0 or random.random() < exp(-delta_E / T):
             placement = new_placement
             energy = new_energy
@@ -99,281 +141,138 @@ def simulated_annealing_placement(netlist, init_temp=10000, cool_rate=0.9995):
     return placement
 ```
 
-### 2.4 关键约束
-
-| 约束 | 处理方式 |
-|------|---------|
-| 固定器件位置 | 不可移动，参与碰撞检测 |
-| 板框边界 | 硬约束，超出则拒绝 |
-| 禁入区域 | 硬约束，不可覆盖 |
-| 器件最小间距 | 硬约束（电气安全距离） |
-| 热感知 | 软惩罚项，加入能量函数 |
-
-### 2.5 布局输出
-
-```yaml
-placement:
-  Q1:      { x: 10.0, y: 15.0, type: "power_transistor", fixed: true }
-  L_match: { x: 25.0, y: 20.0, type: "inductor" }
-  C_shunt: { x: 30.0, y: 18.0, type: "capacitor" }
-  R_bias:  { x: 35.0, y: 25.0, type: "resistor" }
-  ...
-```
-
----
-
-## 3. Stage 2：布线（Routing）— CP-SAT 单一模型
-
-> 这是整个系统的核心创新：不需要分阶段，一个 CP-SAT 模型涵盖所有约束。
-
-### 3.1 输入
-
-```yaml
-nodes:
-  Q1_d:    { type: "pad",         x: 10.0, y: 15.0 }  # 功率管漏极
-  L1_pad:  { type: "pad",         x: 25.0, y: 20.0 }  # 电感位置
-  C1_pad:  { type: "pad",         x: 30.0, y: 18.0 }  # shunt电容
-
-edges:
-  tl_main:              # 固定微带线（预布线）
-    connections: [Q1_d, L1_pad]
-    type: "microstrip"
-    width: 2.5           # mm（特性阻抗50Ω决定）
-    target_length: 15.0
-    fixed: true          # 布局阶段确定，不参与求解
-
-  shunt_trace:           # 灵活走线（需CP-SAT求解）
-    connections: [L1_pad, C1_pad]
-    type: "microstrip"
-    width: 1.2
-    target_length: 8.0
-    fixed: false
-```
-
-### 3.2 网格离散化
+**拥塞惩罚项的实现**：
 
 ```python
-GRID_RESOLUTION = 0.001  # 1 μm，亚微米精度
+def compute_energy(placement: dict, congestion_map: dict = None) -> float:
+    hpwl = compute_hpwl(placement, netlist)
+    cross = estimate_crossings(placement)        # 布局阶段近似
+    boundary = compute_boundary_penalty(placement)
+    thermal = compute_thermal_penalty(placement)
+    congestion = 0.0
 
-class Grid:
-    def __init__(self, x_min, y_min, x_max, y_max, resolution=0.001):
-        self.x_min = x_min
-        self.y_min = y_min
-        self.width  = int((x_max - x_min) / resolution)
-        self.height = int((y_max - y_min) / resolution)
+    if congestion_map:
+        # congestion_map: {(x_zone, y_zone): penalty}
+        for device, pos in placement.items():
+            zone = get_zone(pos, congestion_map.grid)
+            congestion += congestion_map.get(zone, 0.0)
 
-    def is_inside(self, x, y):
-        gx = int((x - self.x_min) / self.resolution)
-        gy = int((y - self.y_min) / self.resolution)
-        return 0 <= gx < self.width and 0 <= gy < self.height
+    return (α * hpwl + β * cross + γ * boundary
+            + δ * thermal + ε * congestion)
 ```
 
-### 3.3 CP-SAT 建模（完整伪代码）
+### 3.2 Stage 2：布线（Routing）— CP-SAT 单一模型
 
-```python
-from ortools.sat.python import cp_model
+> 与之前方案相同，此处不再重复完整代码。详见 `concepts/routing-algorithm-comparison.md`
 
-def solve_routing(topology: dict) -> dict:
-    model = cp_model.CpModel()
-
-    # ── 变量 ──────────────────────────────────────────────
-    # x[u,v,k] = 1 表示边 k 使用了网格边 (u→v)
-    # 维度：grid_nodes × grid_nodes × n_edges（稀疏建模）
-    x = {}
-    for edge in flexible_edges:
-        for gx in range(grid.width):
-            for gy in range(grid.height):
-                for dir in ["H", "V"]:          # H=水平, V=垂直
-                    x[gx, gy, dir, edge.name] = model.NewBoolVar("")
-
-    # ── 约束1: 连通性（每条灵活边是连通路径） ───────────
-    # AddCircuit: 恰好形成一个环（含虚拟终点→起点边）
-    for edge in flexible_edges:
-        arcs = []
-        for gx, gy, dir, name in x.keys():
-            if name != edge.name:
-                continue
-            tail = (gx, gy)
-            head = (gx+1, gy) if dir == "H" else (gx, gy+1)
-            arcs.append((tail, head, x[gx, gy, dir, name]))
-
-        # 虚拟边：终点→起点（闭合电路）
-        virtual = model.NewBoolVar(f"virt_{edge.name}")
-        arcs.append((edge.end_node, edge.start_node, virtual))
-        model.AddCircuit(arcs)
-
-    # ── 约束2: 目标长度 ─────────────────────────────────
-    # sum(length_of_edge × x) ≈ target_length (±5%)
-    for edge in flexible_edges:
-        total_len = sum(
-            GRID_RESOLUTION * x[gx, gy, dir, edge.name]
-            for gx, gy, dir, name in x.keys()
-            if name == edge.name
-        )
-        tol = edge.target_length * 0.05
-        model.Add(total_len >= edge.target_length - tol)
-        model.Add(total_len <= edge.target_length + tol)
-
-    # ── 约束3: 无交叉（核心） ───────────────────────────
-    # AddNoOverlap: 所有灵活边的路径矩形两两不重叠
-    for i, e_a in enumerate(flexible_edges):
-        for e_b in flexible_edges[i+1:]:
-            # 获取两条边的路径包围盒（动态变量）
-            bbox_a = get_path_bbox(e_a, x, grid)
-            bbox_b = get_path_bbox(e_b, x, grid)
-
-            # disjunction: x不相交 OR y不相交
-            x_sep = model.NewBoolVar("")
-            y_sep = model.NewBoolVar("")
-
-            # x 方向分离
-            model.Add(bbox_a.max_x + e_a.width/2 <= bbox_b.min_x - e_b.width/2).OnlyEnforceIf(x_sep)
-            model.Add(bbox_b.max_x + e_b.width/2 <= bbox_a.min_x - e_a.width/2).OnlyEnforceIf(x_sep)
-
-            # y 方向分离
-            model.Add(bbox_a.max_y + e_a.width/2 <= bbox_b.min_y - e_b.width/2).OnlyEnforceIf(y_sep)
-            model.Add(bbox_b.max_y + e_b.width/2 <= bbox_a.min_y - e_a.height/2).OnlyEnforceIf(y_sep)
-
-            # 强制至少一个方向分离
-            model.AddBoolOr([x_sep, y_sep])
-
-    # ── 约束4: 过孔密度 ─────────────────────────────────
-    # AddCumulative: 每个网格区域的过孔总数 ≤ 容量上限
-    zones = partition_grid(grid, n_zones=4)  # 4×4 = 16 区域
-    for zone in zones:
-        via_vars = collect_via_vars_in_zone(zone, x, nodes)
-        model.AddCumulative(via_vars, [1]*len(via_vars), max_vias_per_zone=8)
-
-    # ── 约束5: 固定微带线（预布线） ────────────────────
-    for edge in fixed_edges:
-        # 直接设真值，不参与求解
-        path = compute_straight_path(edge, nodes, grid)
-        for gx, gy, dir in path:
-            x[gx, gy, dir, edge.name].SetValue(1)
-
-    # ── 求解 ────────────────────────────────────────────
-    solver = cp_model.CpSolver()
-    solver.parameters.num_workers = os.cpu_count()   # 多核并行
-    solver.parameters.log_progression = True
-
-    status = solver.Solve(model)
-
-    if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        return extract_routes(solver, x, topology, grid)
-    else:
-        return {"status": "infeasible", "conflicts": solver.NumConflicts()}
-```
-
-### 3.4 关键 CP-SAT 原语
+**CP-SAT 关键约束**：
 
 | 约束 | CP-SAT 原语 | 作用 |
 |------|------------|------|
-| 路径连通 | `AddCircuit(arcs)` | 保证起点→终点形成连通路径 |
-| 无交叉 | `AddNoOverlap` + `AddBoolOr` | 两条边至少一个方向分离 |
+| 无交叉 | `AddNoOverlap` + `AddBoolOr` | 两边至少一维分离 |
+| 路径连通 | `AddCircuit` | 起点→终点连通路径 |
 | 目标长度 | `AddLinearExpression` | 路径总长 ≈ target_length |
 | 过孔密度 | `AddCumulative` | 区域过孔数 ≤ 上限 |
-| 固定微带 | `Var.SetValue(1)` | 预布线直接固定 |
+| 固定微带线 | `Var.SetValue(1)` | 预布线固定 |
+
+**拥塞信息提取**（CP-SAT 失败时）：
+
+```python
+def extract_congestion_info(model, solver) -> dict:
+    """
+    从失败的 CP-SAT 模型中提取冲突约束，生成拥塞地图
+    """
+    # 找出导致不可行的最小假设集
+    assumptions = solver.SufficientAssumptionForProblemContradiction()
+    # assumptions: 导致冲突的变量列表
+
+    # 将冲突变量映射到网格区域
+    congestion_map = {}
+    for var in assumptions:
+        zone = var_to_zone(var)  # 从变量名解析所属区域
+        congestion_map[zone] = congestion_map.get(zone, 0) + 1
+
+    return congestion_map
+```
+
+### 3.3 Stage 3：后处理
+
+| 步骤 | 作用 |
+|------|------|
+| mitered 弯角补偿 | 90°/45° 转弯处切除一角，补偿不连续性 |
+| 泪滴（Teardrop）过渡 | 焊盘与走线渐变过渡，减小应力集中 |
+| DRC 检查 | 最小线宽 0.1mm / 最小间距 0.1mm / 最小过孔直径 0.3mm |
 
 ---
 
-## 4. Stage 3：后处理
-
-### 4.1 弯角 mitered 补偿
-
-微带线转弯处（90°/45°）需要切除一角以补偿不连续性：
+## 4. 完整数据流
 
 ```
-     │         →
-     │    →→→→
-─────×    →→→→→→→
-     │
-  切除区域: d = W × mitered_factor × sin(θ/2)
-  mitered_factor ∈ [0.5, 1.0]
-```
-
-### 4.2 泪滴（Teardrop）过渡
-
-焊盘与走线连接处渐变过渡，减小应力集中：
-
-```
-     ╱╲
-   ╱────╲        渐变宽度: W_pad → W_trace
-  ╱──────╲
-```
-
-### 4.3 DRC 检查
-
-| 检查项 | 阈值 |
-|--------|------|
-| 最小线宽 | 0.1 mm |
-| 最小间距 | 0.1 mm |
-| 最小过孔 | 直径 0.3 mm |
-| 最小弯角半径 | 1× 线宽 |
-
----
-
-## 5. 完整数据流
-
-```
-电路网表
-    │
-    ▼
-┌──────────────┐
-│ YAML 解析     │ → 节点列表、边列表、固定微带线
-└──────┬───────┘
+电路网表（YAML）
        │
        ▼
-┌──────────────┐
-│ 布局 (SA)    │ → 器件 (x,y) 坐标
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│ 网格构建     │ → 离散化网格 (1μm 分辨率)
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│ CP-SAT 建模  │ → 变量 + 约束
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│ 求解 (<1s)   │ → 路径坐标
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│ 后处理       │ → mitered + 泪滴 + DRC
-└──────────────┘
-       │
-       ▼
-Gerber/输出文件
+┌──────────────────┐
+│  迭代循环初始化    │  max_iterations = 5
+└────────┬─────────┘
+         │
+         │  ┌──────────────────────────────────────┐
+         │  │ 迭代 N (N ≤ 5)                        │
+         │  │                                      │
+         │  │  ┌────────────────┐                   │
+         │  │  │ Placement SA  │ ← 热启动 +       │
+         │  │  │ (拥塞惩罚项)   │   拥塞反哺       │
+         │  │  └───────┬────────┘                   │
+         │  │          │                            │
+         │  │          ▼                            │
+         │  │  ┌────────────────┐                   │
+         │  │  │ CP-SAT Routing │                   │
+         │  │  └───────┬────────┘                   │
+         │  │          │                            │
+         │  │    ┌─────┴─────┐                     │
+         │  │    ↓           ↓                     │
+         │  │  成功        失败（infeasible）        │
+         │  │    │           │                     │
+         │  │    │     提取冲突约束 ──→ 拥塞地图     │
+         │  │    │           │                     │
+         │  │    ↓           ↓                     │
+         │  │  收敛判断    回到 Placement           │
+         │  │    │           │                     │
+         │  │    └───────────┘                     │
+         │  │                                      │
+         │  └──────────────────────────────────────┘
+         │
+         ▼
+┌──────────────────┐
+│  后处理           │  mitered + 泪滴 + DRC
+└────────┬─────────┘
+         │
+         ▼
+   Gerber/输出文件
 ```
 
 ---
 
-## 6. 复杂度与规模
+## 5. 复杂度与收敛
 
-| 场景 | 器件数 | 灵活边数 | 网格规模 | 求解时间 |
-|------|--------|---------|---------|---------|
-| 简单 | < 10 | 3 | 100×100 | < 0.1s |
-| 中等 | 10-50 | 10 | 200×200 | 0.5-2s |
-| 复杂 | 50-200 | 30 | 500×500 | 10-60s |
+| 场景 | 器件数 | 灵活边数 | 迭代次数（预估）| 总求解时间 |
+|------|--------|---------|--------------|-----------|
+| 简单 | < 10 | 3 | 1-2 | < 0.5s |
+| 中等 | 10-50 | 10 | 2-3 | 2-5s |
+| 复杂 | 50-200 | 30 | 3-5 | 30-120s |
 | 超复杂 | > 200 | > 30 | — | 需区域分解 |
 
-**区域分解**（只在超复杂场景启用）：
-```
-板子划分为 NxN 区域 → 每区域独立 CP-SAT → 接口变量协调
-```
+**为什么迭代次数可控？**
+- 热启动：每次 Placement 从上次结果继续，初始温度更低
+- 拥塞惩罚项：直接告诉 SA "这些区域不能放器件"
+- 最坏情况：5 次迭代后强制输出（即便不是全局最优）
 
 ---
 
-## 7. 文件索引
+## 6. 文件索引
 
 | 文件 | 内容 |
 |------|------|
 | `ALGORITHM-OVERVIEW.md` | **总体架构**（本文档）|
-| `concepts/placement-problem-formulation.md` | 布局数学建模（SA、能量函数、HPWL）|
+| `concepts/placement-problem-formulation.md` | 布局数学建模（SA、能量函数）|
 | `concepts/routing-algorithm-comparison.md` | 布线 CP-SAT 详细实现 |
 | `concepts/microstrip-topology-matching.md` | 微带线拓扑类型、mitered 补偿 |

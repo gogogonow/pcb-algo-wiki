@@ -6,33 +6,69 @@
 
 ## 总体架构
 
-**三阶段流水线**：
+**迭代协同方案**（推荐）：
 
 ```
-布局 (模拟退火) → 布线 (CP-SAT) → 后处理 (mitered + DRC)
+Placement (SA + 拥塞反哺) ⇄ Routing (CP-SAT)
+         ↑ 反哺冲突约束    ↓ 报告拥塞
 ```
 
 详见 [ALGORITHM-OVERVIEW.md](ALGORITHM-OVERVIEW.md)
 
 ---
 
+## 为什么顺序Pipeline不行
+
+| 缺陷 | 具体表现 |
+|------|---------|
+| HPWL 误导 | Placement 用 HPWL 估算，实际路由是 1.5~3 倍 |
+| Infeasible | Placement 不知道 CP-SAT 约束强度，输出无解 |
+| 锚定效应 | 固定微带线锚点无法调整 |
+| 热拥塞脱节 | SA 热惩罚不考虑走线密度 |
+
+**联合 CP-SAT**：约束耦合是非线性的，工程实现成本极高，不可行。
+
+---
+
+## 最优方案：迭代协同
+
+```
+┌─────────────────────────────────┐
+│  迭代循环（最多5次）              │
+│                                 │
+│  Placement SA ──→ CP-SAT        │
+│       ↑              ↓          │
+│   热启动      成功 ──→ 输出      │
+│       ↑              ↓          │
+│   反哺惩罚   失败 ──→ 提取冲突   │
+│                      ↓          │
+│                  反哺 Placement  │
+└─────────────────────────────────┘
+```
+
+**收敛条件**：连续 3 次 Routing 成功率 > 95%
+
+---
+
+## 能量函数
+
+```
+E = α·HPWL + β·C_cross + γ·C_boundary + δ·C_thermal + ε·C_congestion
+                                           ↑
+                                     新增：拥塞惩罚项
+```
+
+---
+
 ## 核心算法
 
-### Stage 1: 布局（Placement）
+### Stage 1: 布局（SA + 热启动）
 
-**模拟退火**优化器件坐标：
+- 模拟退火优化器件坐标
+- **拥塞惩罚项**：来自上次 Routing 失败信息
+- 热启动：每次从上次结果继续，收敛更快
 
-```
-E = α·HPWL + β·C_cross + γ·C_boundary + δ·C_thermal
-```
-
-- 固定器件：功率管位置（不可移动）
-- 灵活器件：匹配网络器件（电感、电容、电阻）
-- 约束：边界、禁入区、最小间距
-
-### Stage 2: 布线（Routing）
-
-**CP-SAT 单一模型**，涵盖所有约束：
+### Stage 2: 布线（CP-SAT）
 
 | 约束 | CP-SAT 原语 |
 |------|------------|
@@ -40,13 +76,13 @@ E = α·HPWL + β·C_cross + γ·C_boundary + δ·C_thermal
 | 路径连通 | `AddCircuit` |
 | 目标长度 | `AddLinearExpression` |
 | 过孔密度 | `AddCumulative` |
-| 固定微带线 | `Var.SetValue(1)` 预布线 |
+| 固定微带线 | `Var.SetValue(1)` |
 
 ### Stage 3: 后处理
 
-- 弯角 mitered 补偿
+- mitered 弯角补偿
 - 泪滴（Teardrop）过渡
-- DRC 检查（最小线宽/间距/过孔）
+- DRC 检查
 
 ---
 
@@ -60,14 +96,3 @@ E = α·HPWL + β·C_cross + γ·C_boundary + δ·C_thermal
 │   └── microstrip-topology-matching.md   # 微带线拓扑 + mitered
 └── README.md
 ```
-
----
-
-## 复杂度
-
-| 场景 | 器件数 | 灵活边数 | 求解时间 |
-|------|--------|---------|---------|
-| 简单 | < 10 | 3 | < 0.1s |
-| 中等 | 10-50 | 10 | 0.5-2s |
-| 复杂 | 50-200 | 30 | 10-60s |
-| 超复杂 | > 200 | > 30 | 需区域分解 |
