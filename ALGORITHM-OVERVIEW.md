@@ -1,415 +1,280 @@
-# 功放PCB单层自动布局布线——总体算法方案 v4
+# 功放 PCB 单层自动布局布线 —— 总体算法方案 v6
 
-> **混合射频图路由（hybrid_rf_graph）**
+> **基于真实案例 `rf_layout_simplified.yaml` (PA_Module_Simplified) 验证后的最终方案**
 >
-> 三类求解器分发：
-> - **刚性 RF 微带网**（长度锁定的运动学求解 + CP-SAT 无交叉）
-> - **灵活偏置网络**（A* 迷宫绕障，`target_length: null`）
-> - **浮动器件布局**（引力场 / `placement_objective`）
+> 三阶段求解器：SA 浮动 + CP-SAT 主求解 + A* 灵活
+> 输入规范：v3.3（外部 EDA 接口）· 内部 IR：v6 · 上一基线：v4 hybrid_rf_graph
 
 ---
 
-## 0. v4 相对 v3 的关键改动
+## 0. 版本谱系与本次刷新背景
 
-| v3 问题 | v4 解决方案 |
-|---|---|
-| `nodes` 段混用了"物理管脚"与"逻辑分叉点" | 新增 **`terminals`** 段（绝对坐标锚点），`nodes` 只放算法推导坐标的节点 |
-| 所有边走同一条 CP-SAT 流水线，灵活偏置线被迫栅格化 → 变量爆炸 | 顶层 `routing_type: hybrid_rf_graph` + 每边 `routing_class` 三类分发 |
-| `microstrip_parent.children` + `parent_edge` + `position_along_parent` 三重冗余，且 `target_length` 与 `position_along_parent` 互相覆盖 | 删除 `microstrip_parent`：**共享节点即拓扑分裂**，节点位置由两侧子段的 `target_length` 联立推导 |
-| `lumped_*` 默认是并联接地分支（`shunt_tap_of`），无法表达**串联**集总器件（如磁珠 `BLM18`）| 集总器件统一为 **edge**，串/并由 `connections` 是否触地决定，无需 `shunt_tap_of` |
-| 没有"浮动器件"概念，所有 shunt 必须有显式 `position_along_parent` | 新增 `floating_shunt_tap` 节点 + `placement_objective`（`space_available` / `attract_to_target`）|
-| 无 `bend_style`、无 `stepped_impedance` 偏移 | 边支持 `geometry.bend_style`，节点支持 `stepped_impedance` + `connections_rule.custom_offset` |
-| `target_length` 的"无约束"语义不明确 | 显式 `target_length: null` |
-| Placement SA 的能量函数还残留 v2 的约束惩罚项 | SA 仍保持极简，新增**引力场项 `ζ·E_attract`** 仅对 `floating_shunt_tap` 生效 |
+| 版本 | 角色 | 状态 |
+|---|---|---|
+| v3 | 单求解器 CP-SAT，变量爆炸 | 废弃 |
+| v4 | 内部 IR 基线：terminals/nodes/edges + 三求解器分发 + 拓扑分裂 + 浮动器件引力场 | 内部参考保留 |
+| v5 | 在 v4 上接入 v3.3，**未经真实案例验证** | 草案废弃 |
+| **v6** | **以 `rf_layout_simplified.yaml` 锚定回归用例** | **本文档** |
+
+v4 → v6 的变化全部由真实案例驱动，归并为 5 个结构性决策（D1–D5），见 §1。
 
 ---
 
-## 1. 顶层架构：三类求解器协同
+## 1. v4 → v6 的 5 个结构性决策
+
+| 决策 | v4 / v5 | v6 | 触发依据 |
+|---|---|---|---|
+| **D1** RLC 建模 | 翻译为 `lumped_*` edge，串/并由 connections 是否触地推断 | RLC = component-with-pads；pin 直接进 `terminals`；`lumped_*` 翻译层在 v3.3 数据流中作废 | 案例 9 个 RLC 全是 `parametric_uv` + pin 直接出现在 edge 端点 |
+| **D2** UV 解析 | "中段插入 `component_pad_junction` 拓扑分裂" | **anchor_pin 沿宿主 microstrip 端点滑动**；不破坏原 edge 拓扑 | 案例 anchor_pin 总是 host edge 端点 |
+| **D3** routing_class | 二分法：rf_constrained / flexible_path | 三档：`rf_constrained_locked` / `rf_constrained_free` / `flexible_path` | 案例 8/22 RF 段无 `target_length` |
+| **D4** 节点类型 | 5 种 | 新增 **`universal_junction`** 多分支 manifold 模板 + `t_combiner_junction` 别名 | 案例两个核心功分点都用 universal_junction，含显式 `branches[]` |
+| **D5** Schema 容错 | 严格 pydantic + LVS 强阻塞 | Lint 容错（typo 自动修复 + 未知字段透传告警）+ LVS 软警告 | 案例有 `redius`/`cicle` typo + 未知 `bend_style: curved` + 无 `logical_net` |
+
+> v4 文档原 §0（v3 → v4 关键改动）依然成立；v6 在其之上叠加上表 5 行修正。
+
+---
+
+## 2. v6 顶层架构
 
 ```
-                ┌──────────────────────────┐
-                │  YAML (hybrid_rf_graph)  │
-                │  terminals / nodes /edges│
-                └─────────────┬────────────┘
-                              │ routing_class triage
-       ┌──────────────────────┼──────────────────────────┐
-       ▼                      ▼                          ▼
-┌──────────────┐    ┌──────────────────┐       ┌────────────────────┐
-│ rf_constrained│    │ flexible_path     │       │ floating component │
-│ 刚性 RF 微带  │    │ 灵活 DC/Bias 走线 │       │ placement_objective│
-├──────────────┤    ├──────────────────┤       ├────────────────────┤
-│ Kinematic     │    │ A* 迷宫寻路      │       │ 引力场 SA           │
-│ length-lock   │    │ obstacles =      │       │ space_available    │
-│ + CP-SAT      │    │  rigid + comps   │       │ attract_to_target  │
-│ NoOverlap     │    │ target_length    │       │ weight × distance  │
-│               │    │  = null          │       │                    │
-└──────┬────────┘    └────────┬─────────┘       └─────────┬──────────┘
-       │                      │                            │
-       └──────────────────────┴───────────────────────────┘
+                ┌──────────────────────────────┐
+                │  v3.3 YAML (外部 EDA 接口)   │
+                │  components / footprints /   │
+                │  nodes / edges / terminals   │
+                └─────────────┬────────────────┘
+                              │
                               ▼
-                ┌──────────────────────────┐
-                │   全局 DRC + 输出几何     │
-                └──────────────────────────┘
+        ┌───────────────────────────────────────────────┐
+        │  ① Frontend Compiler                          │
+        │   1. Schema Lint                              │
+        │   2. expand_components (footprint → pad 坐标) │
+        │   3. UV Resolve (anchor → host_edge 端点)     │
+        │   4. universal_junction 模板展开              │
+        │   5. routing_class triage (3 档)              │
+        │   6. 拓扑健全性检查 (warning-only)            │
+        └─────────────┬─────────────────────────────────┘
+                      │ 内部 IR (v6 = v4 + D1..D5 修正)
+        ┌─────────────┼─────────────┬───────────────────┐
+        ▼                           ▼                   ▼
+┌──────────────────┐    ┌────────────────────────┐  ┌──────────────────┐
+│ ② Phase 1 SA     │    │ ③ Phase 2 CP-SAT       │  │ ④ Phase 3 A*     │
+│ UV 粗放置         │    │ ★ 主求解器              │  │ flexible_path    │
+│ 引力场 + HPWL     │ →  │ 长度锁 + NoOverlap +   │→ │ 迷宫绕障          │
+│ + 5 次重试        │    │ universal_junction 几何 │  │ (本案例为空)     │
+└──────────────────┘    └────────────────────────┘  └──────────────────┘
+                              │
+                              ▼
+                ┌──────────────────────────────┐
+                │ ⑤ Postproc                   │
+                │  bend 渲染 / 软 LVS / DRC     │
+                │  / SVG / Gerber stub          │
+                └──────────────────────────────┘
 ```
 
 **调度顺序**：
-1. **Floating placement**（引力场 SA）→ 推算 `floating_shunt_tap` 节点的预选坐标。
-2. **Rigid RF kinematic**（运动学求解 + CP-SAT NoOverlap）→ 锁死 `rf_constrained` 边的几何。
-3. **Flexible A***（A* 迷宫）→ 把 1+2 的产物视作障碍物，绕障寻路。
-4. **DRC + 回滚**：A* 失败 ⇒ 反馈到 SA 抬温度，回到第 1 步（最多 5 次）。
+
+1. **Frontend Compiler**：把 v3.3 容错地编译为 v6 IR；fixed pad 坐标推算；UV 器件 + universal_junction 转化为 CP-SAT 变量与线性约束；routing_class 三档分流。
+2. **Phase 1 SA**：仅对 UV 器件做粗放置（沿宿主 microstrip 等距初值 + Metropolis 微调），用引力场吸附 anchor_pin 邻位。
+3. **Phase 2 CP-SAT**：主求解阶段，承担长度锁、NoOverlap、manifold 几何模板、UV anchor 滑动。**真实案例预估 1–5 s 解出**。
+4. **Phase 3 A***：仅对 `flexible_path` 边求解。本案例为空，跳过；保留实现以兼容含 `trace` 的输入。
+5. **Postproc**：bend_style 几何、DRC、软 LVS、SVG/Gerber 输出。
+6. **回滚**：CP-SAT infeasible 或 A* 失败 → 反馈 SA 抬温度，最多重试 5 轮。
 
 ---
 
-## 2. v4 完整 YAML Schema
+## 3. v6 内部 IR 与 v3.3 字段映射
 
-### 2.1 顶层字段
+### 3.1 核心段
 
-```yaml
-version: "2.0.0"
-network_name: "PA_Complete_Module_Net"
-routing_type: "hybrid_rf_graph"      # 必须；激活 v4 三类分发
-description: "..."
-```
-
-### 2.2 `terminals` — 物理锚点（绝对坐标，不可移动）
-
-```yaml
-terminals:
-  PIN_RF_IN:    { type: "pad",          component: "U_DRV", pad: "OUT", x: 0.0,   y: 50.0 }
-  PIN_PA_GATE_1:{ type: "pad",          component: "U_PA",  pad: "G1",  x: 100.0, y: 70.0 }
-  PIN_DC_IN:    { type: "pad",          component: "J_PWR", pad: "1",   x: 0.0,   y: 90.0 }
-  GND_REF:      { type: "ground_plane", description: "全局地" }
-```
-
-| 字段 | 说明 |
-|---|---|
-| `type: pad` | 普通器件管脚，必带 `(x, y)` |
-| `type: ground_plane` | 全局接地参考，统一处理所有并联分支 |
-| `component` / `pad` | 反查器件—管脚的元信息（用于 component-aware DRC）|
-
-### 2.3 `nodes` — 逻辑节点（坐标由算法推导）
-
-```yaml
-nodes:
-  # ---- 普通分叉/吸附 ----
-  node_rf_splitter:        { type: "t_junction",              description: "功分点" }
-  node_rf_shunt_tap:       { type: "component_pad_junction",  description: "吸附匹配电容" }
-
-  # ---- 串联器件两端 ----
-  node_bead_in:            { type: "pad_junction" }
-  node_bead_out:           { type: "pad_junction" }
-
-  # ---- 阶跃阻抗（带物理偏移）----
-  node_rf_step:
-    type: "stepped_impedance"
-    connections_rule:
-      alignment_type: "custom_offset"
-      offset_from_center: 0.25       # 下半支路阶跃阻抗的物理偏移（mm 或归一化比例）
-
-  # ---- 浮动器件（引力场布局）----
-  node_cap_bulk:
-    type: "floating_shunt_tap"
-    placement_objective:
-      strategy: "space_available"    # 在空白处寻找位置
-
-  node_cap_bypass:
-    type: "floating_shunt_tap"
-    placement_objective:
-      strategy: "attract_to_target"
-      target_terminal: "PIN_PA_VDD"
-      weight: 100.0                  # 极高权重 → 紧贴目标管脚
-```
-
-**节点类型表**：
-
-| `type` | 用途 | 坐标决定方式 |
+| v3.3 段 | 经 Frontend Compiler 后 | 说明 |
 |---|---|---|
-| `t_junction` | RF 主干分叉 | 与左右子段联立解（运动学）|
-| `component_pad_junction` | 串/并器件吸附点（位置必须确定）| 由两侧子段 `target_length` 推算 |
-| `pad_junction` | 串联器件两端的过渡点 | 由邻接边几何确定 |
-| `stepped_impedance` | 阶跃阻抗变径点 | 同上 + `custom_offset` |
-| `floating_shunt_tap` | 浮动并联器件吸附点 | 由 `placement_objective` 引力场 SA 决定 |
+| `components.{C, placement: {x,y,rotation}}` (`is_floating: false`) | 写入 `terminals` 段：`C.PIN_k → (abs_x, abs_y)` | 由 footprint.pins.local_xy 经仿射变换推出 |
+| `components.{C, placement: {type: parametric_uv, anchor_pin, reference_net}}` | 注册 UV 器件；引入变量 `(anchor_x, anchor_y, rotation, offset_v_side)`；其他 pin = anchor + R(rotation)·local_offset | D2：端点滑动模型 |
+| `nodes.{N, type: universal_junction, connection_rules.branches[]}` | 节点中心 `(cx, cy)` 作为 IntVar；每分支派生线性约束 `branch_end = center + R(angle)·(offset_u, signed_v)` | D4 |
+| `nodes.{N, type: t_combiner_junction}` | 重命名为 `t_junction`（语义等价：多输入合一）| D4 别名 |
+| `edges.{E, type: microstrip, target_length: ...}` | `routing_class: rf_constrained_locked` | D3 |
+| `edges.{E, type: microstrip, no target_length}` | `routing_class: rf_constrained_free`（仅参与 NoOverlap）| D3 |
+| `edges.{E, type: trace}` | `routing_class: flexible_path`（A* 处理）| 同 v4 |
 
-> ⚠️ **v3→v4 重要变化**：取消 `parent_edge` + `position_along_parent` 字段。节点位置完全由"它两侧的边的 `target_length` + 起止端点坐标"在求解器里联立解出，避免冗余/冲突。
+### 3.2 v6 节点类型表（替换 v4 §2.3）
 
-### 2.4 `edges` — 广义边（微带线 / 普通走线 / 集总器件）
-
-```yaml
-edges:
-  # ===== A. 刚性射频网络区 =====
-  tl_rf_main:
-    type: "microstrip"
-    routing_class: "rf_constrained"
-    connections: [ "PIN_RF_IN", "node_rf_splitter" ]
-    constraint: { width: 1.20, target_length: 15.00 }
-    geometry:   { bend_style: "mitered_45" }       # 拐角风格
-
-  # 拓扑分裂：tl_rf_up_p1 与 tl_rf_up_p2 共享 node_rf_shunt_tap
-  tl_rf_up_p1:
-    type: "microstrip"
-    routing_class: "rf_constrained"
-    connections: [ "node_rf_splitter", "node_rf_shunt_tap" ]
-    constraint: { width: 0.50, target_length: 6.00 }
-
-  c_rf_match:
-    type: "lumped_capacitor"                       # 并联（一端为 GND_REF）
-    connections: [ "node_rf_shunt_tap", "GND_REF" ]
-    parameters: { value_pF: 1.5, package: "0402" }
-
-  tl_rf_up_p2:
-    type: "microstrip"
-    routing_class: "rf_constrained"
-    connections: [ "node_rf_shunt_tap", "PIN_PA_GATE_1" ]
-    constraint: { width: 0.50, target_length: 12.00 }
-
-  # 阶跃阻抗
-  tl_rf_down_narrow:
-    type: "microstrip"
-    routing_class: "rf_constrained"
-    connections: [ "node_rf_splitter", "node_rf_step" ]
-    constraint: { width: 0.50, target_length: 8.00 }
-
-  tl_rf_down_wide:
-    type: "microstrip"
-    routing_class: "rf_constrained"
-    connections: [ "node_rf_step", "PIN_PA_GATE_2" ]
-    constraint: { width: 1.50, target_length: 10.00 }
-
-  # ===== B. 灵活偏置网络区 =====
-  trace_dc_1:
-    type: "trace"
-    routing_class: "flexible_path"
-    connections: [ "PIN_DC_IN", "node_cap_bulk" ]
-    constraint: { width: 0.80, target_length: null }   # 无长度约束 → A*
-
-  C_bulk:
-    type: "lumped_capacitor"                            # 并联
-    connections: [ "node_cap_bulk", "GND_REF" ]
-    parameters: { value: "10uF", package: "0805" }
-
-  trace_dc_2:
-    type: "trace"
-    routing_class: "flexible_path"
-    connections: [ "node_cap_bulk", "node_bead_in" ]
-    constraint: { width: 0.80, target_length: null }
-
-  L_bead:
-    type: "lumped_inductor"                             # 串联（两端均非 GND）
-    connections: [ "node_bead_in", "node_bead_out" ]
-    parameters: { package: "0603", part: "BLM18" }
-```
-
-### 2.5 边类型 × `routing_class` 矩阵
-
-| `type` | `routing_class` | 求解器 | 长度约束 |
+| `type` | 用途 | 坐标决定方式 | 来源 |
 |---|---|---|---|
-| `microstrip` | `rf_constrained` | 运动学 + CP-SAT NoOverlap | `target_length` 硬锁（±tol）|
-| `trace` | `flexible_path` | A* 迷宫 | `null`（忽略）|
-| `lumped_capacitor` / `lumped_inductor` | （由 connections 推断）| 不直接参与寻路；作为节点的物理 footprint | — |
+| `t_junction` | RF 主干分叉 | 与左右子段联立解 | v3.3 + v4 |
+| `t_combiner_junction` | 多输入合一节点 | 同 t_junction（v6 视为别名）| v3.3 |
+| `pad_junction` | 普通中转点 | 由邻接边几何确定 | v4 (≡ v3.3 universal_node) |
+| `stepped_impedance` | 阻抗阶跃变径 | 同上 + custom_offset | v3.3 + v4 |
+| **`universal_junction`** ⭐ | **多分支 manifold 模板** | center 为 IntVar；branch 端点 = center + R(angle)·(u, signed_v) | **v3.3（D4 新增）**|
+| `floating_shunt_tap` | 浮动并联吸附点 | SA 引力场 | v4 |
+| `component_pad_junction` | 串/并器件吸附点（v4 兼容路径）| UV 解析后 = component anchor pin 坐标 | v4（D2 改用 UV 模型）|
 
-**集总器件的串/并自动判定**：
-- `connections` 中包含 `GND_REF` → **并联接地分支**（自动生成接地过孔）。
-- `connections` 两端都是普通节点 → **串联器件**（footprint 占位 + 两端连续走线对齐 pad）。
+### 3.3 v6 routing_class 三档（替换 v4 §2.5）
+
+| 推断条件 | routing_class | 求解器 | 长度约束 |
+|---|---|---|---|
+| `microstrip` ∧ 给定 `target_length` | `rf_constrained_locked` | CP-SAT 长度锁 + NoOverlap | `target_length` ±tol |
+| `microstrip` ∧ 缺省 `target_length` | `rf_constrained_free` | CP-SAT 仅 NoOverlap | 自由 |
+| `trace` | `flexible_path` | A* 迷宫绕障 | 无 |
 
 ---
 
-## 3. 拓扑分裂展开（v4）
+## 4. UV 解析（D2 形式化）
+
+对每个 `parametric_uv` 器件 `c`：
+
+1. **host_edge 匹配**：在 `c.placement.reference_net` 对应的所有 microstrip edges 中，筛选 `c.{anchor_pin}` 出现在 `connections` 端点的 edge。
+2. **三种情形**：
+   - **正常**（本案例 100% 适用）：恰好命中 1 条 → 锁定为 `host_edge`，无需选择变量。
+   - **歧义**：≥ 2 条 → 引入 `host_edge_choice BoolVar[]` + `AddExactlyOne`，由 CP-SAT 决策。
+   - **失配**：0 条 → 反向构造 anonymous microstrip 作 host，target_length 自由；记入 lint_report。
+3. **变量与约束**：
+   ```
+   anchor_x, anchor_y                    ∈ host_edge 主方向 [0, host_length]
+   rotation                              ∈ {0, 90, 180, 270}
+   offset_v_side                         ∈ {+1, -1}    BoolVar
+   anchor_pin_pos = (anchor_x, anchor_y) + offset_v_side · (W_host/2 + clearance) · n̂_host
+   pin_k_pos = anchor_pin_pos + R(rotation) · (footprint.local[k] - footprint.local[anchor])
+   ```
+4. **NoOverlap 障碍**：`c` 的 footprint bbox 在 anchor + rotation 下进入 NoOverlap 集合。
+
+---
+
+## 5. universal_junction 求解模板（D4 形式化）
+
+对节点 `N`，其 `connection_rules.branches[]` 给出：
+
+```
+变量: center_x[N], center_y[N]   ∈ [0, board_w] × [0, board_h]
+
+对每个 branch b ∈ branches:
+  设 t = b.edge 的另一端坐标 (target)
+  设 (du, dv) = (b.origin.offset_u, signed_v(b.origin.offset_v))
+  设 (cosθ, sinθ) = (cos(b.angle), sin(b.angle))    # 预计算为常量
+
+  约束 (anchor):
+    target_x[t] == center_x[N] + cosθ·du - sinθ·dv
+    target_y[t] == center_y[N] + sinθ·du + cosθ·dv
+
+  其中 signed_v(edge_left)    = +W/2 + clearance
+       signed_v(edge_right)   = -W/2 - clearance
+       signed_v(align_center) = 0
+       (W = b.edge.constraint.width, clearance = global_constraints.routing.default_clearance)
+```
+
+**注**：v3.3 angle 单位为度；预计算后系数为常量；CP-SAT 用整数线性约束；非 90° 倍数旋转用 1µm 离散后近似。`semantic_intent` 字段（如 `[stepped_impedance, manifold_junction]`）当前版本仅作为后处理 EM 仿真标记，不参与求解。
+
+---
+
+## 6. CP-SAT 约束矩阵（v6）
+
+| 约束 | OR-Tools 原语 | 适用范围 |
+|---|---|---|
+| RF 段长度（locked） | `AddAbsEquality` + `AddLinearExpression`（±tol） | `rf_constrained_locked` |
+| RF 段长度（free） | — | `rf_constrained_free` 不施加长度 |
+| universal_junction 几何 | `model.Add(...)` 线性方程 | 每分支 1 对 (x, y) 等式 |
+| UV anchor 滑动 | IntVar 域 + 派生 pin 坐标线性表达 | 每个 UV 器件 |
+| 无交叉 | `AddNoOverlap` + `AddBoolOr(x_sep, y_sep)` | 所有 RF 边矩形 + UV/fixed component footprint + keepout |
+| 阶跃阻抗偏移 | 节点 `custom_offset` → 线性约束 | `stepped_impedance` |
+| 板框边界 | 变量域裁剪 | 所有节点变量 |
+| 过孔密度 | `AddCumulative` | shunt via |
+
+无交叉实现（v4 沿用，与 `concepts/routing-algorithm-comparison.md` §3.2 谓词方向一致）：
 
 ```python
-def expand_topology(netlist: dict) -> dict:
-    """
-    v4 展开规则：
-    - 不再有 microstrip_parent；共享节点即拓扑分裂。
-    - lumped_* 中含 GND_REF → 并联（生成 ground_branch + via）。
-    - lumped_* 两端都是普通节点 → 串联（生成 series_component footprint）。
-    - trace + routing_class=flexible_path → 进 A* 队列。
-    - microstrip + routing_class=rf_constrained → 进运动学 + CP-SAT 队列。
-    """
-    out_nodes = dict(netlist["terminals"])    # terminals 直接进入坐标已知集
-    out_nodes.update(netlist.get("nodes", {}))
-
-    rf_edges, flex_edges, series_comps, shunt_branches = [], [], [], []
-
-    for name, edge in netlist["edges"].items():
-        etype = edge.get("type", "")
-        rclass = edge.get("routing_class")
-
-        if etype.startswith("lumped_"):
-            ends = edge["connections"]
-            if "GND_REF" in ends:
-                shunt_branches.append({**edge, "name": name,
-                                       "via_diameter": 0.3})
-            else:
-                series_comps.append({**edge, "name": name})
-            continue
-
-        if rclass == "rf_constrained":
-            rf_edges.append({**edge, "name": name})
-        elif rclass == "flexible_path":
-            flex_edges.append({**edge, "name": name})
-        else:
-            raise ValueError(f"edge {name} missing routing_class")
-
-    return {
-        "nodes": out_nodes,
-        "rf_edges": rf_edges,
-        "flex_edges": flex_edges,
-        "series_components": series_comps,
-        "shunt_branches": shunt_branches,
-    }
-```
-
-> 关键：**没有 `microstrip_parent` 段**；`tl_rf_up_p1` 和 `tl_rf_up_p2` 通过共享 `node_rf_shunt_tap` 自动构成"分裂"关系，运动学求解器在解节点坐标时会自然把它们对齐到同一条逻辑微带线上。
-
----
-
-## 4. 算法流程 v4
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    v4 三阶段协同（最多 5 轮）                    │
-│                                                                 │
-│  Phase 1: Floating Placement SA                                 │
-│  ─────────────────────────────────                              │
-│  E = α·HPWL + γ·C_boundary + δ·C_thermal + ζ·E_attract          │
-│  目标：解出 floating_shunt_tap 节点的初始坐标                     │
-│                                                                 │
-│         ↓ 输出节点坐标                                           │
-│                                                                 │
-│  Phase 2: Rigid RF Kinematic + CP-SAT                           │
-│  ─────────────────────────────────                              │
-│  · 端点已知 + target_length 已知 → 联立解 t_junction 等节点坐标   │
-│  · CP-SAT AddNoOverlap：所有刚性 RF 段两两不交叉                  │
-│  · stepped_impedance 节点应用 custom_offset                     │
-│  · bend_style 决定拐角几何                                       │
-│                                                                 │
-│         ↓ 输出 RF 几何（视作 obstacle）                          │
-│                                                                 │
-│  Phase 3: Flexible A* Routing                                  │
-│  ─────────────────────────────────                              │
-│  · obstacles = (Phase 2 RF 几何) ∪ (series_components 占位)      │
-│                ∪ (shunt_branches via 占位) ∪ 板框                │
-│  · 对每条 flexible_path 边跑 A*（无长度约束）                    │
-│  · 失败 → 反馈到 Phase 1 抬温度，重启                            │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+def add_pairwise_no_overlap(model, e_a, e_b):
+    bbox_a, bbox_b = get_path_bbox(e_a), get_path_bbox(e_b)
+    x_sep = model.NewBoolVar(f"xsep_{e_a.name}_{e_b.name}")
+    y_sep = model.NewBoolVar(f"ysep_{e_a.name}_{e_b.name}")
+    model.Add(bbox_a.max_x + e_a.width/2 <= bbox_b.min_x).OnlyEnforceIf(x_sep)
+    model.Add(bbox_b.max_x + e_b.width/2 <= bbox_a.min_x).OnlyEnforceIf(x_sep)
+    model.Add(bbox_a.max_y + e_a.width/2 <= bbox_b.min_y).OnlyEnforceIf(y_sep)
+    model.Add(bbox_b.max_y + e_b.width/2 <= bbox_a.min_y).OnlyEnforceIf(y_sep)
+    model.AddBoolOr([x_sep, y_sep])
 ```
 
 ---
 
-## 5. Placement SA（v4 能量函数）
+## 7. Phase 1 SA（v6 能量函数）
 
 ```python
-def compute_energy_v4(placement, netlist):
-    hpwl     = compute_hpwl(placement, netlist)
-    boundary = compute_boundary_penalty(placement, board_bounds)
-    thermal  = compute_thermal_penalty(placement, power_devices)
-    attract  = compute_attract_field(placement, netlist)   # ⭐ v4 新增
+def compute_energy_v6(placement, ir):
+    return (alpha   * compute_hpwl(placement, ir)
+          + gamma   * compute_boundary_penalty(placement, ir.board_outline)
+          + delta   * compute_thermal_penalty(placement, ir.power_devices)
+          + zeta    * compute_uv_anchor_attract(placement, ir))   # v6: UV 取代 floating_shunt_tap
 
-    return α * hpwl + γ * boundary + δ * thermal + ζ * attract
-
-
-def compute_attract_field(placement, netlist):
-    """
-    引力场项：仅对 floating_shunt_tap 节点生效
-      - strategy=attract_to_target: weight × dist(node, target_terminal)²
-      - strategy=space_available:   惩罚"靠近已占用区域"，鼓励落到空白
-    """
+def compute_uv_anchor_attract(placement, ir):
+    """对每个 UV 器件，把 anchor_pin 拉向其 host_edge 主方向，并对超出 [0, host_length] 的位置惩罚。"""
     E = 0.0
-    for nname, node in netlist["nodes"].items():
-        if node.get("type") != "floating_shunt_tap":
-            continue
-        obj = node["placement_objective"]
-        if obj["strategy"] == "attract_to_target":
-            tgt = netlist["terminals"][obj["target_terminal"]]
-            d2  = (placement[nname].x - tgt["x"]) ** 2 \
-                + (placement[nname].y - tgt["y"]) ** 2
-            E  += obj["weight"] * d2
-        elif obj["strategy"] == "space_available":
-            E  += local_density(placement, nname)   # 已占用密度作惩罚
+    for uv in ir.uv_components:
+        host = ir.edges[uv.host_edge]
+        u_along = project_onto(placement[uv.name].anchor, host)
+        if u_along < 0 or u_along > host.length:
+            E += zeta_oob * (clamp(u_along, 0, host.length) - u_along) ** 2
     return E
 ```
 
-> 注意：约束类项（无交叉、过孔密度）仍保留 v3 的"全部交给 CP-SAT 强制"原则——SA 不承担硬约束。
+> **v4 → v6 差异**：`floating_shunt_tap` 引力场（`attract_to_target` / `space_available`）被 UV 器件的 anchor 吸附逻辑取代；前者作为 v4 兼容路径保留，但真实案例不触发。
+
+详见 [`concepts/placement-problem-formulation.md`](./concepts/placement-problem-formulation.md)。
 
 ---
 
-## 6. CP-SAT 约束（v4 仅作用于刚性 RF 区）
+## 8. Phase 3 A*（保留兼容）
 
-| 约束 | CP-SAT 原语 | 适用范围 |
+灵活偏置线（`type: trace`）走 A* 迷宫绕障，cost = 路径段数 + λ·拐弯惩罚 + μ·靠近 RF 边惩罚。
+本案例无 `trace` 边，本阶段跳过；实现保留以兼容未来含 trace 输入。
+
+详见 [`concepts/routing-algorithm-comparison.md`](./concepts/routing-algorithm-comparison.md)。
+
+---
+
+## 9. 真实案例求解规模实测预估
+
+`PA_Module_Simplified` (40 × 100 mm 单层板) 经 Frontend Compiler 展开后：
+
+| 项 | 数值 |
+|---|---|
+| Components: fixed (IC1+TP1-5) / UV | 6 / 9 |
+| Terminals (含 GND) | 28 |
+| Nodes: universal / t_junction / t_combiner | 2 / 4 / 2 |
+| Edges: rf_locked / rf_free / flex | 14 / 8 / 0 |
+| CP-SAT IntVar | ≈ 60 |
+| CP-SAT BoolVar | ≈ 250 |
+| 长度约束 | 14 |
+| universal_junction 几何约束 | 2 × 4 = 8 |
+| **预估求解时间（单线程 OR-Tools）** | **1–5 s** |
+
+→ **方案在本案例下完全可解**；远低于 v5 的 5–30 s 估算。规模可作为 M3–M6 的端到端冒烟基线。
+
+---
+
+## 10. 风险登记摘要
+
+| ID | 风险 | 缓解 |
 |---|---|---|
-| RF 段长度 | `AddLinearExpression`（±tol） | 所有 `rf_constrained` 边 |
-| 节点坐标联立 | 几何方程（`AddAbsEquality` 等） | 共享节点的两侧子段 |
-| 阶跃阻抗偏移 | 节点 `custom_offset` 转为线性约束 | `stepped_impedance` 节点 |
-| 无交叉 | `AddNoOverlap` + `AddBoolOr` | 所有 RF 边 + series_component footprint |
-| 过孔密度 | `AddCumulative` | shunt_branches via |
-| 预布线障碍 | `occupied_cells` | 由 Phase 2 RF 几何生成，供 Phase 3 的 A* 使用 |
+| R1 | universal_junction 含非 90° angle 时整数近似误差 | 1µm 离散；误差 < 1‰ 在 DRC 容忍内 |
+| R2 | UV host_edge 失配 | 反向构造 anonymous host edge + lint warning，不阻塞 |
+| R3 | rf_constrained_free 短段被挤穿 | NoOverlap inflate 用 width + 2·clearance；infeasible 反馈 SA 抬温度 |
+| R4 | NoOverlap 仅轴对齐，对斜段近似 | 斜段拆为多个轴对齐子矩形（v4 现做法）|
+| R5 | 高密度 UV 时 CP-SAT 启发退化 | num_workers + portfolio search；超时降级"先 SA 固定 placement，再 CP-SAT 仅解节点" |
+| R6 | typo 修复表覆盖不全 | lint_report 累积统计 + 月度回顾；未知字段透传不阻塞 |
+| R7 | universal_junction 多语义 `semantic_intent` | 当前版本仅按几何模板求解；语义留给后处理 EM 仿真 |
+| R8 | 未来引入 multipoint_net / logical_net | M5 已搭好 A* 与 LVS 接口，预留 FLUTE 集成钩子 |
 
-**关键实现：无交叉约束（与 §3.2 routing-algorithm-comparison.md 统一谓词方向）**
-
-```python
-def add_pairwise_no_overlap(model, e_a, e_b, x):
-    """两边之间的无交叉：x 方向分离 OR y 方向分离（强制约束）"""
-    bbox_a = get_path_bbox(e_a, x)
-    bbox_b = get_path_bbox(e_b, x)
-
-    x_sep = model.NewBoolVar(f"xsep_{e_a.name}_{e_b.name}")
-    y_sep = model.NewBoolVar(f"ysep_{e_a.name}_{e_b.name}")
-
-    # x_sep == True ⇔ a 在 b 左侧 或 b 在 a 左侧
-    model.Add(bbox_a.max_x + e_a.width / 2 <= bbox_b.min_x).OnlyEnforceIf(x_sep)
-    model.Add(bbox_b.max_x + e_b.width / 2 <= bbox_a.min_x).OnlyEnforceIf(x_sep)
-
-    model.Add(bbox_a.max_y + e_a.width / 2 <= bbox_b.min_y).OnlyEnforceIf(y_sep)
-    model.Add(bbox_b.max_y + e_b.width / 2 <= bbox_a.min_y).OnlyEnforceIf(y_sep)
-
-    model.AddBoolOr([x_sep, y_sep])      # 至少一个方向必须分离
-```
+完整 ADR 见 [`ITERATION-PLAN.md`](./ITERATION-PLAN.md) §5。
 
 ---
 
-## 7. 灵活路径 A* 求解器（替代 v3 中对 flexible 边的 CP-SAT）
-
-```python
-def route_flexible(flex_edge, obstacles, grid):
-    """
-    A* 迷宫绕障；忽略 target_length（因为是 null）。
-    Cost = 路径段数 + λ·拐弯惩罚 + μ·靠近 RF 边惩罚（避免耦合）
-    """
-    start = grid.snap(flex_edge.connections[0].xy)
-    goal  = grid.snap(flex_edge.connections[1].xy)
-    return astar(
-        start, goal,
-        passable=lambda c: c not in obstacles,
-        cost=cell_cost(flex_edge, obstacles),
-    )
-```
-
-**为什么从 CP-SAT 切到 A***：
-- 灵活偏置线没有长度约束 ⇒ CP-SAT 的 `AddLinearExpression` 失去用武之地。
-- 单条边在 500×500 网格里 CP-SAT 变量 ≈10⁵；A* 单边 < 10ms。
-- 复杂度从 v3 估算的 10⁶ 量级下降到 RF 段数 × 节点联立 ≈ 10²~10³。
-
----
-
-## 8. 典型 Doherty 功放量化（v4 重新评估）
-
-| 参数 | v3 估算 | v4 估算 | 改善原因 |
-|---|---|---|---|
-| 微带线段数（含拓扑分裂） | 15-30 | 15-30 | — |
-| 浮动器件 (`floating_shunt_tap`) | 不支持 | 5-15 | 新增能力 |
-| 串联器件 (`L_bead` 类) | 不支持 | 2-5 | 新增能力 |
-| RLC 并联 shunt | 23-42 | 23-42 | — |
-| **CP-SAT 变量规模** | ~10⁵-10⁶ | **~10⁴**（仅 RF）| flex 不再走 CP-SAT |
-| **求解时间** | 30-120 s | **5-30 s** | A* 替换灵活线 CP-SAT |
-
----
-
-## 9. 文件索引
+## 11. 文件索引
 
 | 文件 | 内容 |
 |---|---|
-| `ALGORITHM-OVERVIEW.md` | **总体架构 v4**（本文档）|
-| `concepts/placement-problem-formulation.md` | 布局 SA + 引力场模型 |
-| `concepts/routing-algorithm-comparison.md` | 刚性 RF CP-SAT + 灵活 A* 双求解器实现 |
-| `concepts/microstrip-topology-matching.md` | 微带线类型、`bend_style`、阶跃阻抗 `custom_offset` |
+| `README.md` | v6 入口与速览 |
+| `ALGORITHM-OVERVIEW.md` | **总体架构 v6**（本文档）|
+| `ITERATION-PLAN.md` | v6 算法方案 + 6+1 期开发计划 + 风险登记 + ADR |
+| `射频微波版图结构化数据规范 (v3.3).md` | 输入数据规范（外部 EDA 接口）|
+| `rf_layout_simplified.yaml` | 真实案例 (PA_Module_Simplified)，所有期次的回归基线 |
+| `concepts/placement-problem-formulation.md` | SA + 引力场 + UV anchor 吸附（v6 适配）|
+| `concepts/routing-algorithm-comparison.md` | CP-SAT + A* 双求解器实现（v6 适配）|
+| `concepts/microstrip-topology-matching.md` | 微带类型 / bend_style / 阶跃阻抗 / universal_junction 几何（v6 适配）|

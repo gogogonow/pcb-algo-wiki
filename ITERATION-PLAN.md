@@ -1,0 +1,363 @@
+# 功放 PCB 自动布局布线引擎 —— 最终算法方案 v6 与迭代开发计划
+
+> 基础规范：[`射频微波版图结构化数据规范 (v3.3).md`](./射频微波版图结构化数据规范%20(v3.3).md)
+> 算法基线：[`ALGORITHM-OVERVIEW.md`](./ALGORITHM-OVERVIEW.md) (v4 hybrid_rf_graph)
+> 锚定回归用例：[`rf_layout_simplified.yaml`](./rf_layout_simplified.yaml) (PA_Module_Simplified)
+>
+> 本文档替代 v5 草案，基于真实案例 `PA_Module_Simplified` 的实测验证后输出。
+
+---
+
+## 0. 文档定位
+
+v3.3 是**外部数据交换规范**（面向 EDA 上游 / 设计师），v4 是**求解器内部 schema**（面向算法）。两者抽象层级不同。本计划的 v6 在 v5 草案基础上根据**真实案例**做了 5 处结构性修正，把"理论上可行"收敛为"实测可解"。
+
+阅读顺序：
+
+1. §1 真实案例特征与 v5 草案的差距 → 解释**为什么要改方案**
+2. §2 最终算法方案 v6（pipeline + 关键模块）→ **改成什么样**
+3. §3 案例求解规模实测预估 → **方案在真实数据上是否真能跑**
+4. §4 6+1 期迭代计划（M0–M6）→ **怎么落地**
+5. §5 风险登记与决策记录
+
+---
+
+## 1. 真实案例对 v5 草案的 5 处冲击
+
+`PA_Module_Simplified` 是一个 40×100 mm 单层板，含：
+
+- 1 个 4-pin 主芯片 (`IC1`，绝对放置) + 5 个测试点 (`TP1–TP5`，绝对放置)
+- **9 个 RLC 全部用 `parametric_uv` 吸附**（C1–C6, R1–R3）
+- 22 条 `microstrip` edge，**全部 `rf_constrained`**，**0 条** `trace`/`logical_net`/`multipoint_net`
+- 2 个 `universal_junction` 节点（v4 文档未定义） + 4 个 `t_junction` + 2 个 `t_combiner_junction`
+- 部分 RF 段无 `target_length`（短引线段）
+- 拼写 typo (`redius`/`cicle`)、未知 `bend_style: curved`、未知 `geometry.launch_rule: normal`
+
+| # | 真实案例事实 | v5 草案的假设 | 结论 |
+|---|---|---|---|
+| F1 | 9 个 RLC 是 `components`+`parametric_uv`，PIN 直接出现在 `edges.connections` | "集总器件统一为 `lumped_*` edge" | **❌ 假设破产**：RLC = component-with-pads，pin = terminal |
+| F2 | `universal_junction` 含 `connection_rules.branches[]`，每分支显式 `{angle, offset_u, offset_v}` | 未支持 | **❌ 缺关键节点类型**：必须新增 multi-branch manifold 模板 |
+| F3 | `t_combiner_junction` 未在 v4 列举 | 未支持 | ⚠️ 名称别名，语义 ≡ t_junction |
+| F4 | `terminals:` 段无 (x,y)，坐标由 component placement+footprint 推出 | "type=pad 必带 (x,y)" | **❌ 必须 frontend 推算坐标** |
+| F5 | 多条 RF edge 无 `target_length` 但仍 `rf_constrained` | 二分法 (rf_constrained 必有 length / flexible_path 无 length) | **❌ 二分法不够**：需第三档"rf 自由长度" |
+| F6 | `R2`: anchor=PIN_1, ref_net=PWR_NET, PIN_2=RF_NET_1（跨非地双 net）；`C6`: anchor=PIN_2 | "UV anchor 总是 PIN_1；shunt vs series 看是否触地" | **❌ 串/并判定要泛化** |
+| F7 | 0 条 `multipoint_net`/`logical_net`/`trace` | M5 规划 FLUTE/RSMT + LVS 强校验 | ⚠️ 工作量被高估，降级为可选 |
+| F8 | typo + 未知字段 | pydantic 严格 reject | **❌ 太刚**：必须容错 + 透传告警 |
+
+**判定结论**：v5 的"三阶段流水线 + Frontend Compiler"主体架构成立；但 §1 列出的 8 项发现要求重做 5 个结构性决策（D1–D5，见 §2.0）。
+
+---
+
+## 2. 最终算法方案 v6
+
+### 2.0 五个结构性决策（替换 v5）
+
+| 决策 ID | v5 原方案 | v6 修订方案 | 触发依据 |
+|---|---|---|---|
+| **D1** | RLC 翻译为 `lumped_*` edge | RLC = component-with-pads；pin 直接进 `terminals`；`lumped_*` 概念在 v3.3 数据流中作废（v4 文档保留供无 footprint 的纯电气抽象使用）| F1 |
+| **D2** | UV 解析 = "在宿主 microstrip 中间插入 `component_pad_junction` 拓扑分裂" | UV 解析 = "**UV 器件的 anchor_pin 落在某条 RF edge 的端点**；component placement (x, y, rotation) 是 CP-SAT 待求；anchor_pin 沿 reference_net 的某条 microstrip 的 u 方向滑动，offset_v 离散为 ±(W/2 + clearance)" — 不破坏原 edge 拓扑 | F1+F6 |
+| **D3** | `routing_class` ∈ {rf_constrained, flexible_path} | 三档：**rf_constrained_locked** / **rf_constrained_free** / **flexible_path**（自动从 v3.3 字段推断）| F5 |
+| **D4** | 节点类型 5 种 | 新增 **`universal_junction`** + `t_combiner_junction`；`universal_junction` 作为**几何模板节点**，按 `branches[].{angle, offset_u, offset_v}` 把每分支端点表达为相对中心的线性偏移 | F2+F3 |
+| **D5** | LVS Verifier 强阻塞 + 严格 schema | LVS 改**软警告**（真实案例无 logical_net）；新增 **Schema Lint**（typo 自动修复 + 未知字段透传告警），优先级提升到 M2a | F7+F8 |
+
+### 2.1 总体管线
+
+```
+v3.3 YAML
+    │
+    │ ① Frontend Compiler （重写）
+    │   1. Schema Lint
+    │      · typo 自动修复表（redius→radius, cicle→circle, ...）
+    │      · 未知 bend_style / launch_rule / pad_geometry.shape → warning + 透传到几何后处理器
+    │      · 未知字段不阻塞，记入 lint_report
+    │   2. expand_components
+    │      · 对每个 component：footprint.pins.local_xy 经 placement.{x,y,rotation} 仿射变换 → 绝对坐标 pad
+    │      · is_floating=false → 立即写入 terminals 坐标 (fixed pads)
+    │      · placement.type=parametric_uv → 仅注册 component；pad 坐标作为 CP-SAT 变量集
+    │      · component bbox 作为 NoOverlap 障碍 footprint
+    │   3. UV 解析（D2 新模型）
+    │      · 对每个 UV 器件：在 reference_net 上枚举 microstrip edges，找出把 anchor_pin 作为端点的那条 (host_edge)
+    │      · 若多条匹配 → host_edge_choice BoolVar（AddExactlyOne）
+    │      · 引入参数 (anchor_offset_u: IntVar, anchor_offset_v_side: BoolVar, rotation: IntVar∈{0,90,180,270})
+    │      · component 其他 pin 坐标 = anchor + R(rotation)·footprint.local_offset
+    │   4. universal_junction 模板展开（D4）
+    │      · 节点中心 (cx, cy) 为 IntVar
+    │      · 对 branches[] 每条派生约束：
+    │          branch_end - center = R(angle) · (offset_u, signed_v(offset_v))
+    │        其中 signed_v(edge_left)=+W/2, signed_v(edge_right)=-W/2, signed_v(align_center)=0
+    │   5. routing_class triage（D3）
+    │      · type=microstrip ∧ has(target_length) → rf_constrained_locked
+    │      · type=microstrip ∧ ¬has(target_length) → rf_constrained_free
+    │      · type=trace → flexible_path
+    │      · type=lumped_* （v4 兼容兜底） → 按串/并展开
+    │   6. 拓扑健全性检查（warning-only）
+    │      · 每条 edge 端点 ∈ terminals ∪ nodes
+    │      · 每个 net 在 expand_components 后连通
+    │      · 节点的所有 incident edge 与该节点的 net 一致
+    │
+    ▼ 内部 IR (v4 + 扩展)
+    │
+    │ ② Phase 1 SA — 仅对 UV 器件做粗放置
+    │   能量 E = α·HPWL + γ·C_boundary + δ·C_thermal + ζ·E_anchor_attract
+    │   · UV 器件初值：沿 host_edge 等距分布 + anchor_pin 朝向 host_edge 主方向
+    │   · 5 次重试机制保留（CP-SAT 失败 → 抬温度）
+    │
+    │ ③ Phase 2 CP-SAT — 主求解器（核心阶段）
+    │   变量：
+    │     · 所有 nodes 中心 (含 universal_junction)
+    │     · 所有 UV 器件 (anchor_x, anchor_y, rotation, offset_v_side)
+    │   约束：
+    │     · rf_constrained_locked: AddAbsEquality + AddLinearExpression，|Δx|+|Δy| ∈ [L−tol, L+tol]
+    │     · rf_constrained_free:  无长度约束，仅参与 NoOverlap
+    │     · universal_junction: 每个 branch 端点 = center + R(angle)·(u, v_signed) 线性约束
+    │     · NoOverlap: (microstrip 矩形 ∪ component footprint 矩形 ∪ keepout_zones) 两两 x/y 分离
+    │     · 板框边界: 所有节点变量域 ⊂ board_outline
+    │     · UV anchor_pin 必须落在 host_edge 主方向的 [0, host_length] 区间
+    │
+    │ ④ Phase 3 A* — 仅对 flexible_path
+    │   · 本案例为空集，跳过
+    │   · 保留实现以兼容 v4 文档与未来含 trace 的输入
+    │
+    │ ⑤ 后处理
+    │   · bend_style 几何渲染 (mitered_45 / curved / square / arc)
+    │   · 未知 bend_style → fallback 到 mitered_45 + warning
+    │   · LVS 软校验（若存在 logical_net）
+    │   · 基础 DRC（min_width, min_clearance, via_density）
+    │   · 输出 SVG 预览 + Gerber/GDS stub
+    ▼
+最终几何 + lint_report + drc_report
+```
+
+### 2.2 v6 节点类型表（替换 v4 §2.3）
+
+| `type` | 用途 | 坐标决定方式 | 来源 |
+|---|---|---|---|
+| `t_junction` | RF 主干分叉 | 与左右子段联立解 | v3.3 + v4 |
+| `t_combiner_junction` | 多输入合一节点 | 同 t_junction | v3.3 (新别名) |
+| `pad_junction` | 普通中转点 | 由邻接边几何确定 | v4 (≡ v3.3 universal_node) |
+| `stepped_impedance` | 阻抗阶跃变径 | 同上 + custom_offset | v3.3 + v4 |
+| `universal_junction` ⭐ | **多分支 manifold 模板** | center 为 IntVar；branch 端点 = center + R(angle)·(offset_u, signed_v) | **v3.3 (D4 新增)** |
+| `floating_shunt_tap` | 浮动并联吸附点 | SA 引力场 | v4 |
+| `component_pad_junction` | 串/并器件吸附点 | UV 解析后 = component anchor pin 坐标 | v4 (D2 改用 UV 模型) |
+
+### 2.3 v6 routing_class 三档（替换 v4 §2.5）
+
+| 推断条件 | routing_class | 求解器 | 长度约束 |
+|---|---|---|---|
+| type=microstrip ∧ target_length 给定 | `rf_constrained_locked` | CP-SAT 长度锁 + NoOverlap | `target_length` ±tol |
+| type=microstrip ∧ target_length 缺省 | `rf_constrained_free` | CP-SAT 仅 NoOverlap | 自由 |
+| type=trace | `flexible_path` | A* 迷宫绕障 | 无 |
+
+### 2.4 UV 解析的 `host_edge` 匹配规则（D2 细化）
+
+对 UV 器件 `c`：
+
+1. 在 `c.placement.reference_net` 对应的所有 microstrip edges 中，筛选 `c.{anchor_pin}` 出现在 `connections` 端点的 edge；
+2. **正常情形（本案例 100% 适用）**：恰好命中 1 条 → 锁定 host_edge，无需 BoolVar；
+3. **歧义情形**：≥ 2 条 → 引入 `host_edge_choice BoolVar[]` + `AddExactlyOne`，由 CP-SAT 决策；
+4. **失配情形**：0 条 → 启动**反向构造**：在 reference_net 末端追加一条 anonymous microstrip 作 host，target_length 自由；记入 lint_report。
+
+### 2.5 universal_junction 求解模板（D4 形式化）
+
+对节点 N 含 `connection_rules.branches[]`：
+
+```
+变量: center_x[N], center_y[N]                                     ∈ [0, board_w]×[0, board_h]
+对每个 branch b ∈ branches:
+  设 t = b.edge 的另一端坐标 (target)
+  设 (du, dv) = (b.origin.offset_u, signed_v(b.origin.offset_v))
+  设 (cosθ, sinθ) = (cos(b.angle), sin(b.angle))   预计算为常量
+
+  约束 1 (anchor):
+    target_x[t] == center_x[N] + cosθ·du - sinθ·dv
+    target_y[t] == center_y[N] + sinθ·du + cosθ·dv
+
+  其中 signed_v(edge_left)  = +W/2 + clearance
+       signed_v(edge_right) = -W/2 - clearance
+       signed_v(align_center) = 0
+       (W = b.edge.constraint.width, clearance = global_constraints.routing.default_clearance)
+```
+
+注：v3.3 的 angle 单位为度，预计算后系数为常量；CP-SAT 用整数线性约束；非 90° 倍数的旋转用 1µm 离散后近似。
+
+---
+
+## 3. 真实案例求解规模实测预估
+
+| 项 | 数值 | 备注 |
+|---|---|---|
+| Components: fixed (IC1+TP1-5) / UV | 6 / 9 | — |
+| Terminals (含 GND) | 28 | 由 expand_components 推出 |
+| Nodes: universal_junction / t_junction / t_combiner | 2 / 4 / 2 | — |
+| Edges: rf_locked / rf_free / flex | 14 / 8 / 0 | F5 触发的 8 条 free |
+| CP-SAT IntVar | ≈ 60 | 8 nodes×2 + 9 UV×4 |
+| CP-SAT BoolVar (NoOverlap pairs ≈ 22²/2 + UV ±v) | ≈ 250 | — |
+| 长度约束 | 14 | — |
+| universal_junction 几何约束 | 2×4 = 8 | 每个 4 branches |
+| **预估求解时间 (单线程 OR-Tools)** | **1–5 s** | 远低于 v5 的 5–30 s |
+
+→ **方案在本案例下完全可解**。本案例可作为 M3–M6 的端到端冒烟测试。
+
+---
+
+## 4. 迭代开发计划（M0–M6，约 8–12 周）
+
+每期顶部列出**目标**、**交付物**、**退出标准 (DoD)**。所有期次均以 `pytest` 单元测试 + 真实案例 `rf_layout_simplified.yaml` 的对应阶段断言作为最低退出门槛。
+
+### M0 ─ 案例锚定 + 拓扑可视化（0.5 周）
+
+- **目标**：把 `rf_layout_simplified.yaml` 拓扑图（node-edge graph）渲染成 SVG，作为后续每期 DoD 的视觉基线。
+- **交付物**：
+  - `tools/topology_viz.py`：纯 Python（networkx + svgwrite），输入 v3.3 YAML，输出 `out/{project}.topology.svg`；
+  - `tests/regression/PA_Module_Simplified/topology.svg.expected`：基线快照。
+- **DoD**：
+  - 对真实案例输出 SVG，肉眼可识别 IC1 + 9 UV 器件 + 2 universal_junction + edges；
+  - 在 CI 中作为 artifact 上传，便于 PR review。
+
+### M1 ─ 工程骨架与 Schema 定义（1 周）
+
+- **目标**：项目脚手架 + v3.3/v4 双 schema 形式化模型。
+- **交付物**：
+  - 仓库结构 `src/{schema, frontend, solver, postproc, tools}/`，`tests/{unit, regression}/`；
+  - `schema/v33.py` / `schema/v6_ir.py`：pydantic 模型；v3.3 模型**允许 extra='allow'**（容错）；v6 IR 用 strict；
+  - CI: ruff + black + mypy + pytest；
+  - `rf_layout_simplified.yaml` 通过 v33 schema 解析。
+- **DoD**：
+  - `pytest tests/unit/test_schema.py` 全绿；
+  - 真实案例 schema load 成功，无 lint error（warning 允许）。
+
+### M2 ─ Frontend Compiler
+
+#### M2a Schema Lint（0.5 周）
+
+- **目标**：D5 决策落地。
+- **交付物**：
+  - `frontend/lint.py`：typo 修复表（redius/radius, cicle/circle, ...）；未知 bend_style/launch_rule/shape 透传 + warning；
+  - `lint_report` 结构化输出（JSON）。
+- **DoD**：
+  - 真实案例的 5+ 个 typo 全部修复；
+  - 未知字段告警计数与预期一致。
+
+#### M2b expand_components（1 周）
+
+- **目标**：F4 解决 — 由 component 推出 terminal 坐标。
+- **交付物**：
+  - `frontend/expand_components.py`：footprint × placement → 绝对 pad（含 rotation 仿射）；
+  - 区分 fixed pad (写入 terminals 坐标) vs UV pad (注册待求)；
+  - `frontend/obstacles.py`：board_outline + keepout_zones + fixed-component bbox → obstacle 多边形集合。
+- **DoD**：
+  - 真实案例展开后，TP1–TP5 + IC1 共 9 个 fixed pad 坐标对照手算无误；
+  - 5+ 不同 footprint × rotation (0/90/180/270) 单元测试全绿。
+
+#### M2c routing_class triage + 节点 normalize（0.5 周）
+
+- **目标**：D3 + D4 一部分。
+- **交付物**：
+  - `frontend/triage.py`：实现 routing_class 三档推断；
+  - `frontend/normalize_nodes.py`：节点类型重命名（universal_node ↔ pad_junction，impedance_step ↔ stepped_impedance），保留 `universal_junction` 与 `t_combiner_junction`。
+- **DoD**：
+  - 真实案例 22 条 edge 分类：14 locked / 8 free / 0 flex（与 §3 表一致）；
+  - 节点类型直方图与手算一致。
+
+### M3 ─ UV 解析 + universal_junction 模板（2 周）
+
+- **目标**：D2 + D4 落地，本期是技术风险最高的一期。
+- **交付物**：
+  - `frontend/uv_resolver.py`：
+    - host_edge 匹配（§2.4 三档：唯一/歧义/失配）；
+    - 引入 (anchor_x, anchor_y, rotation, offset_v_side) 变量描述（IR 层）；
+    - 其他 pin 坐标的派生表达式（线性，OR-Tools 兼容）。
+  - `frontend/universal_junction.py`：§2.5 模板展开，输出 CP-SAT 线性约束生成器。
+- **DoD**：
+  - 真实案例 9 个 UV 器件全部解析为唯一 host_edge（无歧义）；
+  - 2 个 universal_junction 各展开 4 条 branch 约束，几何方程通过单元测试（给定 center 求 branch_end 与手算一致）；
+  - 与 M4 联调前，输出 IR 通过 v6 schema strict 校验。
+
+### M4 ─ Phase 2 CP-SAT 接入（2 周）
+
+- **目标**：v6 求解器主干，跑通真实案例。
+- **交付物**：
+  - `solver/cpsat.py`：
+    - 长度约束 (rf_locked) + 自由段 (rf_free 跳过长度) + universal_junction 几何 + UV 模型；
+    - NoOverlap (含 microstrip 矩形 + component footprint + keepout)；
+    - 板框边界；
+  - `solver/extract.py`：把 OR-Tools 解抽取回几何对象；
+  - `tools/geom_viz.py`：渲染 RF 几何 SVG。
+- **DoD**：
+  - 真实案例 status ∈ {OPTIMAL, FEASIBLE}；
+  - 14 条 locked 边长度误差 ≤ ±0.5%；
+  - 任意两条 RF 边 + footprint 两两 NoOverlap 自动断言通过；
+  - 求解时间 ≤ 10 s（CI 单线程）。
+
+### M5 ─ Phase 1 SA + Phase 3 A*（兼容能力）（1.5 周）
+
+- **目标**：补齐三阶段流水线；A* 与 multipoint 降为可选能力。
+- **交付物**：
+  - `solver/sa_floating.py`：v4 引力场能量函数 + Metropolis 退火；
+  - `solver/orchestrator.py`：三阶段流水线 + 5 次重试 + 抬温度反馈；
+  - `solver/astar_flex.py`：A* 实现（v4 文档现成），用合成 trace 用例验证；
+  - **不**实现 FLUTE/RSMT（F7：真实案例无 multipoint，留作 v7 扩展）。
+- **DoD**：
+  - 真实案例端到端：M0 SVG → M3 IR → M4 CP-SAT → M5 几何 SVG，单命令一键跑通；
+  - 端到端时间 ≤ 30 s；
+  - 合成 trace 单元用例通过 A*。
+
+### M6 ─ 后处理 + LVS 软校验 + DRC + 输出（1 周）
+
+- **目标**：达到 MVP 可用状态。
+- **交付物**：
+  - `postproc/bend.py`：mitered_45 / curved / square / arc 几何渲染；未知 bend_style → fallback；
+  - `postproc/lvs.py`：软校验（若 YAML 含 logical_net 才生效；产出 warning 不阻塞）；
+  - `postproc/drc.py`：min_width / min_clearance / via_density 检查；
+  - `output/svg_full.py`：最终板图 SVG（含 footprint + 走线 + bend）；
+  - `output/gerber_stub.py` / `output/gds_stub.py`：占位 + 字段映射文档；
+  - `README.md` 增加"如何运行"章节；
+  - 性能基线报告（真实案例耗时分布）。
+- **DoD**：
+  - 真实案例 DRC 0 critical；
+  - 最终 SVG 视觉检查无明显交叉 / 越界；
+  - 端到端命令文档化；
+  - 性能基线 ≤ 30 s。
+
+---
+
+## 5. 风险登记与决策记录
+
+### 5.1 风险登记表
+
+| ID | 风险 | 触发条件 | 缓解 | 责任期 |
+|---|---|---|---|---|
+| R1 | universal_junction 含非 90° 倍数 angle 时 OR-Tools 整数近似引入误差 | 任意 angle ∉ {0, ±90, 180} | 1µm 离散；误差 < 单位长度的 1‰，DRC 容忍内 | M3 |
+| R2 | UV host_edge 失配（reference_net 无任何 anchor_pin 端点）| 输入数据自描述错误 | §2.4 反向构造 anonymous host edge + lint warning；不阻塞 | M3 |
+| R3 | rf_constrained_free 段长度过短被 NoOverlap 挤穿 | 邻近器件密集 | NoOverlap 的 inflate 用 width + 2·clearance；CP-SAT infeasible 时反馈 SA 抬温度 | M4 |
+| R4 | OR-Tools NoOverlap 仅 axis-aligned，对斜段近似 | 大量 45° 走线 | 把斜段拆为多个轴对齐子矩形 (v4 现做法)；监控误差 | M4 |
+| R5 | 9 个 UV 同时求解，CP-SAT 启发式搜索退化 | 高密度 UV | num_workers=cpu_count + portfolio search；超时则降级"先 SA 固定 placement，再 CP-SAT 仅解节点" | M4–M5 |
+| R6 | 拼写 typo 表覆盖不全 | 上游持续产生新 typo | lint_report 累积统计，每月回顾扩充修复表；未知字段透传不阻塞 | M2a 持续 |
+| R7 | universal_junction 的 `semantic_intent` 列表多语义（如同时 stepped_impedance + manifold_junction）| 真实案例已出现 | 当前版本只用几何模板（branches[]）求解；semantic_intent 仅用于后处理 EM 仿真标记 | M3 |
+| R8 | 未来若引入 multipoint_net / logical_net | v7 扩展 | M5 已搭好 A* 与 LVS 接口，预留 FLUTE 集成钩子 | post-M6 |
+
+### 5.2 ADR（关键决策记录）
+
+- **ADR-1（D1）**：作废 v3.3→v4 的 `lumped_*` 翻译。理由：真实案例所有 RLC 都是 component-with-pads，pin 直接出现在 edge 端点。`lumped_*` 在 v4 文档中保留供"无 footprint 抽象电路"使用。
+- **ADR-2（D2）**：UV 解析采用"端点滑动"而非"中段插入分裂"。理由：真实案例 UV 器件的 anchor_pin 总是出现在某条 microstrip 的 connections 端点，"中段插入"的 v5 模型与数据不符。
+- **ADR-3（D3）**：routing_class 扩为三档。理由：真实案例存在 `microstrip + 无 target_length` 的"短引线段"，二分法无法表达。
+- **ADR-4（D4）**：新增 `universal_junction` 作为几何模板节点类型。理由：真实案例两个核心功分点都用此类型，含显式 branches[] 配置；现有 t_junction/stepped_impedance 不足以表达。
+- **ADR-5（D5）**：Schema Lint 容错优先于严格校验。理由：真实数据存在 typo + 未知字段，严格 reject 会让数据进不来；warning 透传更工程化。
+- **ADR-6**：M5 不实现 FLUTE/RSMT。理由：真实案例无 multipoint_net；保留接口但不预先投入。
+- **ADR-7**：LVS 改为软警告。理由：真实案例无 logical_net；强阻塞不适用。
+
+---
+
+## 6. 文件索引
+
+| 文件 | 状态 | 说明 |
+|---|---|---|
+| `射频微波版图结构化数据规范 (v3.3).md` | 既有 | 输入规范（外部接口） |
+| `ALGORITHM-OVERVIEW.md` | 既有 | v4 算法基线（求解器内部 schema） |
+| `concepts/placement-problem-formulation.md` | 既有 | SA + 引力场建模 |
+| `concepts/routing-algorithm-comparison.md` | 既有 | CP-SAT + A* 双求解器 |
+| `concepts/microstrip-topology-matching.md` | 既有 | 微带线 / bend_style / 阶跃阻抗 |
+| `rf_layout_simplified.yaml` | **既有（锚定回归用例）** | PA_Module_Simplified 真实数据 |
+| `ITERATION-PLAN.md` | **本文件 v6** | 最终算法方案 + 6+1 期迭代计划 |
+| `concepts/frontend-compiler-spec.md` | 待写（M2 完成后） | Frontend Compiler 详细规范 |
+| `concepts/universal-junction-template.md` | 待写（M3 完成后） | universal_junction 模板规范 |
