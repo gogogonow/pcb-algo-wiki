@@ -1,12 +1,21 @@
-# PCB 单层无交叉布线——双求解器实现指南（v4）
+# PCB 单层无交叉布线 —— 双求解器实现指南（v6）
 
-> 场景：刚性微带 + 灵活偏置 + 浮动器件 | 高密度 RLC shunt | 无交叉硬约束
+> **v6 更新（基于真实案例 `rf_layout_simplified.yaml` 校准）**
 >
-> 目标：从输入 YAML 到可布线路径的完整算法流程（CP-SAT for RF + A* for flex）
+> 本文档原 v4 内容描述 CP-SAT (rf_constrained) + A* (flexible_path) 双求解器实现，**整体算法不变**。v6 对入口规范和分流规则做以下三处增量调整，请阅读时同步带入：
+>
+> 1. **输入格式不再是 v4 的简化 schema**，而是 v3.3 外部 YAML（含 `components` / `footprints` / `parametric_uv` / `universal_junction`）。v6 引入 **Frontend Compiler** 把 v3.3 编译为 v4 风格的内部 IR 后，再喂给本文描述的求解器。详见 `ALGORITHM-OVERVIEW.md` §1–§5。
+> 2. **`routing_class` 由二分法扩为三档**（D3）：
+>    - `rf_constrained_locked`（有 target_length，原 `rf_constrained` 的常态）→ 走本文 §3 的 CP-SAT 长度锁；
+>    - `rf_constrained_free`（无 target_length 的短引线段）→ **仅**进 CP-SAT NoOverlap，**不**施加长度约束；
+>    - `flexible_path`（trace）→ 走本文 §4 的 A*。
+> 3. **新增 `universal_junction` 几何模板节点**（D4）：节点中心 (cx, cy) 是 IntVar，每分支派生线性等式约束 `branch_end = center + R(angle)·(offset_u, signed_v)`，由 Frontend Compiler 在编译期注入 CP-SAT。
+>
+> 真实案例 `PA_Module_Simplified`：22 条 RF 边 = 14 locked + 8 free；2 个 universal_junction × 4 branches；0 条 flexible_path。预估 CP-SAT 1–5 s 解出。
+>
+> ---
 
----
-
-## 1. 输入格式（v4 schema）
+## 1. 输入格式（v4 IR，由 v3.3 经 Frontend Compiler 编译得到）
 
 ```yaml
 version: "2.0.0"

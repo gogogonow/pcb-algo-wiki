@@ -1,4 +1,26 @@
-# 布局问题数学建模（v4）
+# 布局问题数学建模（v6）
+
+> **v6 更新（基于真实案例 `rf_layout_simplified.yaml` 校准）**
+>
+> 本文档原 v4 内容描述"`floating_shunt_tap` 节点 + 引力场"模型，仍作为内部 IR 兼容路径保留。在 v3.3 真实数据流下，主要的"待放置变量"由两类**新对象**承担，请把下文的 $V_{float}$ 概念一并扩展为下表中的 v6 三类：
+>
+> | v6 类别 | 来源 | SA 处理 | CP-SAT 处理 |
+> |---|---|---|---|
+> | **UV 器件** (`components.placement.type = parametric_uv`) | v3.3 D2 决策 | 沿宿主 microstrip 等距初值 + Metropolis 微调 anchor | (anchor_x, anchor_y, rotation, offset_v_side) 进入 IntVar/BoolVar |
+> | **`universal_junction` 中心** | v3.3 D4 决策 | SA 不直接放置（由 CP-SAT 几何模板决定）| (cx, cy) IntVar，按 branches[] 派生线性约束 |
+> | **`floating_shunt_tap` 节点**（v4 兼容路径）| v4 文档 | 引力场 SA（本文 §"引力场模型"）| 不直接进 CP-SAT 几何变量 |
+>
+> 真实案例 `PA_Module_Simplified` 不触发 `floating_shunt_tap`；触发 9 个 UV 器件 + 2 个 universal_junction。
+>
+> ---
+>
+> **v6 SA 能量函数（替代下文 §"v4 能量函数"）**
+>
+> $$E_{v6} = \alpha \cdot HPWL + \gamma \cdot C_{boundary} + \delta \cdot C_{thermal} + \zeta \cdot E_{uv\_anchor} + \zeta' \cdot E_{attract}^{v4}$$
+>
+> 其中 $E_{uv\_anchor}$ 把每个 UV 器件的 anchor_pin 拉向其 host_edge 主方向并对超出 $[0, host\_length]$ 的位置做铰链惩罚；$E_{attract}^{v4}$ 仅当输入仍含 `floating_shunt_tap` 节点时生效（向后兼容）。
+>
+> ---
 
 ## 基本定义
 

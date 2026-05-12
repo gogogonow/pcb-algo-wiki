@@ -1,4 +1,32 @@
-# 微带线拓扑与匹配网络自动化综合（v4）
+# 微带线拓扑与匹配网络自动化综合（v6）
+
+> **v6 更新（基于真实案例 `rf_layout_simplified.yaml` 校准）**
+>
+> 本文档原 v4 内容（微带宽度计算、bend_style、stepped_impedance）**完全保留并继续适用**。v6 新增以下两处补充，请配合阅读：
+>
+> 1. **新增 `universal_junction`** 作为 v3.3 + v6 的"多分支 manifold 模板节点"。它在拓扑层是一个公共主干 + N 个带朝向和偏移的支路；在几何层等价于 N 个 stepped_impedance 节点的合成。每分支由 `{angle, origin: {offset_u, offset_v}}` 描述，求解器把它转化为线性几何约束注入 CP-SAT。详见 `ALGORITHM-OVERVIEW.md` §5。
+> 2. **`bend_style` 容错**：v3.3 真实数据出现 v4 文档未列举的值（如 `curved`、`launch_rule: normal`）。v6 在 Postproc 阶段增加 fallback 表：未知 `bend_style` → `mitered_45` + warning 透传到 lint_report；`curved` 渲染为半径 ≥ 3W 的圆弧。
+>
+> ### v6 边几何模板（自 v3.3 universal_junction 推导）
+>
+> 给定 universal_junction 节点 N、其中心 `(cx, cy)` 与某条分支 b：
+>
+> $$\begin{aligned}
+> branch\_end_x &= cx + \cos\theta \cdot du - \sin\theta \cdot dv \\
+> branch\_end_y &= cy + \sin\theta \cdot du + \cos\theta \cdot dv
+> \end{aligned}$$
+>
+> 其中 $\theta$ = `b.angle`（度）；$du$ = `b.origin.offset_u`；$dv$ = `signed_v(b.origin.offset_v)`：
+>
+> | `offset_v` 值 | $dv$ |
+> |---|---|
+> | `edge_left`    | $+W/2 + \text{clearance}$ |
+> | `edge_right`   | $-W/2 - \text{clearance}$ |
+> | `align_center` | $0$ |
+>
+> 真实案例的 `IC1_pin1_seg1_universal_node` 含 4 个分支，分别按上式生成 4 对 (x, y) 等式约束。
+>
+> ---
 
 ## 微带线宽度计算
 
