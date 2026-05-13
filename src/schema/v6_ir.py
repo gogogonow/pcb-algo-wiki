@@ -68,6 +68,7 @@ class V6Edge(StrictFrozenModel):
     endpoints: EndpointTuple
     routing_class: RoutingClass
     target_length: ExactFloat | None = None
+    width: ExactFloat | None = None
 
     @model_validator(mode="after")
     def validate_target_length(self) -> Self:

@@ -142,6 +142,26 @@ def test_v6_ir_accepts_minimal_strict_graph() -> None:
     assert ir.edges["E1"].routing_class is RoutingClass.FLEXIBLE_PATH
 
 
+def test_v6_ir_accepts_locked_edge_width_in_strict_graph() -> None:
+    ir = V6IR.model_validate(
+        {
+            "board": {"origin": {"x": 0.0, "y": 0.0}, "width": 10.0, "height": 5.0},
+            "terminals": {"J1": {"point": {"x": 0.0, "y": 0.0}}},
+            "nodes": {"N1": {"point": {"x": 5.0, "y": 2.5}}},
+            "edges": {
+                "E1": {
+                    "endpoints": ("J1", "N1"),
+                    "routing_class": RoutingClass.RF_CONSTRAINED_LOCKED,
+                    "target_length": 7.5,
+                    "width": 1.2,
+                }
+            },
+        }
+    )
+
+    assert ir.edges["E1"].width == 1.2
+
+
 def test_v6_ir_rejects_unknown_field() -> None:
     with pytest.raises(ValidationError, match="extra_forbidden"):
         V6IR.model_validate(
@@ -223,6 +243,16 @@ def test_v6_free_and_flexible_edges_can_omit_target_length(
             },
             "target_length",
         ),
+        (
+            V6Edge,
+            {
+                "endpoints": ("J1", "N1"),
+                "routing_class": RoutingClass.RF_CONSTRAINED_LOCKED,
+                "target_length": 42.0,
+                "width": "1.2",
+            },
+            "width",
+        ),
     ],
 )
 def test_v6_models_reject_numeric_strings(
@@ -243,6 +273,18 @@ def test_board_rejects_int_for_float_field() -> None:
     with pytest.raises(ValidationError, match="width"):
         Board.model_validate(
             {"origin": {"x": 0.0, "y": 0.0}, "width": 10, "height": 5.0}
+        )
+
+
+def test_v6_edge_rejects_int_for_width_field() -> None:
+    with pytest.raises(ValidationError, match="width"):
+        V6Edge.model_validate(
+            {
+                "endpoints": ("J1", "N1"),
+                "routing_class": RoutingClass.RF_CONSTRAINED_LOCKED,
+                "target_length": 42.0,
+                "width": 1,
+            }
         )
 
 
