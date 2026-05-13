@@ -8,11 +8,12 @@
 
 ## 0. 文档定位与版本
 
-本仓库是一个 **设计文档 wiki**（暂无实现代码）。它描述：
+本仓库目前包含 **设计文档 + M0/M1 基础实现**。它描述并提供：
 
 1. 上游 EDA 工具产出的 v3.3 YAML 数据规范；
 2. 后端布局布线引擎应当采用的算法方案；
-3. 落地的 6+1 期迭代开发计划。
+3. 已落地的 M0/M1 命令行工具与质量门；
+4. 后续 6+1 期迭代开发计划。
 
 | 版本 | 状态 | 说明 |
 |---|---|---|
@@ -178,15 +179,27 @@ edges:
 
 ```
 .
-├── README.md                                       # 本文档（v6 入口）
+├── README.md                                       # 本文档（v6 入口 + M0/M1 运行说明）
 ├── ALGORITHM-OVERVIEW.md                           # v6 算法总览
 ├── ITERATION-PLAN.md                               # v6 算法方案 + 6+1 期开发计划
-├── 射频微波版图结构化数据规范 (v3.3).md            # 输入数据规范（外部 EDA 接口）
+├── pyproject.toml                                  # 可编辑安装 + console scripts
 ├── rf_layout_simplified.yaml                       # 真实案例 (PA_Module_Simplified)
-└── concepts/
-    ├── placement-problem-formulation.md            # SA + 引力场（v6 适配）
-    ├── routing-algorithm-comparison.md             # CP-SAT + A* 双求解器（v6 适配）
-    └── microstrip-topology-matching.md             # 微带 / bend_style / universal_junction 几何
+├── scripts/verify_m1.sh                            # M1 一键验证
+├── tools/
+│   ├── topology_viz.py                             # 仓库根包装器
+│   └── schema_check.py                             # 仓库根包装器
+├── src/
+│   ├── schema/                                     # v33 / v6_ir schema
+│   ├── tools/                                      # CLI 实现
+│   └── topology/                                   # M0 拓扑渲染
+├── tests/
+│   ├── unit/                                       # schema / CLI / 渲染测试
+│   └── regression/PA_Module_Simplified/            # 拓扑 SVG 基线快照
+├── concepts/
+│   ├── placement-problem-formulation.md            # SA + 引力场（v6 适配）
+│   ├── routing-algorithm-comparison.md             # CP-SAT + A* 双求解器（v6 适配）
+│   └── microstrip-topology-matching.md             # 微带 / bend_style / universal_junction 几何
+└── 射频微波版图结构化数据规范 (v3.3).md            # 输入数据规范（外部 EDA 接口）
 ```
 
 阅读路径：
@@ -196,7 +209,46 @@ edges:
 
 ---
 
-## 8. 6+1 期迭代计划速览
+## 8. 本地运行（M0 / M1）
+
+推荐先创建虚拟环境（部分 Linux 发行版对系统 Python 启用了 PEP 668）：
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+python3 -m pip install -e ".[dev]"
+```
+
+若你的环境允许直接安装，也可直接执行：
+
+```bash
+python3 -m pip install -e ".[dev]"
+```
+
+常用命令：
+
+```bash
+# M0: 生成拓扑 SVG 基线
+topology_viz rf_layout_simplified.yaml
+# 输出: out/PA_Module_Simplified.topology.svg
+
+# M1: 运行 v3.3 schema 检查
+schema_check rf_layout_simplified.yaml
+# 预期:
+# project: PA_Module_Simplified
+# components: 15
+# footprints: 5
+# nodes: 8
+# terminals: 10
+# edges: 22
+
+# 一键验证 M1 质量门
+./scripts/verify_m1.sh
+```
+
+---
+
+## 9. 6+1 期迭代计划速览
 
 | 期 | 周 | 目标 | 关键交付 |
 |---|---|---|---|
