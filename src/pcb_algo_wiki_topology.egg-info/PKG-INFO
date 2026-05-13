@@ -1,8 +1,0 @@
-Metadata-Version: 2.4
-Name: pcb-algo-wiki-topology
-Version: 0.0.0
-Summary: M0 topology visualization baseline for PA_Module_Simplified
-Requires-Python: >=3.11
-Requires-Dist: PyYAML>=6.0
-Requires-Dist: svgwrite>=1.4
-Requires-Dist: pytest>=8.0

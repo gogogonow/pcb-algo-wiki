@@ -6,8 +6,9 @@ import sys
 import pytest
 
 
-src = Path(__file__).resolve().parents[1] / "src"
-sys.path.insert(0, str(src))
+repo_root = Path(__file__).resolve().parents[1]
+src = repo_root / "src"
+sys.path[:0] = [str(repo_root), str(src)]
 
 ARTIFACTS_ROOT = Path(__file__).resolve().parents[1] / ".test-artifacts"
 
