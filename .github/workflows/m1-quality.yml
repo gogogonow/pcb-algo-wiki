@@ -30,8 +30,8 @@ jobs:
           python -m ruff check src tests tools
           python -m mypy src
           python -m pytest -q
-          python tools/schema_check.py rf_layout_simplified.yaml
-          python tools/topology_viz.py rf_layout_simplified.yaml
+          schema_check rf_layout_simplified.yaml
+          topology_viz rf_layout_simplified.yaml
 
       - name: Upload M1 topology SVG artifact
         uses: actions/upload-artifact@v4
