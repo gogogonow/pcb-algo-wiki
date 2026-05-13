@@ -1,0 +1,40 @@
+name: M0 topology
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  m0-topology:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Run pytest
+        run: pytest
+
+      - name: Generate real-case topology SVG
+        run: python tools/topology_viz.py rf_layout_simplified.yaml
+
+      - name: Upload M0 topology SVG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: m0-topology-svg
+          path: out/PA_Module_Simplified.topology.svg
+          if-no-files-found: error

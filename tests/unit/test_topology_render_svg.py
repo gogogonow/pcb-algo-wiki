@@ -56,6 +56,18 @@ def test_real_case_render_includes_all_edges_in_deterministic_order() -> None:
     )
 
 
+def test_real_case_render_is_pretty_printed_for_reviewable_regressions() -> None:
+    graph = load_topology_graph(REAL_CASE_PATH)
+
+    svg = topology.render_topology_svg(graph)
+    lines = svg.splitlines()
+
+    assert len(lines) > 20
+    assert any(line.startswith('  <g id="topology-edges"') for line in lines)
+    assert any(line.startswith('    <line class="topology-edge"') for line in lines)
+    assert lines[-1] == "</svg>"
+
+
 def test_real_case_renders_distinct_component_pin_anchors_for_multi_pin_passives() -> None:
     graph = load_topology_graph(REAL_CASE_PATH)
     root = ET.fromstring(topology.render_topology_svg(graph))

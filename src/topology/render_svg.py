@@ -89,6 +89,7 @@ def render_topology_svg(graph: TopologyGraph) -> str:
     for terminal in sorted(graph.terminals, key=lambda item: item.id):
         _append_terminal(terminal_layer, terminal, positions[terminal.id])
 
+    ET.indent(root, space="  ")
     return ET.tostring(root, encoding="unicode")
 
 

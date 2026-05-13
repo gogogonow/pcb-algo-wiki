@@ -1,6 +1,172 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="760" viewBox="0 0 900 760" role="img" aria-label="topology graph"><style>.topology-edge { stroke: #667085; stroke-width: 2; fill: none; }
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="760" viewBox="0 0 900 760" role="img" aria-label="topology graph">
+  <style>.topology-edge { stroke: #667085; stroke-width: 2; fill: none; }
 .topology-fixed-component-shape { fill: #dbeafe; stroke: #1d4ed8; stroke-width: 2; }
 .topology-uv-component-shape { fill: #fef3c7; stroke: #b45309; stroke-width: 2; }
 .topology-node-shape { fill: #dcfce7; stroke: #15803d; stroke-width: 2; }
 .topology-terminal-shape { fill: #f3e8ff; stroke: #7e22ce; stroke-width: 2; }
-.topology-label { fill: #111827; font-family: Arial, sans-serif; font-size: 11px; }</style><g id="topology-edges" class="topology-edges"><line class="topology-edge" data-edge-id="C1_to_R1" data-kind="microstrip" x1="200.0" y1="140.0" x2="140.0" y2="374.0" /><line class="topology-edge" data-edge-id="IC1_pin1_seg1" data-kind="microstrip" x1="214.4" y1="302.0" x2="450.0" y2="120.0" /><line class="topology-edge" data-edge-id="IC1_pin1_seg2" data-kind="microstrip" x1="450.0" y1="120.0" x2="450.0" y2="192.0" /><line class="topology-edge" data-edge-id="IC1_pin1_seg2_to_R2" data-kind="microstrip" x1="450.0" y1="192.0" x2="740.0" y2="374.0" /><line class="topology-edge" data-edge-id="IC1_pin1_seg3" data-kind="microstrip" x1="450.0" y1="120.0" x2="450.0" y2="264.0" /><line class="topology-edge" data-edge-id="IC1_pin1_seg3_to_C5" data-kind="microstrip" x1="450.0" y1="264.0" x2="140.0" y2="296.0" /><line class="topology-edge" data-edge-id="IC1_pin1_seg4" data-kind="microstrip" x1="450.0" y1="120.0" x2="140.0" y2="140.0" /><line class="topology-edge" data-edge-id="IC1_pin1_seg5" data-kind="microstrip" x1="450.0" y1="336.0" x2="680.0" y2="140.0" /><line class="topology-edge" data-edge-id="IC1_pin1_seg6" data-kind="microstrip" x1="740.0" y1="140.0" x2="562.0" y2="80.0" /><line class="topology-edge" data-edge-id="IC1_pin2_seg1" data-kind="microstrip" x1="214.4" y1="358.0" x2="450.0" y2="408.0" /><line class="topology-edge" data-edge-id="IC1_pin2_seg2" data-kind="microstrip" x1="450.0" y1="408.0" x2="450.0" y2="480.0" /><line class="topology-edge" data-edge-id="IC1_pin2_seg2_to_C3" data-kind="microstrip" x1="450.0" y1="480.0" x2="140.0" y2="218.0" /><line class="topology-edge" data-edge-id="IC1_pin2_seg3" data-kind="microstrip" x1="450.0" y1="408.0" x2="450.0" y2="552.0" /><line class="topology-edge" data-edge-id="IC1_pin2_seg3_to_C6" data-kind="microstrip" x1="450.0" y1="552.0" x2="740.0" y2="296.0" /><line class="topology-edge" data-edge-id="IC1_pin2_seg4" data-kind="microstrip" x1="450.0" y1="408.0" x2="140.0" y2="452.0" /><line class="topology-edge" data-edge-id="IC1_pin2_seg5" data-kind="microstrip" x1="450.0" y1="624.0" x2="680.0" y2="218.0" /><line class="topology-edge" data-edge-id="IC1_pin2_seg6" data-kind="microstrip" x1="740.0" y1="218.0" x2="562.0" y2="580.0" /><line class="topology-edge" data-edge-id="PWR_VDD_bus" data-kind="microstrip" x1="324.4" y1="302.0" x2="324.4" y2="358.0" /><line class="topology-edge" data-edge-id="R1_to_combiner" data-kind="microstrip" x1="200.0" y1="374.0" x2="450.0" y2="336.0" /><line class="topology-edge" data-edge-id="R2_to_TP1" data-kind="microstrip" x1="680.0" y1="374.0" x2="142.0" y2="80.0" /><line class="topology-edge" data-edge-id="R3_to_combiner" data-kind="microstrip" x1="200.0" y1="452.0" x2="450.0" y2="624.0" /><line class="topology-edge" data-edge-id="RF_INPUT_to_IC1" data-kind="microstrip" x1="422.0" y1="80.0" x2="324.4" y2="302.0" /></g><g id="topology-fixed-components" class="topology-fixed-components"><g class="topology-component topology-fixed-component" data-component-id="IC1"><rect class="topology-fixed-component-shape" x="241.4" y="312.0" width="56" height="36" rx="6" /><text class="topology-label" x="269.4" y="364.0" text-anchor="middle">IC1</text></g><g class="topology-component topology-fixed-component" data-component-id="TP1"><rect class="topology-fixed-component-shape" x="142.0" y="62.0" width="56" height="36" rx="6" /><text class="topology-label" x="170.0" y="114.0" text-anchor="middle">TP1</text></g><g class="topology-component topology-fixed-component" data-component-id="TP2"><rect class="topology-fixed-component-shape" x="282.0" y="462.0" width="56" height="36" rx="6" /><text class="topology-label" x="310.0" y="514.0" text-anchor="middle">TP2</text></g><g class="topology-component topology-fixed-component" data-component-id="TP3"><rect class="topology-fixed-component-shape" x="422.0" y="62.0" width="56" height="36" rx="6" /><text class="topology-label" x="450.0" y="114.0" text-anchor="middle">TP3</text></g><g class="topology-component topology-fixed-component" data-component-id="TP4"><rect class="topology-fixed-component-shape" x="562.0" y="62.0" width="56" height="36" rx="6" /><text class="topology-label" x="590.0" y="114.0" text-anchor="middle">TP4</text></g><g class="topology-component topology-fixed-component" data-component-id="TP5"><rect class="topology-fixed-component-shape" x="562.0" y="562.0" width="56" height="36" rx="6" /><text class="topology-label" x="590.0" y="614.0" text-anchor="middle">TP5</text></g></g><g id="topology-uv-components" class="topology-uv-components"><g class="topology-component topology-uv-component" data-component-id="C1"><ellipse class="topology-uv-component-shape" cx="170.0" cy="140.0" rx="30" ry="18" /><text class="topology-label" x="170.0" y="174.0" text-anchor="middle">C1</text></g><g class="topology-component topology-uv-component" data-component-id="C2"><ellipse class="topology-uv-component-shape" cx="710.0" cy="140.0" rx="30" ry="18" /><text class="topology-label" x="710.0" y="174.0" text-anchor="middle">C2</text></g><g class="topology-component topology-uv-component" data-component-id="C3"><ellipse class="topology-uv-component-shape" cx="170.0" cy="218.0" rx="30" ry="18" /><text class="topology-label" x="170.0" y="252.0" text-anchor="middle">C3</text></g><g class="topology-component topology-uv-component" data-component-id="C4"><ellipse class="topology-uv-component-shape" cx="710.0" cy="218.0" rx="30" ry="18" /><text class="topology-label" x="710.0" y="252.0" text-anchor="middle">C4</text></g><g class="topology-component topology-uv-component" data-component-id="C5"><ellipse class="topology-uv-component-shape" cx="170.0" cy="296.0" rx="30" ry="18" /><text class="topology-label" x="170.0" y="330.0" text-anchor="middle">C5</text></g><g class="topology-component topology-uv-component" data-component-id="C6"><ellipse class="topology-uv-component-shape" cx="710.0" cy="296.0" rx="30" ry="18" /><text class="topology-label" x="710.0" y="330.0" text-anchor="middle">C6</text></g><g class="topology-component topology-uv-component" data-component-id="R1"><ellipse class="topology-uv-component-shape" cx="170.0" cy="374.0" rx="30" ry="18" /><text class="topology-label" x="170.0" y="408.0" text-anchor="middle">R1</text></g><g class="topology-component topology-uv-component" data-component-id="R2"><ellipse class="topology-uv-component-shape" cx="710.0" cy="374.0" rx="30" ry="18" /><text class="topology-label" x="710.0" y="408.0" text-anchor="middle">R2</text></g><g class="topology-component topology-uv-component" data-component-id="R3"><ellipse class="topology-uv-component-shape" cx="170.0" cy="452.0" rx="30" ry="18" /><text class="topology-label" x="170.0" y="486.0" text-anchor="middle">R3</text></g></g><g id="topology-nodes" class="topology-nodes"><g class="topology-node" data-node-id="IC1_pin1_seg1_universal_node"><circle class="topology-node-shape" cx="450.0" cy="120.0" r="12" /><text class="topology-label" x="470.0" y="124.0" text-anchor="start">IC1_pin1_seg1_universal_node</text></g><g class="topology-node" data-node-id="IC1_pin1_seg2_end_split_pad"><circle class="topology-node-shape" cx="450.0" cy="192.0" r="12" /><text class="topology-label" x="470.0" y="196.0" text-anchor="start">IC1_pin1_seg2_end_split_pad</text></g><g class="topology-node" data-node-id="IC1_pin1_seg3_end_split_pad"><circle class="topology-node-shape" cx="450.0" cy="264.0" r="12" /><text class="topology-label" x="470.0" y="268.0" text-anchor="start">IC1_pin1_seg3_end_split_pad</text></g><g class="topology-node" data-node-id="IC1_pin1_seg5_start_combiner"><circle class="topology-node-shape" cx="450.0" cy="336.0" r="12" /><text class="topology-label" x="470.0" y="340.0" text-anchor="start">IC1_pin1_seg5_start_combiner</text></g><g class="topology-node" data-node-id="IC1_pin2_seg1_universal_node"><circle class="topology-node-shape" cx="450.0" cy="408.0" r="12" /><text class="topology-label" x="470.0" y="412.0" text-anchor="start">IC1_pin2_seg1_universal_node</text></g><g class="topology-node" data-node-id="IC1_pin2_seg2_end_split_pad"><circle class="topology-node-shape" cx="450.0" cy="480.0" r="12" /><text class="topology-label" x="470.0" y="484.0" text-anchor="start">IC1_pin2_seg2_end_split_pad</text></g><g class="topology-node" data-node-id="IC1_pin2_seg3_end_split_pad"><circle class="topology-node-shape" cx="450.0" cy="552.0" r="12" /><text class="topology-label" x="470.0" y="556.0" text-anchor="start">IC1_pin2_seg3_end_split_pad</text></g><g class="topology-node" data-node-id="IC1_pin2_seg5_start_combiner"><circle class="topology-node-shape" cx="450.0" cy="624.0" r="12" /><text class="topology-label" x="470.0" y="628.0" text-anchor="start">IC1_pin2_seg5_start_combiner</text></g></g><g id="topology-terminals" class="topology-terminals"><g class="topology-terminal" data-terminal-id="GND"><polygon class="topology-terminal-shape" points="790.0,109.0 801.0,120.0 790.0,131.0 779.0,120.0" /><text class="topology-label" x="806.0" y="124.0" text-anchor="start">GND</text></g><g class="topology-terminal" data-terminal-id="IC1.PIN_1"><polygon class="topology-terminal-shape" points="214.4,291.0 225.4,302.0 214.4,313.0 203.4,302.0" /><text class="topology-label" x="230.4" y="306.0" text-anchor="start">IC1.PIN_1</text></g><g class="topology-terminal" data-terminal-id="IC1.PIN_2"><polygon class="topology-terminal-shape" points="214.4,347.0 225.4,358.0 214.4,369.0 203.4,358.0" /><text class="topology-label" x="230.4" y="362.0" text-anchor="start">IC1.PIN_2</text></g><g class="topology-terminal" data-terminal-id="IC1.PIN_3"><polygon class="topology-terminal-shape" points="324.4,291.0 335.4,302.0 324.4,313.0 313.4,302.0" /><text class="topology-label" x="340.4" y="306.0" text-anchor="start">IC1.PIN_3</text></g><g class="topology-terminal" data-terminal-id="IC1.PIN_4"><polygon class="topology-terminal-shape" points="324.4,347.0 335.4,358.0 324.4,369.0 313.4,358.0" /><text class="topology-label" x="340.4" y="362.0" text-anchor="start">IC1.PIN_4</text></g><g class="topology-terminal" data-terminal-id="TP1.PIN_1"><polygon class="topology-terminal-shape" points="142.0,69.0 153.0,80.0 142.0,91.0 131.0,80.0" /><text class="topology-label" x="158.0" y="84.0" text-anchor="start">TP1.PIN_1</text></g><g class="topology-terminal" data-terminal-id="TP2.PIN_1"><polygon class="topology-terminal-shape" points="282.0,469.0 293.0,480.0 282.0,491.0 271.0,480.0" /><text class="topology-label" x="298.0" y="484.0" text-anchor="start">TP2.PIN_1</text></g><g class="topology-terminal" data-terminal-id="TP3.PIN_1"><polygon class="topology-terminal-shape" points="422.0,69.0 433.0,80.0 422.0,91.0 411.0,80.0" /><text class="topology-label" x="438.0" y="84.0" text-anchor="start">TP3.PIN_1</text></g><g class="topology-terminal" data-terminal-id="TP4.PIN_1"><polygon class="topology-terminal-shape" points="562.0,69.0 573.0,80.0 562.0,91.0 551.0,80.0" /><text class="topology-label" x="578.0" y="84.0" text-anchor="start">TP4.PIN_1</text></g><g class="topology-terminal" data-terminal-id="TP5.PIN_1"><polygon class="topology-terminal-shape" points="562.0,569.0 573.0,580.0 562.0,591.0 551.0,580.0" /><text class="topology-label" x="578.0" y="584.0" text-anchor="start">TP5.PIN_1</text></g></g></svg>
+.topology-label { fill: #111827; font-family: Arial, sans-serif; font-size: 11px; }</style>
+  <g id="topology-edges" class="topology-edges">
+    <line class="topology-edge" data-edge-id="C1_to_R1" data-kind="microstrip" x1="200.0" y1="140.0" x2="140.0" y2="374.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin1_seg1" data-kind="microstrip" x1="214.4" y1="302.0" x2="450.0" y2="120.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin1_seg2" data-kind="microstrip" x1="450.0" y1="120.0" x2="450.0" y2="192.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin1_seg2_to_R2" data-kind="microstrip" x1="450.0" y1="192.0" x2="740.0" y2="374.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin1_seg3" data-kind="microstrip" x1="450.0" y1="120.0" x2="450.0" y2="264.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin1_seg3_to_C5" data-kind="microstrip" x1="450.0" y1="264.0" x2="140.0" y2="296.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin1_seg4" data-kind="microstrip" x1="450.0" y1="120.0" x2="140.0" y2="140.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin1_seg5" data-kind="microstrip" x1="450.0" y1="336.0" x2="680.0" y2="140.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin1_seg6" data-kind="microstrip" x1="740.0" y1="140.0" x2="562.0" y2="80.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin2_seg1" data-kind="microstrip" x1="214.4" y1="358.0" x2="450.0" y2="408.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin2_seg2" data-kind="microstrip" x1="450.0" y1="408.0" x2="450.0" y2="480.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin2_seg2_to_C3" data-kind="microstrip" x1="450.0" y1="480.0" x2="140.0" y2="218.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin2_seg3" data-kind="microstrip" x1="450.0" y1="408.0" x2="450.0" y2="552.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin2_seg3_to_C6" data-kind="microstrip" x1="450.0" y1="552.0" x2="740.0" y2="296.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin2_seg4" data-kind="microstrip" x1="450.0" y1="408.0" x2="140.0" y2="452.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin2_seg5" data-kind="microstrip" x1="450.0" y1="624.0" x2="680.0" y2="218.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin2_seg6" data-kind="microstrip" x1="740.0" y1="218.0" x2="562.0" y2="580.0" />
+    <line class="topology-edge" data-edge-id="PWR_VDD_bus" data-kind="microstrip" x1="324.4" y1="302.0" x2="324.4" y2="358.0" />
+    <line class="topology-edge" data-edge-id="R1_to_combiner" data-kind="microstrip" x1="200.0" y1="374.0" x2="450.0" y2="336.0" />
+    <line class="topology-edge" data-edge-id="R2_to_TP1" data-kind="microstrip" x1="680.0" y1="374.0" x2="142.0" y2="80.0" />
+    <line class="topology-edge" data-edge-id="R3_to_combiner" data-kind="microstrip" x1="200.0" y1="452.0" x2="450.0" y2="624.0" />
+    <line class="topology-edge" data-edge-id="RF_INPUT_to_IC1" data-kind="microstrip" x1="422.0" y1="80.0" x2="324.4" y2="302.0" />
+  </g>
+  <g id="topology-fixed-components" class="topology-fixed-components">
+    <g class="topology-component topology-fixed-component" data-component-id="IC1">
+      <rect class="topology-fixed-component-shape" x="241.4" y="312.0" width="56" height="36" rx="6" />
+      <text class="topology-label" x="269.4" y="364.0" text-anchor="middle">IC1</text>
+    </g>
+    <g class="topology-component topology-fixed-component" data-component-id="TP1">
+      <rect class="topology-fixed-component-shape" x="142.0" y="62.0" width="56" height="36" rx="6" />
+      <text class="topology-label" x="170.0" y="114.0" text-anchor="middle">TP1</text>
+    </g>
+    <g class="topology-component topology-fixed-component" data-component-id="TP2">
+      <rect class="topology-fixed-component-shape" x="282.0" y="462.0" width="56" height="36" rx="6" />
+      <text class="topology-label" x="310.0" y="514.0" text-anchor="middle">TP2</text>
+    </g>
+    <g class="topology-component topology-fixed-component" data-component-id="TP3">
+      <rect class="topology-fixed-component-shape" x="422.0" y="62.0" width="56" height="36" rx="6" />
+      <text class="topology-label" x="450.0" y="114.0" text-anchor="middle">TP3</text>
+    </g>
+    <g class="topology-component topology-fixed-component" data-component-id="TP4">
+      <rect class="topology-fixed-component-shape" x="562.0" y="62.0" width="56" height="36" rx="6" />
+      <text class="topology-label" x="590.0" y="114.0" text-anchor="middle">TP4</text>
+    </g>
+    <g class="topology-component topology-fixed-component" data-component-id="TP5">
+      <rect class="topology-fixed-component-shape" x="562.0" y="562.0" width="56" height="36" rx="6" />
+      <text class="topology-label" x="590.0" y="614.0" text-anchor="middle">TP5</text>
+    </g>
+  </g>
+  <g id="topology-uv-components" class="topology-uv-components">
+    <g class="topology-component topology-uv-component" data-component-id="C1">
+      <ellipse class="topology-uv-component-shape" cx="170.0" cy="140.0" rx="30" ry="18" />
+      <text class="topology-label" x="170.0" y="174.0" text-anchor="middle">C1</text>
+    </g>
+    <g class="topology-component topology-uv-component" data-component-id="C2">
+      <ellipse class="topology-uv-component-shape" cx="710.0" cy="140.0" rx="30" ry="18" />
+      <text class="topology-label" x="710.0" y="174.0" text-anchor="middle">C2</text>
+    </g>
+    <g class="topology-component topology-uv-component" data-component-id="C3">
+      <ellipse class="topology-uv-component-shape" cx="170.0" cy="218.0" rx="30" ry="18" />
+      <text class="topology-label" x="170.0" y="252.0" text-anchor="middle">C3</text>
+    </g>
+    <g class="topology-component topology-uv-component" data-component-id="C4">
+      <ellipse class="topology-uv-component-shape" cx="710.0" cy="218.0" rx="30" ry="18" />
+      <text class="topology-label" x="710.0" y="252.0" text-anchor="middle">C4</text>
+    </g>
+    <g class="topology-component topology-uv-component" data-component-id="C5">
+      <ellipse class="topology-uv-component-shape" cx="170.0" cy="296.0" rx="30" ry="18" />
+      <text class="topology-label" x="170.0" y="330.0" text-anchor="middle">C5</text>
+    </g>
+    <g class="topology-component topology-uv-component" data-component-id="C6">
+      <ellipse class="topology-uv-component-shape" cx="710.0" cy="296.0" rx="30" ry="18" />
+      <text class="topology-label" x="710.0" y="330.0" text-anchor="middle">C6</text>
+    </g>
+    <g class="topology-component topology-uv-component" data-component-id="R1">
+      <ellipse class="topology-uv-component-shape" cx="170.0" cy="374.0" rx="30" ry="18" />
+      <text class="topology-label" x="170.0" y="408.0" text-anchor="middle">R1</text>
+    </g>
+    <g class="topology-component topology-uv-component" data-component-id="R2">
+      <ellipse class="topology-uv-component-shape" cx="710.0" cy="374.0" rx="30" ry="18" />
+      <text class="topology-label" x="710.0" y="408.0" text-anchor="middle">R2</text>
+    </g>
+    <g class="topology-component topology-uv-component" data-component-id="R3">
+      <ellipse class="topology-uv-component-shape" cx="170.0" cy="452.0" rx="30" ry="18" />
+      <text class="topology-label" x="170.0" y="486.0" text-anchor="middle">R3</text>
+    </g>
+  </g>
+  <g id="topology-nodes" class="topology-nodes">
+    <g class="topology-node" data-node-id="IC1_pin1_seg1_universal_node">
+      <circle class="topology-node-shape" cx="450.0" cy="120.0" r="12" />
+      <text class="topology-label" x="470.0" y="124.0" text-anchor="start">IC1_pin1_seg1_universal_node</text>
+    </g>
+    <g class="topology-node" data-node-id="IC1_pin1_seg2_end_split_pad">
+      <circle class="topology-node-shape" cx="450.0" cy="192.0" r="12" />
+      <text class="topology-label" x="470.0" y="196.0" text-anchor="start">IC1_pin1_seg2_end_split_pad</text>
+    </g>
+    <g class="topology-node" data-node-id="IC1_pin1_seg3_end_split_pad">
+      <circle class="topology-node-shape" cx="450.0" cy="264.0" r="12" />
+      <text class="topology-label" x="470.0" y="268.0" text-anchor="start">IC1_pin1_seg3_end_split_pad</text>
+    </g>
+    <g class="topology-node" data-node-id="IC1_pin1_seg5_start_combiner">
+      <circle class="topology-node-shape" cx="450.0" cy="336.0" r="12" />
+      <text class="topology-label" x="470.0" y="340.0" text-anchor="start">IC1_pin1_seg5_start_combiner</text>
+    </g>
+    <g class="topology-node" data-node-id="IC1_pin2_seg1_universal_node">
+      <circle class="topology-node-shape" cx="450.0" cy="408.0" r="12" />
+      <text class="topology-label" x="470.0" y="412.0" text-anchor="start">IC1_pin2_seg1_universal_node</text>
+    </g>
+    <g class="topology-node" data-node-id="IC1_pin2_seg2_end_split_pad">
+      <circle class="topology-node-shape" cx="450.0" cy="480.0" r="12" />
+      <text class="topology-label" x="470.0" y="484.0" text-anchor="start">IC1_pin2_seg2_end_split_pad</text>
+    </g>
+    <g class="topology-node" data-node-id="IC1_pin2_seg3_end_split_pad">
+      <circle class="topology-node-shape" cx="450.0" cy="552.0" r="12" />
+      <text class="topology-label" x="470.0" y="556.0" text-anchor="start">IC1_pin2_seg3_end_split_pad</text>
+    </g>
+    <g class="topology-node" data-node-id="IC1_pin2_seg5_start_combiner">
+      <circle class="topology-node-shape" cx="450.0" cy="624.0" r="12" />
+      <text class="topology-label" x="470.0" y="628.0" text-anchor="start">IC1_pin2_seg5_start_combiner</text>
+    </g>
+  </g>
+  <g id="topology-terminals" class="topology-terminals">
+    <g class="topology-terminal" data-terminal-id="GND">
+      <polygon class="topology-terminal-shape" points="790.0,109.0 801.0,120.0 790.0,131.0 779.0,120.0" />
+      <text class="topology-label" x="806.0" y="124.0" text-anchor="start">GND</text>
+    </g>
+    <g class="topology-terminal" data-terminal-id="IC1.PIN_1">
+      <polygon class="topology-terminal-shape" points="214.4,291.0 225.4,302.0 214.4,313.0 203.4,302.0" />
+      <text class="topology-label" x="230.4" y="306.0" text-anchor="start">IC1.PIN_1</text>
+    </g>
+    <g class="topology-terminal" data-terminal-id="IC1.PIN_2">
+      <polygon class="topology-terminal-shape" points="214.4,347.0 225.4,358.0 214.4,369.0 203.4,358.0" />
+      <text class="topology-label" x="230.4" y="362.0" text-anchor="start">IC1.PIN_2</text>
+    </g>
+    <g class="topology-terminal" data-terminal-id="IC1.PIN_3">
+      <polygon class="topology-terminal-shape" points="324.4,291.0 335.4,302.0 324.4,313.0 313.4,302.0" />
+      <text class="topology-label" x="340.4" y="306.0" text-anchor="start">IC1.PIN_3</text>
+    </g>
+    <g class="topology-terminal" data-terminal-id="IC1.PIN_4">
+      <polygon class="topology-terminal-shape" points="324.4,347.0 335.4,358.0 324.4,369.0 313.4,358.0" />
+      <text class="topology-label" x="340.4" y="362.0" text-anchor="start">IC1.PIN_4</text>
+    </g>
+    <g class="topology-terminal" data-terminal-id="TP1.PIN_1">
+      <polygon class="topology-terminal-shape" points="142.0,69.0 153.0,80.0 142.0,91.0 131.0,80.0" />
+      <text class="topology-label" x="158.0" y="84.0" text-anchor="start">TP1.PIN_1</text>
+    </g>
+    <g class="topology-terminal" data-terminal-id="TP2.PIN_1">
+      <polygon class="topology-terminal-shape" points="282.0,469.0 293.0,480.0 282.0,491.0 271.0,480.0" />
+      <text class="topology-label" x="298.0" y="484.0" text-anchor="start">TP2.PIN_1</text>
+    </g>
+    <g class="topology-terminal" data-terminal-id="TP3.PIN_1">
+      <polygon class="topology-terminal-shape" points="422.0,69.0 433.0,80.0 422.0,91.0 411.0,80.0" />
+      <text class="topology-label" x="438.0" y="84.0" text-anchor="start">TP3.PIN_1</text>
+    </g>
+    <g class="topology-terminal" data-terminal-id="TP4.PIN_1">
+      <polygon class="topology-terminal-shape" points="562.0,69.0 573.0,80.0 562.0,91.0 551.0,80.0" />
+      <text class="topology-label" x="578.0" y="84.0" text-anchor="start">TP4.PIN_1</text>
+    </g>
+    <g class="topology-terminal" data-terminal-id="TP5.PIN_1">
+      <polygon class="topology-terminal-shape" points="562.0,569.0 573.0,580.0 562.0,591.0 551.0,580.0" />
+      <text class="topology-label" x="578.0" y="584.0" text-anchor="start">TP5.PIN_1</text>
+    </g>
+  </g>
+</svg>
