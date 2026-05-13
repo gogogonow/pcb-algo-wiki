@@ -269,11 +269,45 @@ def test_point_rejects_int_for_float_field() -> None:
         Point.model_validate({"x": 1, "y": 2.0})
 
 
+@pytest.mark.parametrize(
+    ("payload", "match"),
+    [
+        ({"x": float("nan"), "y": 2.0}, "x"),
+        ({"x": 1.0, "y": float("inf")}, "y"),
+    ],
+)
+def test_point_rejects_non_finite_coordinates(
+    payload: dict[str, float], match: str
+) -> None:
+    with pytest.raises(ValidationError, match=match):
+        Point.model_validate(payload)
+
+
 def test_board_rejects_int_for_float_field() -> None:
     with pytest.raises(ValidationError, match="width"):
         Board.model_validate(
             {"origin": {"x": 0.0, "y": 0.0}, "width": 10, "height": 5.0}
         )
+
+
+@pytest.mark.parametrize(
+    ("payload", "match"),
+    [
+        (
+            {"origin": {"x": 0.0, "y": 0.0}, "width": float("nan"), "height": 5.0},
+            "width",
+        ),
+        (
+            {"origin": {"x": 0.0, "y": 0.0}, "width": 10.0, "height": float("inf")},
+            "height",
+        ),
+    ],
+)
+def test_board_rejects_non_finite_dimensions(
+    payload: dict[str, object], match: str
+) -> None:
+    with pytest.raises(ValidationError, match=match):
+        Board.model_validate(payload)
 
 
 def test_v6_edge_rejects_int_for_width_field() -> None:
@@ -286,6 +320,34 @@ def test_v6_edge_rejects_int_for_width_field() -> None:
                 "width": 1,
             }
         )
+
+
+@pytest.mark.parametrize(
+    ("payload", "match"),
+    [
+        (
+            {
+                "endpoints": ("J1", "N1"),
+                "routing_class": RoutingClass.RF_CONSTRAINED_LOCKED,
+                "target_length": float("nan"),
+            },
+            "target_length",
+        ),
+        (
+            {
+                "endpoints": ("J1", "N1"),
+                "routing_class": RoutingClass.FLEXIBLE_PATH,
+                "width": float("inf"),
+            },
+            "width",
+        ),
+    ],
+)
+def test_v6_edge_rejects_non_finite_lengths(
+    payload: dict[str, object], match: str
+) -> None:
+    with pytest.raises(ValidationError, match=match):
+        V6Edge.model_validate(payload)
 
 
 @pytest.mark.parametrize(

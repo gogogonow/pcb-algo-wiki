@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from enum import StrEnum
 from typing import Annotated, Any, Self
 
@@ -21,6 +22,8 @@ from pydantic import (
 def require_exact_float(value: Any) -> Any:
     if type(value) is not float:
         raise ValueError("value must be a float")
+    if not math.isfinite(value):
+        raise ValueError("value must be finite")
     return value
 
 
