@@ -206,25 +206,38 @@ v3.3 YAML
 
 ### M0 ─ 案例锚定 + 拓扑可视化（0.5 周）
 
+- **状态**：✅ 已实现并作为回归基线使用。
 - **目标**：把 `rf_layout_simplified.yaml` 拓扑图（node-edge graph）渲染成 SVG，作为后续每期 DoD 的视觉基线。
 - **交付物**：
-  - `tools/topology_viz.py`：纯 Python（networkx + svgwrite），输入 v3.3 YAML，输出 `out/{project}.topology.svg`；
-  - `tests/regression/PA_Module_Simplified/topology.svg.expected`：基线快照。
+  - `tools/topology_viz.py` + `topology_viz` console script：输入 v3.3 YAML，输出 `out/{project}.topology.svg`；
+  - `tests/regression/PA_Module_Simplified/topology.svg.expected`：拓扑 SVG 回归快照；
+  - CI artifact workflow：上传拓扑 SVG，便于 PR review。
 - **DoD**：
   - 对真实案例输出 SVG，肉眼可识别 IC1 + 9 UV 器件 + 2 universal_junction + edges；
   - 在 CI 中作为 artifact 上传，便于 PR review。
+- **本地命令**：
+  - `python3 -m pip install -e ".[dev]"`（如遇 PEP 668，先执行 `python3 -m venv .venv && . .venv/bin/activate`）
+  - `topology_viz rf_layout_simplified.yaml`
+  - 输出路径：`out/PA_Module_Simplified.topology.svg`
 
 ### M1 ─ 工程骨架与 Schema 定义（1 周）
 
-- **目标**：项目脚手架 + v3.3/v4 双 schema 形式化模型。
+- **状态**：✅ 已实现；M2 及后续 lint/repair、frontend compiler、solver、postproc 仍是未来工作。
+- **目标**：项目脚手架 + v3.3/v6 IR 双 schema 形式化模型。
 - **交付物**：
   - 仓库结构 `src/{schema, frontend, solver, postproc, tools}/`，`tests/{unit, regression}/`；
   - `schema/v33.py` / `schema/v6_ir.py`：pydantic 模型；v3.3 模型**允许 extra='allow'**（容错）；v6 IR 用 strict；
-  - CI: ruff + black + mypy + pytest；
+  - `schema_check` CLI / console script：输出真实案例项目名与 components / footprints / nodes / terminals / edges 计数；
+  - CI: black + ruff + mypy + pytest 质量门；
   - `rf_layout_simplified.yaml` 通过 v33 schema 解析。
 - **DoD**：
   - `pytest tests/unit/test_schema.py` 全绿；
   - 真实案例 schema load 成功，无 lint error（warning 允许）。
+- **本地命令**：
+  - `python3 -m pip install -e ".[dev]"`（如遇 PEP 668，先执行 `python3 -m venv .venv && . .venv/bin/activate`）
+  - `schema_check rf_layout_simplified.yaml`
+  - 预期输出：`project: PA_Module_Simplified`，`components: 15`，`footprints: 5`，`nodes: 8`，`terminals: 10`，`edges: 22`
+  - `./scripts/verify_m1.sh`
 
 ### M2 ─ Frontend Compiler
 

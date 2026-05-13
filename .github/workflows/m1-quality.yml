@@ -1,0 +1,41 @@
+name: M1 quality
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  m1-quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -e ".[dev]"
+
+      - name: Run quality checks
+        run: |
+          python -m black --check src tests tools
+          python -m ruff check src tests tools
+          python -m mypy src
+          python -m pytest -q
+          schema_check rf_layout_simplified.yaml
+          topology_viz rf_layout_simplified.yaml
+
+      - name: Upload M1 topology SVG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: m1-topology-svg
+          path: out/PA_Module_Simplified.topology.svg
+          if-no-files-found: error

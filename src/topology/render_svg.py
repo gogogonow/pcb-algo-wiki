@@ -8,7 +8,6 @@ from xml.etree import ElementTree as ET
 
 from .model import TopologyComponent, TopologyGraph, TopologyPoint, TopologyTerminal
 
-
 SVG_WIDTH = 900
 SVG_HEIGHT = 760
 
@@ -40,7 +39,9 @@ def render_topology_svg(graph: TopologyGraph) -> str:
 .topology-label { fill: #111827; font-family: Arial, sans-serif; font-size: 11px; }
 """.strip()
 
-    edge_layer = ET.SubElement(root, "g", {"id": "topology-edges", "class": "topology-edges"})
+    edge_layer = ET.SubElement(
+        root, "g", {"id": "topology-edges", "class": "topology-edges"}
+    )
     fixed_layer = ET.SubElement(
         root,
         "g",
@@ -51,7 +52,9 @@ def render_topology_svg(graph: TopologyGraph) -> str:
         "g",
         {"id": "topology-uv-components", "class": "topology-uv-components"},
     )
-    node_layer = ET.SubElement(root, "g", {"id": "topology-nodes", "class": "topology-nodes"})
+    node_layer = ET.SubElement(
+        root, "g", {"id": "topology-nodes", "class": "topology-nodes"}
+    )
     terminal_layer = ET.SubElement(
         root,
         "g",
@@ -96,9 +99,13 @@ def render_topology_svg(graph: TopologyGraph) -> str:
 def _build_positions(graph: TopologyGraph) -> dict[str, TopologyPoint]:
     positions: dict[str, TopologyPoint] = {}
 
-    fixed_defaults = _iter_grid_points(x_values=(140.0, 280.0, 420.0), y_start=120.0, y_step=90.0)
+    fixed_defaults = _iter_grid_points(
+        x_values=(140.0, 280.0, 420.0), y_start=120.0, y_step=90.0
+    )
     for component in sorted(graph.fixed_components, key=lambda item: item.id):
-        positions[component.id] = _scale_component_position(component.position) or next(fixed_defaults)
+        positions[component.id] = _scale_component_position(component.position) or next(
+            fixed_defaults
+        )
 
     uv_points = _iter_grid_points(x_values=(170.0, 710.0), y_start=140.0, y_step=78.0)
     for component in sorted(graph.parametric_uv_components, key=lambda item: item.id):
@@ -110,7 +117,9 @@ def _build_positions(graph: TopologyGraph) -> dict[str, TopologyPoint]:
 
     terminal_points = _iter_grid_points(x_values=(790.0,), y_start=120.0, y_step=54.0)
     for terminal in sorted(graph.terminals, key=lambda item: item.id):
-        positions[terminal.id] = _terminal_position(terminal, positions, graph) or next(terminal_points)
+        positions[terminal.id] = _terminal_position(terminal, positions, graph) or next(
+            terminal_points
+        )
 
     return positions
 
@@ -199,7 +208,9 @@ def _component_pin_position(
     )
 
 
-def _append_fixed_component(layer: ET.Element, component: TopologyComponent, position: TopologyPoint) -> None:
+def _append_fixed_component(
+    layer: ET.Element, component: TopologyComponent, position: TopologyPoint
+) -> None:
     group = ET.SubElement(
         layer,
         "g",
@@ -223,7 +234,9 @@ def _append_fixed_component(layer: ET.Element, component: TopologyComponent, pos
     _append_label(group, component.label or component.id, position, dy=34.0)
 
 
-def _append_uv_component(layer: ET.Element, component: TopologyComponent, position: TopologyPoint) -> None:
+def _append_uv_component(
+    layer: ET.Element, component: TopologyComponent, position: TopologyPoint
+) -> None:
     group = ET.SubElement(
         layer,
         "g",
@@ -246,7 +259,9 @@ def _append_uv_component(layer: ET.Element, component: TopologyComponent, positi
     _append_label(group, component.label or component.id, position, dy=34.0)
 
 
-def _append_node(layer: ET.Element, node_id: str, label: str, position: TopologyPoint) -> None:
+def _append_node(
+    layer: ET.Element, node_id: str, label: str, position: TopologyPoint
+) -> None:
     group = ET.SubElement(
         layer,
         "g",
@@ -265,7 +280,9 @@ def _append_node(layer: ET.Element, node_id: str, label: str, position: Topology
     _append_label(group, label, position, dx=20.0, dy=4.0, anchor="start")
 
 
-def _append_terminal(layer: ET.Element, terminal: TopologyTerminal, position: TopologyPoint) -> None:
+def _append_terminal(
+    layer: ET.Element, terminal: TopologyTerminal, position: TopologyPoint
+) -> None:
     group = ET.SubElement(
         layer,
         "g",
@@ -285,7 +302,9 @@ def _append_terminal(layer: ET.Element, terminal: TopologyTerminal, position: To
             "points": " ".join(f"{_fmt(x)},{_fmt(y)}" for x, y in points),
         },
     )
-    _append_label(group, terminal.label or terminal.id, position, dx=16.0, dy=4.0, anchor="start")
+    _append_label(
+        group, terminal.label or terminal.id, position, dx=16.0, dy=4.0, anchor="start"
+    )
 
 
 def _append_label(

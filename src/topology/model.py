@@ -85,7 +85,11 @@ class TopologyGraph:
 
     @property
     def fixed_components(self) -> list[TopologyComponent]:
-        return [component for component in self.components if component.placement_kind == "fixed"]
+        return [
+            component
+            for component in self.components
+            if component.placement_kind == "fixed"
+        ]
 
     @property
     def parametric_uv_components(self) -> list[TopologyComponent]:
@@ -114,11 +118,15 @@ class TopologyGraph:
 
         terminal = self._find_by_id(self.terminals, endpoint_id)
         if terminal is not None:
-            return TopologyEndpointRef(id=endpoint_id, entity=terminal, entity_kind="terminal")
+            return TopologyEndpointRef(
+                id=endpoint_id, entity=terminal, entity_kind="terminal"
+            )
 
         component = self._find_by_id(self.components, endpoint_id)
         if component is not None:
-            return TopologyEndpointRef(id=endpoint_id, entity=component, entity_kind="component")
+            return TopologyEndpointRef(
+                id=endpoint_id, entity=component, entity_kind="component"
+            )
 
         component_id, separator, pin_id = endpoint_id.partition(".")
         if separator:

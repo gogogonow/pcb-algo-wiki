@@ -4,7 +4,6 @@ import pytest
 
 from topology.loaders import extract_topology_graph, load_topology_graph
 
-
 REAL_CASE_PATH = Path(__file__).resolve().parents[2] / "rf_layout_simplified.yaml"
 
 
@@ -74,7 +73,10 @@ def test_real_case_resolves_every_edge_endpoint() -> None:
     assert resolved["IC1.PIN_1"].pin_id is None
 
     assert resolved["IC1_pin1_seg1_universal_node"].entity_kind == "node"
-    assert resolved["IC1_pin1_seg1_universal_node"].entity_id == "IC1_pin1_seg1_universal_node"
+    assert (
+        resolved["IC1_pin1_seg1_universal_node"].entity_id
+        == "IC1_pin1_seg1_universal_node"
+    )
     assert resolved["IC1_pin1_seg1_universal_node"].pin_id is None
 
 
@@ -93,8 +95,14 @@ def test_extract_topology_graph_rejects_non_mapping_root() -> None:
 @pytest.mark.parametrize(
     ("connections", "match"),
     [
-        (["UNKNOWN_ENDPOINT", "junction"], "edge 'broken_edge' references unresolved endpoint 'UNKNOWN_ENDPOINT'"),
-        (["junction", "R2.PIN_999"], "edge 'broken_edge' references unresolved endpoint 'R2\\.PIN_999'"),
+        (
+            ["UNKNOWN_ENDPOINT", "junction"],
+            "edge 'broken_edge' references unresolved endpoint 'UNKNOWN_ENDPOINT'",
+        ),
+        (
+            ["junction", "R2.PIN_999"],
+            "edge 'broken_edge' references unresolved endpoint 'R2\\.PIN_999'",
+        ),
     ],
 )
 def test_extract_topology_graph_rejects_edges_with_unresolved_endpoints(
@@ -122,7 +130,9 @@ def test_extract_topology_graph_rejects_edges_with_unresolved_endpoints(
         )
 
 
-def test_load_topology_graph_reads_yaml_as_utf8(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_topology_graph_reads_yaml_as_utf8(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     original_read_text = Path.read_text
     read_kwargs: dict[str, object] = {}
 
@@ -143,7 +153,9 @@ def test_load_topology_graph_reads_yaml_as_utf8(monkeypatch: pytest.MonkeyPatch)
 
 @pytest.mark.parametrize("section_name", ["components", "nodes", "terminals", "edges"])
 def test_extract_topology_graph_rejects_non_mapping_sections(section_name: str) -> None:
-    with pytest.raises(ValueError, match=rf"section {section_name!r} must be a mapping"):
+    with pytest.raises(
+        ValueError, match=rf"section {section_name!r} must be a mapping"
+    ):
         extract_topology_graph({section_name: ["not", "a", "mapping"]})
 
 
@@ -157,7 +169,9 @@ def test_extract_topology_graph_rejects_non_mapping_entities(section_name: str) 
 
 
 def test_extract_topology_graph_rejects_non_mapping_component_placement() -> None:
-    with pytest.raises(ValueError, match=r"component 'broken' placement must be a mapping"):
+    with pytest.raises(
+        ValueError, match=r"component 'broken' placement must be a mapping"
+    ):
         extract_topology_graph(
             {
                 "components": {
@@ -171,7 +185,9 @@ def test_extract_topology_graph_rejects_non_mapping_component_placement() -> Non
 
 
 def test_extract_topology_graph_rejects_non_mapping_component_pin_nets() -> None:
-    with pytest.raises(ValueError, match=r"component 'broken' pin_nets must be a mapping"):
+    with pytest.raises(
+        ValueError, match=r"component 'broken' pin_nets must be a mapping"
+    ):
         extract_topology_graph(
             {
                 "components": {

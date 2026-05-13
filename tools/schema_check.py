@@ -1,4 +1,4 @@
-"""Run the packaged topology visualization CLI from the repository root."""
+"""Run the packaged schema_check CLI from the repository root."""
 
 from __future__ import annotations
 
@@ -13,10 +13,10 @@ if str(SRC_ROOT) not in sys.path:
 
 
 def _load_main():
-    module_path = SRC_ROOT / "tools" / "topology_viz.py"
-    spec = spec_from_file_location("_src_tools_topology_viz", module_path)
+    module_path = SRC_ROOT / "tools" / "schema_check.py"
+    spec = spec_from_file_location("_src_tools_schema_check", module_path)
     if spec is None or spec.loader is None:
-        msg = f"Unable to load topology_viz module from {module_path}"
+        msg = f"Unable to load schema_check module from {module_path}"
         raise ImportError(msg)
 
     module = module_from_spec(spec)
