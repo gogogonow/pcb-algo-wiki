@@ -4,7 +4,10 @@ import pytest
 from pydantic import ValidationError
 
 from schema import (
+    Board,
+    Point,
     RoutingClass,
+    V6Edge,
     V6IR,
     V33Layout,
     load_v33_layout,
@@ -200,3 +203,79 @@ def test_v6_free_and_flexible_edges_can_omit_target_length(
     )
 
     assert ir.edges["E1"].target_length is None
+
+
+@pytest.mark.parametrize(
+    ("model", "payload", "match"),
+    [
+        (
+            Board,
+            {"origin": {"x": 0.0, "y": 0.0}, "width": "10.0", "height": 5.0},
+            "width",
+        ),
+        (Point, {"x": "1.0", "y": 2.0}, "x"),
+        (
+            V6Edge,
+            {
+                "endpoints": ["J1", "N1"],
+                "routing_class": RoutingClass.RF_CONSTRAINED_LOCKED,
+                "target_length": "42.0",
+            },
+            "target_length",
+        ),
+    ],
+)
+def test_v6_models_reject_numeric_strings(
+    model: type[Board] | type[Point] | type[V6Edge],
+    payload: dict[str, object],
+    match: str,
+) -> None:
+    with pytest.raises(ValidationError, match=match):
+        model.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    "routing_class",
+    [RoutingClass.RF_CONSTRAINED_FREE, RoutingClass.FLEXIBLE_PATH],
+)
+def test_v6_free_and_flexible_edges_reject_target_length(
+    routing_class: RoutingClass,
+) -> None:
+    with pytest.raises(ValidationError, match="target_length"):
+        V6IR.model_validate(
+            {
+                "board": {"origin": {"x": 0.0, "y": 0.0}, "width": 10.0, "height": 5.0},
+                "terminals": {"J1": {"point": {"x": 0.0, "y": 0.0}}},
+                "nodes": {"N1": {"point": {"x": 5.0, "y": 2.5}}},
+                "edges": {
+                    "E1": {
+                        "endpoints": ["J1", "N1"],
+                        "routing_class": routing_class,
+                        "target_length": 1.5,
+                    }
+                },
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    "endpoints",
+    [("MISSING", "N1"), ("J1", "MISSING")],
+)
+def test_v6_ir_rejects_edges_with_missing_endpoint_references(
+    endpoints: tuple[str, str],
+) -> None:
+    with pytest.raises(ValidationError, match="endpoints"):
+        V6IR.model_validate(
+            {
+                "board": {"origin": {"x": 0.0, "y": 0.0}, "width": 10.0, "height": 5.0},
+                "terminals": {"J1": {"point": {"x": 0.0, "y": 0.0}}},
+                "nodes": {"N1": {"point": {"x": 5.0, "y": 2.5}}},
+                "edges": {
+                    "E1": {
+                        "endpoints": list(endpoints),
+                        "routing_class": RoutingClass.FLEXIBLE_PATH,
+                    }
+                },
+            }
+        )
