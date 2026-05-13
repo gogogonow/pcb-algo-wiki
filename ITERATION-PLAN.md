@@ -223,7 +223,7 @@ v3.3 YAML
 ### M1 ─ 工程骨架与 Schema 定义（1 周）
 
 - **状态**：✅ 已实现；M2 及后续 lint/repair、frontend compiler、solver、postproc 仍是未来工作。
-- **目标**：项目脚手架 + v3.3/v4 双 schema 形式化模型。
+- **目标**：项目脚手架 + v3.3/v6 IR 双 schema 形式化模型。
 - **交付物**：
   - 仓库结构 `src/{schema, frontend, solver, postproc, tools}/`，`tests/{unit, regression}/`；
   - `schema/v33.py` / `schema/v6_ir.py`：pydantic 模型；v3.3 模型**允许 extra='allow'**（容错）；v6 IR 用 strict；
