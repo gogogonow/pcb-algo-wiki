@@ -132,7 +132,7 @@ def test_v6_ir_accepts_minimal_strict_graph() -> None:
             "nodes": {"N1": {"point": {"x": 5.0, "y": 2.5}}},
             "edges": {
                 "E1": {
-                    "endpoints": ["J1", "N1"],
+                    "endpoints": ("J1", "N1"),
                     "routing_class": RoutingClass.FLEXIBLE_PATH,
                 }
             },
@@ -156,7 +156,7 @@ def test_v6_ir_rejects_unknown_field() -> None:
                 "nodes": {"N1": {"point": {"x": 5.0, "y": 2.5}}},
                 "edges": {
                     "E1": {
-                        "endpoints": ["J1", "N1"],
+                        "endpoints": ("J1", "N1"),
                         "routing_class": RoutingClass.FLEXIBLE_PATH,
                     }
                 },
@@ -173,7 +173,7 @@ def test_v6_locked_edge_requires_target_length() -> None:
                 "nodes": {"N1": {"point": {"x": 5.0, "y": 2.5}}},
                 "edges": {
                     "E1": {
-                        "endpoints": ["J1", "N1"],
+                        "endpoints": ("J1", "N1"),
                         "routing_class": RoutingClass.RF_CONSTRAINED_LOCKED,
                     }
                 },
@@ -195,7 +195,7 @@ def test_v6_free_and_flexible_edges_can_omit_target_length(
             "nodes": {"N1": {"point": {"x": 5.0, "y": 2.5}}},
             "edges": {
                 "E1": {
-                    "endpoints": ["J1", "N1"],
+                    "endpoints": ("J1", "N1"),
                     "routing_class": routing_class,
                 }
             },
@@ -217,7 +217,7 @@ def test_v6_free_and_flexible_edges_can_omit_target_length(
         (
             V6Edge,
             {
-                "endpoints": ["J1", "N1"],
+                "endpoints": ("J1", "N1"),
                 "routing_class": RoutingClass.RF_CONSTRAINED_LOCKED,
                 "target_length": "42.0",
             },
@@ -232,6 +232,44 @@ def test_v6_models_reject_numeric_strings(
 ) -> None:
     with pytest.raises(ValidationError, match=match):
         model.model_validate(payload)
+
+
+def test_point_rejects_int_for_float_field() -> None:
+    with pytest.raises(ValidationError, match="x"):
+        Point.model_validate({"x": 1, "y": 2.0})
+
+
+def test_board_rejects_int_for_float_field() -> None:
+    with pytest.raises(ValidationError, match="width"):
+        Board.model_validate(
+            {"origin": {"x": 0.0, "y": 0.0}, "width": 10, "height": 5.0}
+        )
+
+
+def test_point_rejects_bool_for_float_field() -> None:
+    with pytest.raises(ValidationError, match="x"):
+        Point.model_validate({"x": True, "y": 2.0})
+
+
+def test_v6_edge_rejects_list_endpoints() -> None:
+    with pytest.raises(ValidationError, match="endpoints"):
+        V6Edge.model_validate(
+            {
+                "endpoints": ["A", "B"],
+                "routing_class": "rf_constrained_free",
+            }
+        )
+
+
+def test_v6_edge_accepts_tuple_endpoints() -> None:
+    edge = V6Edge.model_validate(
+        {
+            "endpoints": ("A", "B"),
+            "routing_class": "rf_constrained_free",
+        }
+    )
+
+    assert edge.endpoints == ("A", "B")
 
 
 @pytest.mark.parametrize(
@@ -249,7 +287,7 @@ def test_v6_free_and_flexible_edges_reject_target_length(
                 "nodes": {"N1": {"point": {"x": 5.0, "y": 2.5}}},
                 "edges": {
                     "E1": {
-                        "endpoints": ["J1", "N1"],
+                        "endpoints": ("J1", "N1"),
                         "routing_class": routing_class,
                         "target_length": 1.5,
                     }
@@ -273,7 +311,7 @@ def test_v6_ir_rejects_edges_with_missing_endpoint_references(
                 "nodes": {"N1": {"point": {"x": 5.0, "y": 2.5}}},
                 "edges": {
                     "E1": {
-                        "endpoints": list(endpoints),
+                        "endpoints": endpoints,
                         "routing_class": RoutingClass.FLEXIBLE_PATH,
                     }
                 },

@@ -3,9 +3,36 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Self
+from typing import Annotated, Any, Self
 
-from pydantic import BaseModel, ConfigDict, Field, StrictFloat, model_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    StrictFloat,
+    StrictStr,
+    model_validator,
+)
+
+
+def require_exact_float(value: Any) -> Any:
+    if type(value) is not float:
+        raise ValueError("value must be a float")
+    return value
+
+
+def require_exact_tuple(value: Any) -> Any:
+    if type(value) is not tuple:
+        raise ValueError("value must be a tuple")
+    return value
+
+
+ExactFloat = Annotated[StrictFloat, BeforeValidator(require_exact_float)]
+EndpointTuple = Annotated[
+    tuple[StrictStr, StrictStr],
+    BeforeValidator(require_exact_tuple),
+]
 
 
 class StrictFrozenModel(BaseModel):
@@ -19,14 +46,14 @@ class RoutingClass(StrEnum):
 
 
 class Point(StrictFrozenModel):
-    x: StrictFloat
-    y: StrictFloat
+    x: ExactFloat
+    y: ExactFloat
 
 
 class Board(StrictFrozenModel):
     origin: Point
-    width: StrictFloat
-    height: StrictFloat
+    width: ExactFloat
+    height: ExactFloat
 
 
 class V6Terminal(StrictFrozenModel):
@@ -38,9 +65,9 @@ class V6Node(StrictFrozenModel):
 
 
 class V6Edge(StrictFrozenModel):
-    endpoints: tuple[str, str]
+    endpoints: EndpointTuple
     routing_class: RoutingClass
-    target_length: StrictFloat | None = None
+    target_length: ExactFloat | None = None
 
     @model_validator(mode="after")
     def validate_target_length(self) -> Self:
