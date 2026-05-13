@@ -73,6 +73,21 @@ def test_v33_layout_requires_documented_root_sections() -> None:
         )
 
 
+def test_v33_layout_rejects_null_global_constraints() -> None:
+    with pytest.raises(ValidationError, match="global_constraints"):
+        V33Layout.model_validate(
+            {
+                "metadata": {},
+                "global_constraints": None,
+                "footprints": {},
+                "components": {},
+                "terminals": {},
+                "nodes": {},
+                "edges": {},
+            }
+        )
+
+
 def test_terminal_exposes_typed_v33_fields() -> None:
     layout = V33Layout.model_validate(
         {

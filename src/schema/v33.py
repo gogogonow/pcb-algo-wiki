@@ -157,7 +157,7 @@ class Edge(LenientModel):
 
 class V33Layout(LenientModel):
     metadata: Metadata = Field(...)
-    global_constraints: GlobalConstraints | None = Field(...)
+    global_constraints: GlobalConstraints = Field(...)
     footprints: dict[str, Footprint] = Field(...)
     components: dict[str, Component] = Field(...)
     nodes: dict[str, Node] = Field(...)
