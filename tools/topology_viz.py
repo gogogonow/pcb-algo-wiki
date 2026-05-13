@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 import sys
 
@@ -10,7 +11,20 @@ SRC_ROOT = ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from tools.topology_viz import main
+
+def _load_main():
+    module_path = SRC_ROOT / "tools" / "topology_viz.py"
+    spec = spec_from_file_location("_src_tools_topology_viz", module_path)
+    if spec is None or spec.loader is None:
+        msg = f"Unable to load topology_viz module from {module_path}"
+        raise ImportError(msg)
+
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.main
+
+
+main = _load_main()
 
 if __name__ == "__main__":
     raise SystemExit(main())
