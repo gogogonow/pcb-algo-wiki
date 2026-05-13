@@ -3,7 +3,12 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from schema import V33Layout, load_v33_layout
+from schema import (
+    RoutingClass,
+    V6IR,
+    V33Layout,
+    load_v33_layout,
+)
 from schema.v33 import Footprint, Metadata
 
 REAL_CASE_PATH = Path(__file__).resolve().parents[2] / "rf_layout_simplified.yaml"
@@ -114,3 +119,84 @@ def test_terminal_exposes_typed_v33_fields() -> None:
     assert terminal.pin == "PIN_1"
     assert terminal.net == "RF_OUT"
     assert terminal.extra_fields["tyop_field"] == "still-preserved"
+
+
+def test_v6_ir_accepts_minimal_strict_graph() -> None:
+    ir = V6IR.model_validate(
+        {
+            "board": {"origin": {"x": 0.0, "y": 0.0}, "width": 10.0, "height": 5.0},
+            "terminals": {"J1": {"point": {"x": 0.0, "y": 0.0}}},
+            "nodes": {"N1": {"point": {"x": 5.0, "y": 2.5}}},
+            "edges": {
+                "E1": {
+                    "endpoints": ["J1", "N1"],
+                    "routing_class": RoutingClass.FLEXIBLE_PATH,
+                }
+            },
+        }
+    )
+
+    assert ir.edges["E1"].routing_class is RoutingClass.FLEXIBLE_PATH
+
+
+def test_v6_ir_rejects_unknown_field() -> None:
+    with pytest.raises(ValidationError, match="extra_forbidden"):
+        V6IR.model_validate(
+            {
+                "board": {
+                    "origin": {"x": 0.0, "y": 0.0},
+                    "width": 10.0,
+                    "height": 5.0,
+                    "unexpected": True,
+                },
+                "terminals": {"J1": {"point": {"x": 0.0, "y": 0.0}}},
+                "nodes": {"N1": {"point": {"x": 5.0, "y": 2.5}}},
+                "edges": {
+                    "E1": {
+                        "endpoints": ["J1", "N1"],
+                        "routing_class": RoutingClass.FLEXIBLE_PATH,
+                    }
+                },
+            }
+        )
+
+
+def test_v6_locked_edge_requires_target_length() -> None:
+    with pytest.raises(ValidationError, match="target_length"):
+        V6IR.model_validate(
+            {
+                "board": {"origin": {"x": 0.0, "y": 0.0}, "width": 10.0, "height": 5.0},
+                "terminals": {"J1": {"point": {"x": 0.0, "y": 0.0}}},
+                "nodes": {"N1": {"point": {"x": 5.0, "y": 2.5}}},
+                "edges": {
+                    "E1": {
+                        "endpoints": ["J1", "N1"],
+                        "routing_class": RoutingClass.RF_CONSTRAINED_LOCKED,
+                    }
+                },
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    "routing_class",
+    [RoutingClass.RF_CONSTRAINED_FREE, RoutingClass.FLEXIBLE_PATH],
+)
+def test_v6_free_and_flexible_edges_can_omit_target_length(
+    routing_class: RoutingClass,
+) -> None:
+    ir = V6IR.model_validate(
+        {
+            "board": {"origin": {"x": 0.0, "y": 0.0}, "width": 10.0, "height": 5.0},
+            "terminals": {"J1": {"point": {"x": 0.0, "y": 0.0}}},
+            "nodes": {"N1": {"point": {"x": 5.0, "y": 2.5}}},
+            "edges": {
+                "E1": {
+                    "endpoints": ["J1", "N1"],
+                    "routing_class": routing_class,
+                }
+            },
+        }
+    )
+
+    assert ir.edges["E1"].target_length is None

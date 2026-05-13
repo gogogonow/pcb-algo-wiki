@@ -16,10 +16,20 @@ def test_future_packages_are_importable_and_export_nothing(package_name: str) ->
     assert module.__all__ == []
 
 
-def test_schema_package_exports_v33_api() -> None:
+def test_schema_package_exports_schema_models() -> None:
     module = importlib.import_module("schema")
 
-    assert module.__all__ == ["V33Layout", "load_v33_layout"]
+    assert module.__all__ == [
+        "Board",
+        "Point",
+        "RoutingClass",
+        "V6Edge",
+        "V6IR",
+        "V6Node",
+        "V6Terminal",
+        "V33Layout",
+        "load_v33_layout",
+    ]
 
 
 def test_tools_package_resolves_to_src_package() -> None:
