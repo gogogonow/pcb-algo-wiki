@@ -39,6 +39,7 @@ target-version = "py311"
 src = ["src", "tests", "tools"]
 
 [tool.ruff.lint.per-file-ignores]
+"tools/schema_check.py" = ["E402"]
 "tools/topology_viz.py" = ["E402"]
 
 [tool.mypy]
