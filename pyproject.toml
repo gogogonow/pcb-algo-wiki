@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pcb-algo-wiki-topology"
+version = "0.0.0"
+description = "M0 topology visualization baseline for PA_Module_Simplified"
+requires-python = ">=3.11"
+dependencies = [
+  "PyYAML>=6.0",
+  "svgwrite>=1.4",
+  "pytest>=8.0",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
