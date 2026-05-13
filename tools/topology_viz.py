@@ -10,7 +10,6 @@ import sys
 
 import yaml
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
@@ -33,7 +32,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     input_path = Path(args.input_path)
-    output_path = Path(args.output_path) if args.output_path else _default_output_path(input_path)
+    output_path = (
+        Path(args.output_path) if args.output_path else _default_output_path(input_path)
+    )
 
     graph = load_topology_graph(input_path)
     svg = render_topology_svg(graph)

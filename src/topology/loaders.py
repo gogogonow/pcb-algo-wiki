@@ -108,9 +108,13 @@ def _iter_section(
     return entities
 
 
-def _validate_edge_endpoint(graph: TopologyGraph, edge_id: str, endpoint_id: object) -> str:
+def _validate_edge_endpoint(
+    graph: TopologyGraph, edge_id: str, endpoint_id: object
+) -> str:
     if not isinstance(endpoint_id, str):
-        raise ValueError(f"edge {edge_id!r} references unresolved endpoint {endpoint_id!r}")
+        raise ValueError(
+            f"edge {edge_id!r} references unresolved endpoint {endpoint_id!r}"
+        )
 
     try:
         graph.resolve_endpoint(endpoint_id)

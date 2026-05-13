@@ -4,7 +4,6 @@ from xml.etree import ElementTree as ET
 import topology
 from topology.loaders import load_topology_graph
 
-
 REAL_CASE_PATH = Path(__file__).resolve().parents[2] / "rf_layout_simplified.yaml"
 
 
@@ -26,11 +25,15 @@ def test_render_adds_distinct_groups_and_classes() -> None:
     assert _classes(_find_by_id(root, "topology-fixed-components")) == {
         "topology-fixed-components",
     }
-    assert _classes(_find_by_id(root, "topology-uv-components")) == {"topology-uv-components"}
+    assert _classes(_find_by_id(root, "topology-uv-components")) == {
+        "topology-uv-components"
+    }
     assert _classes(_find_by_id(root, "topology-nodes")) == {"topology-nodes"}
     assert _classes(_find_by_id(root, "topology-terminals")) == {"topology-terminals"}
 
-    assert len(_elements_with_class(root, "topology-fixed-component")) == len(graph.fixed_components)
+    assert len(_elements_with_class(root, "topology-fixed-component")) == len(
+        graph.fixed_components
+    )
     assert len(_elements_with_class(root, "topology-uv-component")) == len(
         graph.parametric_uv_components
     )
@@ -68,11 +71,15 @@ def test_real_case_render_is_pretty_printed_for_reviewable_regressions() -> None
     assert lines[-1] == "</svg>"
 
 
-def test_real_case_renders_distinct_component_pin_anchors_for_multi_pin_passives() -> None:
+def test_real_case_renders_distinct_component_pin_anchors_for_multi_pin_passives() -> (
+    None
+):
     graph = load_topology_graph(REAL_CASE_PATH)
     root = ET.fromstring(topology.render_topology_svg(graph))
 
-    c1_pin_1_anchor = _edge_endpoint_coordinates(root, graph, "IC1_pin1_seg4", "C1.PIN_1")
+    c1_pin_1_anchor = _edge_endpoint_coordinates(
+        root, graph, "IC1_pin1_seg4", "C1.PIN_1"
+    )
     c1_pin_2_anchor = _edge_endpoint_coordinates(root, graph, "C1_to_R1", "C1.PIN_2")
 
     assert c1_pin_1_anchor != c1_pin_2_anchor
@@ -82,10 +89,22 @@ def test_real_case_single_pin_component_terminals_anchor_to_component_pin() -> N
     graph = load_topology_graph(REAL_CASE_PATH)
     root = ET.fromstring(topology.render_topology_svg(graph))
 
-    assert _edge_endpoint_coordinates(root, graph, "R2_to_TP1", "TP1.PIN_1") == ("142.0", "80.0")
-    assert _edge_endpoint_coordinates(root, graph, "RF_INPUT_to_IC1", "TP3.PIN_1") == ("422.0", "80.0")
-    assert _edge_endpoint_coordinates(root, graph, "IC1_pin1_seg6", "TP4.PIN_1") == ("562.0", "80.0")
-    assert _edge_endpoint_coordinates(root, graph, "IC1_pin2_seg6", "TP5.PIN_1") == ("562.0", "580.0")
+    assert _edge_endpoint_coordinates(root, graph, "R2_to_TP1", "TP1.PIN_1") == (
+        "142.0",
+        "80.0",
+    )
+    assert _edge_endpoint_coordinates(root, graph, "RF_INPUT_to_IC1", "TP3.PIN_1") == (
+        "422.0",
+        "80.0",
+    )
+    assert _edge_endpoint_coordinates(root, graph, "IC1_pin1_seg6", "TP4.PIN_1") == (
+        "562.0",
+        "80.0",
+    )
+    assert _edge_endpoint_coordinates(root, graph, "IC1_pin2_seg6", "TP5.PIN_1") == (
+        "562.0",
+        "580.0",
+    )
 
 
 def _find_by_id(root: ET.Element, element_id: str) -> ET.Element:
@@ -115,7 +134,9 @@ def _edge_endpoint_coordinates(
         return element.attrib["x1"], element.attrib["y1"]
     if edge.target == endpoint_id:
         return element.attrib["x2"], element.attrib["y2"]
-    raise AssertionError(f"edge {edge_id!r} does not reference endpoint {endpoint_id!r}")
+    raise AssertionError(
+        f"edge {edge_id!r} does not reference endpoint {endpoint_id!r}"
+    )
 
 
 def _find_edge(root: ET.Element, edge_id: str) -> ET.Element:

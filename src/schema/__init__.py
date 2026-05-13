@@ -1,3 +1,3 @@
-"""CLI tools package."""
+"""Schema package."""
 
 __all__: list[str] = []

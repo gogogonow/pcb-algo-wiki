@@ -8,9 +8,17 @@ version = "0.0.0"
 description = "M0 topology visualization baseline for PA_Module_Simplified"
 requires-python = ">=3.11"
 dependencies = [
+  "pydantic>=2.7",
   "PyYAML>=6.0",
   "svgwrite>=1.4",
   "pytest>=8.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "black>=24.0",
+  "mypy>=1.10",
+  "ruff>=0.5",
 ]
 
 [tool.setuptools]
@@ -22,3 +30,22 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.black]
+target-version = ["py311"]
+
+[tool.ruff]
+target-version = "py311"
+src = ["src", "tests", "tools"]
+
+[tool.ruff.lint.per-file-ignores]
+"tools/topology_viz.py" = ["E402"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src"]
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = ["topology", "topology.*"]
+ignore_errors = true

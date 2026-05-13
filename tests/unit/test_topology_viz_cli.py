@@ -4,12 +4,13 @@ import pytest
 
 from tools.topology_viz import main
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REAL_CASE_PATH = REPO_ROOT / "rf_layout_simplified.yaml"
 
 
-def test_main_writes_svg_to_explicit_output_path_and_creates_parent_dir(scratch_dir: Path) -> None:
+def test_main_writes_svg_to_explicit_output_path_and_creates_parent_dir(
+    scratch_dir: Path,
+) -> None:
     output_path = scratch_dir / "nested" / "explicit.svg"
 
     exit_code = main([str(REAL_CASE_PATH), str(output_path)])
@@ -24,7 +25,9 @@ def test_main_writes_svg_to_explicit_output_path_and_creates_parent_dir(scratch_
     assert "R2" in svg
 
 
-def test_main_defaults_real_case_output_path_from_project_name(scratch_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main_defaults_real_case_output_path_from_project_name(
+    scratch_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.chdir(scratch_dir)
 
     exit_code = main([str(REAL_CASE_PATH)])
