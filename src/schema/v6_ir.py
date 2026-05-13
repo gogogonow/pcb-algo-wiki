@@ -10,6 +10,8 @@ from pydantic import (
     BeforeValidator,
     ConfigDict,
     Field,
+    ValidationInfo,
+    field_validator,
     StrictFloat,
     StrictStr,
     model_validator,
@@ -25,6 +27,22 @@ def require_exact_float(value: Any) -> Any:
 def require_exact_tuple(value: Any) -> Any:
     if type(value) is not tuple:
         raise ValueError("value must be a tuple")
+    return value
+
+
+def require_positive_float(value: float, field_name: str | None) -> float:
+    name = field_name or "value"
+    if value <= 0.0:
+        raise ValueError(f"{name} must be greater than 0")
+    return value
+
+
+def require_positive_optional_float(
+    value: float | None, field_name: str | None
+) -> float | None:
+    name = field_name or "value"
+    if value is not None and value <= 0.0:
+        raise ValueError(f"{name} must be greater than 0")
     return value
 
 
@@ -55,6 +73,11 @@ class Board(StrictFrozenModel):
     width: ExactFloat
     height: ExactFloat
 
+    @field_validator("width", "height")
+    @classmethod
+    def validate_positive_dimensions(cls, value: float, info: ValidationInfo) -> float:
+        return require_positive_float(value, info.field_name)
+
 
 class V6Terminal(StrictFrozenModel):
     point: Point
@@ -69,6 +92,13 @@ class V6Edge(StrictFrozenModel):
     routing_class: RoutingClass
     target_length: ExactFloat | None = None
     width: ExactFloat | None = None
+
+    @field_validator("target_length", "width")
+    @classmethod
+    def validate_positive_optional_lengths(
+        cls, value: float | None, info: ValidationInfo
+    ) -> float | None:
+        return require_positive_optional_float(value, info.field_name)
 
     @model_validator(mode="after")
     def validate_target_length(self) -> Self:

@@ -288,6 +288,50 @@ def test_v6_edge_rejects_int_for_width_field() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("width", "height", "match"),
+    [
+        (0.0, 5.0, "width"),
+        (-10.0, 5.0, "width"),
+        (10.0, 0.0, "height"),
+        (10.0, -5.0, "height"),
+    ],
+)
+def test_board_rejects_non_positive_dimensions(
+    width: float, height: float, match: str
+) -> None:
+    with pytest.raises(ValidationError, match=match):
+        Board.model_validate(
+            {"origin": {"x": 0.0, "y": 0.0}, "width": width, "height": height}
+        )
+
+
+@pytest.mark.parametrize("width", [0.0, -1.2])
+def test_v6_edge_rejects_non_positive_width(width: float) -> None:
+    with pytest.raises(ValidationError, match="width"):
+        V6Edge.model_validate(
+            {
+                "endpoints": ("J1", "N1"),
+                "routing_class": RoutingClass.FLEXIBLE_PATH,
+                "width": width,
+            }
+        )
+
+
+@pytest.mark.parametrize("target_length", [0.0, -7.5])
+def test_v6_locked_edge_rejects_non_positive_target_length(
+    target_length: float,
+) -> None:
+    with pytest.raises(ValidationError, match="target_length"):
+        V6Edge.model_validate(
+            {
+                "endpoints": ("J1", "N1"),
+                "routing_class": RoutingClass.RF_CONSTRAINED_LOCKED,
+                "target_length": target_length,
+            }
+        )
+
+
 def test_point_rejects_bool_for_float_field() -> None:
     with pytest.raises(ValidationError, match="x"):
         Point.model_validate({"x": True, "y": 2.0})
