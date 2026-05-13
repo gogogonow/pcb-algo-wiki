@@ -1,5 +1,8 @@
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from schema import V33Layout, load_v33_layout
 from schema.v33 import Footprint, Metadata
 
@@ -54,3 +57,45 @@ def test_load_v33_layout_preserves_unknown_fields_on_nested_models() -> None:
     pin = footprint.pins["PIN_1"]
     assert pin.pad_geometry is not None
     assert pin.pad_geometry.extra_fields["redius"] == 2.0
+
+
+def test_v33_layout_requires_documented_root_sections() -> None:
+    with pytest.raises(ValidationError, match="components"):
+        V33Layout.model_validate(
+            {
+                "metadata": {},
+                "global_constraints": {},
+                "footprints": {},
+                "terminals": {},
+                "nodes": {},
+                "edges": {},
+            }
+        )
+
+
+def test_terminal_exposes_typed_v33_fields() -> None:
+    layout = V33Layout.model_validate(
+        {
+            "metadata": {},
+            "global_constraints": {},
+            "footprints": {},
+            "components": {},
+            "terminals": {
+                "RF_OUT": {
+                    "type": "terminal",
+                    "associated_component": "U1",
+                    "pin": "PIN_1",
+                    "net": "RF_OUT",
+                    "tyop_field": "still-preserved",
+                }
+            },
+            "nodes": {},
+            "edges": {},
+        }
+    )
+
+    terminal = layout.terminals["RF_OUT"]
+    assert terminal.associated_component == "U1"
+    assert terminal.pin == "PIN_1"
+    assert terminal.net == "RF_OUT"
+    assert terminal.extra_fields["tyop_field"] == "still-preserved"

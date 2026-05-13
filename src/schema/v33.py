@@ -131,6 +131,9 @@ class Node(LenientModel):
 
 class Terminal(LenientModel):
     type: str | None = None
+    associated_component: str | None = None
+    pin: str | None = None
+    net: str | None = None
 
 
 class EdgeConstraint(LenientModel):
@@ -153,13 +156,13 @@ class Edge(LenientModel):
 
 
 class V33Layout(LenientModel):
-    metadata: Metadata = Field(default_factory=Metadata)
-    global_constraints: GlobalConstraints | None = None
-    footprints: dict[str, Footprint] = Field(default_factory=dict)
-    components: dict[str, Component] = Field(default_factory=dict)
-    nodes: dict[str, Node] = Field(default_factory=dict)
-    terminals: dict[str, Terminal] = Field(default_factory=dict)
-    edges: dict[str, Edge] = Field(default_factory=dict)
+    metadata: Metadata = Field(...)
+    global_constraints: GlobalConstraints | None = Field(...)
+    footprints: dict[str, Footprint] = Field(...)
+    components: dict[str, Component] = Field(...)
+    nodes: dict[str, Node] = Field(...)
+    terminals: dict[str, Terminal] = Field(...)
+    edges: dict[str, Edge] = Field(...)
 
 
 def load_v33_layout(path: str | Path) -> V33Layout:
