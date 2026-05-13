@@ -8,12 +8,18 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.mark.parametrize(
     "package_name",
-    ["schema", "frontend", "solver", "postproc", "tools"],
+    ["frontend", "solver", "postproc", "tools"],
 )
 def test_future_packages_are_importable_and_export_nothing(package_name: str) -> None:
     module = importlib.import_module(package_name)
 
     assert module.__all__ == []
+
+
+def test_schema_package_exports_v33_api() -> None:
+    module = importlib.import_module("schema")
+
+    assert module.__all__ == ["V33Layout", "load_v33_layout"]
 
 
 def test_tools_package_resolves_to_src_package() -> None:
