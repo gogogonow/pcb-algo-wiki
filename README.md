@@ -179,7 +179,7 @@ edges:
 
 ```
 .
-├── README.md                                       # 本文档（v6 入口 + M0/M1/M2/M3/M4 运行说明）
+├── README.md                                       # 本文档（v6 入口 + M0/M1/M2/M3/M4/M5 运行说明）
 ├── ALGORITHM-OVERVIEW.md                           # v6 算法总览
 ├── ITERATION-PLAN.md                               # v6 算法方案 + 6+1 期开发计划
 ├── pyproject.toml                                  # 可编辑安装 + console scripts
@@ -188,9 +188,13 @@ edges:
 ├── scripts/verify_m2.sh                            # M2 一键验证（含 frontend_compile 烟测）
 ├── scripts/verify_m3.sh                            # M3 一键验证（含 solver_ir 烟测）
 ├── scripts/verify_m4.sh                            # M4 一键验证（含 cpsat_solve 烟测）
+├── scripts/verify_m5.sh                            # M5 一键验证（含 pcb_solve 三阶段流水线烟测）
 ├── tools/
 │   ├── topology_viz.py                             # 仓库根包装器
-│   └── schema_check.py                             # 仓库根包装器
+│   ├── schema_check.py                             # 仓库根包装器
+│   ├── frontend_compile.py / solver_ir.py          # M2 / M3 CLI 包装
+│   ├── cpsat_solve.py                              # M4 CP-SAT 单段 CLI
+│   └── pcb_solve.py                                # M5 三阶段一键 CLI（SA + CP-SAT + A*）
 ├── src/
 │   ├── schema/                                     # v33 / v6_ir schema
 │   ├── tools/                                      # CLI 实现
@@ -212,7 +216,7 @@ edges:
 
 ---
 
-## 8. 本地运行（M0 / M1 / M2 / M3 / M4）
+## 8. 本地运行（M0 / M1 / M2 / M3 / M4 / M5）
 
 推荐先创建虚拟环境（部分 Linux 发行版对系统 Python 启用了 PEP 668）：
 
@@ -292,6 +296,20 @@ cpsat_solve rf_layout_simplified.yaml \
 
 # 一键验证 M4 质量门（含 verify_m3 全部步骤 + cpsat_solve 烟测）
 ./scripts/verify_m4.sh
+
+# M5: 三阶段一键流水线（SA hint → CP-SAT → A* flexible-path → audit）
+pcb_solve rf_layout_simplified.yaml \
+    --time-limit 10 --workers 8 --max-retries 5 \
+    --svg-out out/PA_Module_Simplified.m5.svg \
+    --report-out out/PA_Module_Simplified.m5.json
+# 旁路开关:
+#   --no-sa     仅 cold-start CP-SAT（等价 M4 行为）
+#   --no-astar  保留直连 polyline，不跑 A*
+# 预期 stdout（典型）:
+# status=OPTIMAL attempts=1 wall=0.013s locked_within_tol=True no_overlap_pass=False max_len_err=0.500% sa(E:190369.4->146336.9, acc=1202/1700) astar(routed=0,failed=0)
+
+# 一键验证 M5 质量门（含 verify_m4 全部步骤 + pcb_solve 三阶段烟测）
+./scripts/verify_m5.sh
 ```
 
 M2 产物 `out/PA_Module_Simplified.frontend.json` 的 schema 与字段含义见
@@ -303,6 +321,9 @@ M3 产物 `out/PA_Module_Simplified.solver.json` 的 schema、UV/junction 表达
 M4 CP-SAT 模型（变量 / 约束 / NoOverlap 取舍 / CLI 退出码）详见
 [`concepts/cpsat-model.md`](./concepts/cpsat-model.md)。
 
+M5 三阶段流水线（SA 能量函数 / `AddHint` 通道 / A* 网格 / orchestrator 重试策略）详见
+[`concepts/sa-and-astar.md`](./concepts/sa-and-astar.md)。
+
 ---
 
 ## 9. 6+1 期迭代计划速览
@@ -313,8 +334,8 @@ M4 CP-SAT 模型（变量 / 约束 / NoOverlap 取舍 / CLI 退出码）详见
 | **M1** | 1   | 脚手架 + 双 schema | v33 (lenient) / v6 IR (strict) |
 | **M2** | 2   | Frontend Compiler | Lint + expand_components + triage |
 | **M3** | 2   | UV + universal_junction | 端点滑动模型 + 几何模板（最高风险）|
-| **M4** | 2   | CP-SAT 主求解器 | 真实案例端到端 ≤ 10 s |
-| **M5** | 1.5 | SA + A* 兼容能力 | 三阶段流水线 + 5 次重试 |
+| **M4** | 2   | CP-SAT 主求解器 | 真实案例端到端 ≤ 10 s ✅ |
+| **M5** | 1.5 | SA hint + A* flexible-path + orchestrator | `pcb_solve` 一键 E2E + 5 次重试 ✅ |
 | **M6** | 1   | 后处理 + 输出 | bend / DRC / 软 LVS / SVG / Gerber stub |
 
 详见 [`ITERATION-PLAN.md`](./ITERATION-PLAN.md) §4。
