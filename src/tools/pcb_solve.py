@@ -26,13 +26,14 @@ import json
 import sys
 from pathlib import Path
 
-from postproc.geom_svg import render_geometry_svg
+from postproc import apply_bends, render_geometry_svg, run_drc, run_lvs
 from solver import (
     DEFAULT_NUM_WORKERS,
     DEFAULT_TIME_LIMIT_S,
     OrchestratorOptions,
     solve_layout,
 )
+from output import render_full_layout
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -89,6 +90,37 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Suppress per-edge length error printout.",
     )
+    p.add_argument(
+        "--bend",
+        dest="bend",
+        action="store_true",
+        default=True,
+        help="Render bend_style geometry (mitered/curved) before DRC/SVG. Default ON (M6).",
+    )
+    p.add_argument(
+        "--no-bend",
+        dest="bend",
+        action="store_false",
+        help="Skip bend rendering — emit raw straight-segment polylines (M5 behaviour).",
+    )
+    p.add_argument(
+        "--drc-out",
+        type=Path,
+        default=None,
+        help="Optional DRC report JSON path (M6).",
+    )
+    p.add_argument(
+        "--lvs-out",
+        type=Path,
+        default=None,
+        help="Optional LVS report JSON path (M6).",
+    )
+    p.add_argument(
+        "--final-svg",
+        type=Path,
+        default=None,
+        help="Optional final SVG path (with footprint outlines + bend + DRC overlay).",
+    )
     return p
 
 
@@ -138,6 +170,41 @@ def _report_dict(result) -> dict:
         "overlap_pairs": [
             {"edge_a": o.edge_a, "edge_b": o.edge_b, "overlap_um": o.overlap_um}
             for o in audit.overlap_pairs
+        ],
+    }
+
+
+def _drc_dict(report) -> dict:
+    return {
+        "min_trace_width_mm": report.min_trace_width,
+        "min_clearance_mm": report.min_clearance,
+        "critical": report.critical_count,
+        "warning": report.warning_count,
+        "violations": [
+            {
+                "rule": v.rule,
+                "severity": v.severity,
+                "edge_a": v.edge_a,
+                "edge_b": v.edge_b,
+                "detail": v.detail,
+            }
+            for v in report.violations
+        ],
+    }
+
+
+def _lvs_dict(report) -> dict:
+    return {
+        "skipped": report.skipped,
+        "reason": report.reason,
+        "checked_nets": list(report.checked_nets),
+        "mismatches": [
+            {
+                "logical_net": m.logical_net,
+                "component_count": m.component_count,
+                "members": list(m.members),
+            }
+            for m in report.mismatches
         ],
     }
 
@@ -205,10 +272,78 @@ def main(argv: list[str] | None = None) -> int:
         args.svg_out.write_text(render_geometry_svg(geom), encoding="utf-8")
         print(f"svg -> {args.svg_out}")
 
+    bend_report = None
+    drc_report = None
+    lvs_report = None
+    rendered_geom = geom
+    if args.bend:
+        rendered_geom, bend_report = apply_bends(geom, result.ir)
+        print(
+            f"bend: bended={len(bend_report.bended_edges)} "
+            f"skip={len(bend_report.skipped_edges)} "
+            f"warn={len(bend_report.warnings)}"
+        )
+
+    drc_report = run_drc(
+        rendered_geom,
+        result.ir,
+        known_overlap_pairs=frozenset(
+            (o.edge_a, o.edge_b) for o in audit.overlap_pairs
+        ),
+    )
+    print(
+        f"drc: critical={drc_report.critical_count} "
+        f"warning={drc_report.warning_count}"
+    )
+
+    lvs_report = run_lvs(result.ir, rendered_geom)
+    if lvs_report.skipped:
+        print(f"lvs: skipped ({lvs_report.reason})")
+    else:
+        print(
+            f"lvs: nets={len(lvs_report.checked_nets)} "
+            f"mismatches={len(lvs_report.mismatches)}"
+        )
+
+    if args.drc_out is not None:
+        args.drc_out.parent.mkdir(parents=True, exist_ok=True)
+        args.drc_out.write_text(
+            json.dumps(_drc_dict(drc_report), indent=2),
+            encoding="utf-8",
+        )
+        print(f"drc-report -> {args.drc_out}")
+
+    if args.lvs_out is not None:
+        args.lvs_out.parent.mkdir(parents=True, exist_ok=True)
+        args.lvs_out.write_text(
+            json.dumps(_lvs_dict(lvs_report), indent=2),
+            encoding="utf-8",
+        )
+        print(f"lvs-report -> {args.lvs_out}")
+
+    if args.final_svg is not None:
+        args.final_svg.parent.mkdir(parents=True, exist_ok=True)
+        args.final_svg.write_text(
+            render_full_layout(
+                rendered_geom, bend=bend_report, drc=drc_report, lvs=lvs_report
+            ),
+            encoding="utf-8",
+        )
+        print(f"final-svg -> {args.final_svg}")
+
     if args.report_out is not None:
         args.report_out.parent.mkdir(parents=True, exist_ok=True)
+        report = _report_dict(result)
+        if bend_report is not None:
+            report["bend"] = {
+                "bended_edges": list(bend_report.bended_edges),
+                "skipped_edges": list(bend_report.skipped_edges),
+                "warnings": list(bend_report.warnings),
+            }
+        report["drc"] = _drc_dict(drc_report)
+        report["lvs"] = _lvs_dict(lvs_report)
         args.report_out.write_text(
-            json.dumps(_report_dict(result), indent=2),
+            json.dumps(report, indent=2),
             encoding="utf-8",
         )
         print(f"report -> {args.report_out}")
@@ -217,6 +352,8 @@ def main(argv: list[str] | None = None) -> int:
         return 3
     if not audit.locked_edges_within_tolerance:
         return 4
+    if drc_report is not None and drc_report.critical_count > 0:
+        return 5
     return 0
 
 

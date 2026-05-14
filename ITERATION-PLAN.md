@@ -363,6 +363,7 @@ v3.3 YAML
 
 ### M6 ─ 后处理 + LVS 软校验 + DRC + 输出（1 周）
 
+- **状态**：✅ 已实现（M6，2024-Q4）。`postproc/{bend,drc,lvs}.py` + `output/svg_full.py` 全部落地，PA 端到端 `pcb_solve --bend --drc-out --final-svg` 退出码 0、DRC critical=0（详见 `concepts/postproc-bend-drc-lvs.md`）。Gerber/GDS 仅 stub，字段映射见 `concepts/output-stub-mapping.md`，真实写入留 v7。
 - **目标**：达到 MVP 可用状态。
 - **交付物**：
   - `postproc/bend.py`：mitered_45 / curved / square / arc 几何渲染；未知 bend_style → fallback；

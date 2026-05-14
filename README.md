@@ -216,7 +216,7 @@ edges:
 
 ---
 
-## 8. 本地运行（M0 / M1 / M2 / M3 / M4 / M5）
+## 8. 本地运行（M0 / M1 / M2 / M3 / M4 / M5 / M6）
 
 推荐先创建虚拟环境（部分 Linux 发行版对系统 Python 启用了 PEP 668）：
 
@@ -310,6 +310,25 @@ pcb_solve rf_layout_simplified.yaml \
 
 # 一键验证 M5 质量门（含 verify_m4 全部步骤 + pcb_solve 三阶段烟测）
 ./scripts/verify_m5.sh
+
+# M6: MVP 收官 — 弯折几何 + DRC + 软 LVS + 最终 SVG（+ Gerber/GDS 占位）
+pcb_solve rf_layout_simplified.yaml \
+    --time-limit 10 --workers 8 --max-retries 5 --quiet \
+    --bend \
+    --drc-out  out/PA_Module_Simplified.m6.drc.json \
+    --lvs-out  out/PA_Module_Simplified.m6.lvs.json \
+    --final-svg out/PA_Module_Simplified.m6.final.svg \
+    --report-out out/PA_Module_Simplified.m6.json
+# 旁路开关:
+#   --no-bend   保留 M5 直线段输出（不渲染弯折几何）
+# 退出码: 0=ok / 3=求解失败 / 4=锁定长度超容 / 5=DRC critical>0
+# 预期 stdout（典型）:
+# bend: bended=0 skip=22 warn=0
+# drc: critical=0 warning=50
+# lvs: skipped (no logical_net assignment provided (PA single-layer default))
+
+# 一键验证 M6 质量门（含 verify_m5 全部步骤 + pcb_solve M6 + DRC critical 断言）
+./scripts/verify_m6.sh
 ```
 
 M2 产物 `out/PA_Module_Simplified.frontend.json` 的 schema 与字段含义见
@@ -324,6 +343,36 @@ M4 CP-SAT 模型（变量 / 约束 / NoOverlap 取舍 / CLI 退出码）详见
 M5 三阶段流水线（SA 能量函数 / `AddHint` 通道 / A* 网格 / orchestrator 重试策略）详见
 [`concepts/sa-and-astar.md`](./concepts/sa-and-astar.md)。
 
+M6 后处理（弯折几何 / DRC waiver 机制 / 软 LVS / 最终 SVG）详见
+[`concepts/postproc-bend-drc-lvs.md`](./concepts/postproc-bend-drc-lvs.md)；
+Gerber/GDS 字段映射（v7 留实现）详见
+[`concepts/output-stub-mapping.md`](./concepts/output-stub-mapping.md)。
+
+### 8.1 性能基线（PA 单层参考板）
+
+| 阶段 | 耗时（典型） | 备注 |
+|---|---|---|
+| frontend_compile | < 0.05 s | 22 边 / 9 UV |
+| solver_ir         | < 0.05 s | 含 universal_junction 模板展开 |
+| SA seed (200 iter) | ~0.05 s | UV 软种子 |
+| CP-SAT 主求解     | ~0.01 s | OPTIMAL，1 attempt |
+| A* flexible_path  | 0 s | PA 无 flexible 边 |
+| audit + bend + DRC + LVS | < 0.05 s | M6 后处理 |
+| **端到端 wall**   | **< 0.2 s** | DoD ≤ 30s ✅ |
+
+### 8.2 MVP 完成声明（M6）
+
+至 M6 合入主干，本仓库形成最小可发布闭环：
+
+- ✅ YAML → SolverIR → SA → CP-SAT → A* → audit → bend → DRC → LVS → 最终 SVG 一键贯通
+- ✅ PA 参考板：DRC critical=0、locked length 在 0.5% 容差内、端到端 < 0.2s
+- ✅ 完整测试套件 + `scripts/verify_m{1..6}.sh` 阶梯化质量门
+- ⚠️ **已知限制**（v7 任务）：
+  - CP-SAT NoOverlap 仅做轴对齐 BBox 近似，PA 上有 50 条 audit-waivered 重叠（详见 ITERATION-PLAN R4）
+  - Gerber / GDSII 仅 stub，调用即抛 `NotImplementedError`
+  - LVS 仅在输入提供 `logical_net_of_edge` 时生效（PA 默认 skip）
+  - 多层 / via stitching / 阻抗匹配 DRC 未支持
+
 ---
 
 ## 9. 6+1 期迭代计划速览
@@ -336,6 +385,6 @@ M5 三阶段流水线（SA 能量函数 / `AddHint` 通道 / A* 网格 / orchest
 | **M3** | 2   | UV + universal_junction | 端点滑动模型 + 几何模板（最高风险）|
 | **M4** | 2   | CP-SAT 主求解器 | 真实案例端到端 ≤ 10 s ✅ |
 | **M5** | 1.5 | SA hint + A* flexible-path + orchestrator | `pcb_solve` 一键 E2E + 5 次重试 ✅ |
-| **M6** | 1   | 后处理 + 输出 | bend / DRC / 软 LVS / SVG / Gerber stub |
+| **M6** | 1   | 后处理 + 输出 | bend / DRC / 软 LVS / 最终 SVG / Gerber·GDS stub ✅ MVP |
 
 详见 [`ITERATION-PLAN.md`](./ITERATION-PLAN.md) §4。
