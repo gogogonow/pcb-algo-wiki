@@ -429,6 +429,61 @@ v3.3 YAML
   - 实际跑下来 priority_score 最高的 GAP **不是**先验假设的 `GAP-CPSAT-NO-GEOM-FREEDOM`（R5 占比仅 9%，未触达 30% 阈值），而是 `GAP-PLACEMENT-DENSITY`（priority 4.00，30/66 对集中在 (8,20)–(16,40) 8×20mm 热点内）；
   - 推论：**M9 应优先做"布局分散性优化"（SA cost 增加 dispersion 项 / footprint margin / 板尺寸评估），而不是先动 CP-SAT 求解器**——这一改动是 M8 数据驱动决策的直接成果。
 
+### M9 ─ 八角走线路由器（Octilinear A\* Router）
+
+- **状态**：⚠️ 已实现基础框架，效果待优化（仅 5/22 边成功路由）。
+- **目标**：引入支持 45° 对角线方向的 A\* 路由器（八角走线），减少 Manhattan 布线的直角绕行，降低与现有走线的交叉。
+- **核心交付**：
+  - `src/solver/octilinear_router.py`：A\* 搜索核心，支持 8 个方向（0°/45°/90°/135° 及镜像）；pad halo 300µm 障碍标记；
+  - `src/postproc/route_orchestrator.py`：路由编排器，对 `rf_constrained` 边逐一调用 A\* 并写入 GeometryIR；
+  - `src/tools/pcb_solve.py`：新增 `--octilinear/--no-octilinear` CLI 参数；
+  - 相关单元测试（路由器基本路径、障碍绕行、八向扩展）。
+
+#### M9 效果复盘 — 根因分析（深度）
+
+**背景数据**：PA_Module_Simplified，22 条 RF 边，M9 仅路由 5/22（23%）；`R2_to_TP1` 实际长度=0.000mm（零长度）；`IC1_pin2_seg6` 误差=-98.7%（严重下冲）。
+
+**根因一：CP-SAT 布局不感知路由可达性**
+
+CP-SAT 将 8 个 RLC UV 器件全部堆积在 IC1 周围约 25mm×10mm 区域（布局分散性未优化），导致 22 条 RF 走线的端点高度聚集；A\* 栅格在该区域几乎无可通行单元，绝大多数路由请求直接失败。
+
+- **本质**：布局阶段没有"走线可达性"约束，CP-SAT 的 `NoOverlap` 仅阻止器件物理重叠，不阻止端点密集。
+- **修复方向（M9.1）**：SA 能量函数增加 `dispersion_term`（端点离散度惩罚）+ CP-SAT `footprint_margin` 参数扩大间距。
+
+**根因二：SA crossing_weight 过小（=100），布局优化无效**
+
+SA 总能量约 190k→146k（优化幅度 23%），但交叉惩罚项仅贡献 < 0.5% 的总能量，导致 SA 对走线交叉几乎无感，布局结果中大量端点仍相互挤压。
+
+- **修复方向（M9.1）**：将 `crossing_weight` 提升至 5,000–10,000，使交叉惩罚在 SA 能量中占有实质比重（目标 ≥ 10%）。
+
+**根因三：Pad halo 固定 300µm 堵塞 IC1 出口**
+
+IC1 管脚间距约 0.5mm；相邻管脚的 300µm halo 在栅格上互相重叠，在 IC1 周边形成连片障碍区，第 2–3 条路由通过后，后续路由的出口通道完全关闭。
+
+- **修复方向（M9.1）**：自适应 halo：`halo = max(line_width/2 + clearance, 100µm)`；或引入动态障碍更新策略（已路由边的 halo 比未路由边更宽）。
+
+**根因四：锁长目标超出 A\* 最短可达路径长度（严重过长）**
+
+部分边（如 `IC1_pin1_seg6`）的 `target_length=20mm`，而 A\* 实际最短路径 ≈ 7mm；蛇形走线模块最多能在 60% 中段插入单个 U 形弯，补偿能力 < 3mm，远不足以填补 13mm 缺口。更极端的 `IC1_pin2_seg6` target=~50mm 而最短路径 ≈ 0.5mm（端点几乎重合），误差 -98.7%。
+
+- **修复方向（M9.1）**：`route_orchestrator` 增加"过长预检"：若 `astar_shortest > target + tolerance`，标记为 `overshoot_skip` 并输出警告，不再尝试路由；蛇形模块升级为多段蛇形（当缺口 > 3mm 时自动增加折叠次数）。
+
+**根因五：UV 端点坐标提取 bug（零长度路由）**
+
+`R2_to_TP1` 路由长度=0.000mm，说明起点和终点坐标相同。根因是 `R2.PIN_1` 未写入 `terminals` 字典（只有固定端点 `TP1.PIN_1` 有坐标），UV 器件的管脚坐标在 CP-SAT 求解后没有被反写回 `terminals`，导致路由编排器取到 `(0, 0)` 或重复使用起点坐标。
+
+- **修复方向（M9.1）**：CP-SAT 求解后遍历所有 UV placement，将每个管脚的世界坐标写入 `terminals` 字典，供路由编排器和蛇形模块消费。
+
+#### M9.1 修复优先级列表
+
+| 优先级 | 修复项 | 预期影响 |
+|---|---|---|
+| P1 | UV 端点坐标提取修复（`terminals` 反写） | 消除零长度路由，直接提升可路由边数 |
+| P2 | SA `crossing_weight` 提升至 5,000–10,000 + `dispersion_term` | 驱动布局分散，减少端点密集，A\* 可通行区域扩大 |
+| P3 | pad halo 自适应：`max(line_width/2 + clearance, 100µm)` | IC1 周边出口通道恢复，多管脚器件可路由性提升 |
+| P4 | `route_orchestrator` 过长预检 + `overshoot_skip` 标记 | 消除无效路由尝试，减少误差报告噪声 |
+| P5 | 蛇形走线升级：多段蛇形（缺口 > 3mm 时自动增折） | 解决大缺口锁长边的蛇形补偿不足问题 |
+
 ---
 
 ## 5. 风险登记与决策记录
