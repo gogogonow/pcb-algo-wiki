@@ -1,9 +1,9 @@
-"""M6 hard DRC — checks min_width / min_clearance / via_density.
+"""M6/M7 hard DRC — checks min_width / min_clearance / via_density.
 
-Reuses the inflated-bbox pairwise scheme from ``solver.audit`` but elevates
-clearance violations to **critical** (M5 only emitted them as overlap
-warnings) so downstream gating can refuse to ship boards with hard rule
-breaches.
+M7 upgrade: Rule 2 (min_clearance) now uses true segment-segment minimum
+distance instead of inflated bbox overlap.  This eliminates the large number
+of false-positive warnings caused by diagonal segments whose bounding boxes
+overlap even when the actual traces are well-separated.
 
 PA single-layer YAML has no vias → ``via_density`` always passes; the field
 is kept for forward compatibility with multi-layer/v7 work.
@@ -11,12 +11,15 @@ is kept for forward compatibility with multi-layer/v7 work.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from schema.geometry_ir import GeometryIR
 from schema.solver_ir import SolverIR
 
-_BBOX_SCALE = 1000  # mm → µm to keep integer overlap math
+if TYPE_CHECKING:
+    from schema.v6_ir import Point
 
 
 @dataclass(frozen=True)
@@ -123,16 +126,15 @@ def run_drc(
                 if net_a is not None and net_a == net_b:
                     continue
             rb = geom.routes[eb]
-            ax_min, ay_min, ax_max, ay_max = _inflate_bbox(
-                ra.points, float(ra.width), clearance_default
+            # Required edge-to-edge gap = half_width_a + half_width_b + clearance.
+            required_gap = (
+                float(ra.width) / 2.0 + float(rb.width) / 2.0 + clearance_default
             )
-            bx_min, by_min, bx_max, by_max = _inflate_bbox(
-                rb.points, float(rb.width), clearance_default
-            )
-            ox = min(ax_max, bx_max) - max(ax_min, bx_min)
-            oy = min(ay_max, by_max) - max(ay_min, by_min)
-            if ox > 0 and oy > 0:
+            min_dist = _polyline_polyline_min_dist(ra.points, rb.points)
+            if min_dist < required_gap - 1e-6:
                 severity = "warning" if (ea, eb) in waivered else "critical"
+                gap_um = int(round(min_dist * 1000))
+                req_um = int(round(required_gap * 1000))
                 violations.append(
                     DrcViolation(
                         rule="min_clearance",
@@ -140,8 +142,8 @@ def run_drc(
                         edge_a=ea,
                         edge_b=eb,
                         detail=(
-                            f"bbox-overlap {min(ox, oy)}µm < "
-                            f"clearance={clearance_default:.4f}mm"
+                            f"seg-seg distance {gap_um}µm < required {req_um}µm "
+                            f"(trace_clearance={clearance_default:.4f}mm)"
                             + (" (audit-waivered)" if severity == "warning" else "")
                         ),
                     )
@@ -157,9 +159,83 @@ def run_drc(
     )
 
 
+def _seg_seg_min_dist(p1: "Point", p2: "Point", p3: "Point", p4: "Point") -> float:
+    """Return the minimum Euclidean distance between segment p1-p2 and segment p3-p4.
+
+    Uses parametric closest-approach math; clamps to [0,1] for each segment.
+    """
+    dx1 = p2.x - p1.x
+    dy1 = p2.y - p1.y
+    dx2 = p4.x - p3.x
+    dy2 = p4.y - p3.y
+    dx12 = p1.x - p3.x
+    dy12 = p1.y - p3.y
+
+    a = dx1 * dx1 + dy1 * dy1  # |seg1|^2
+    e = dx2 * dx2 + dy2 * dy2  # |seg2|^2
+    f = dx2 * dx12 + dy2 * dy12
+
+    # Degenerate: both points
+    if a < 1e-12 and e < 1e-12:
+        return math.hypot(p1.x - p3.x, p1.y - p3.y)
+    if a < 1e-12:
+        # seg1 is a point
+        t = max(0.0, min(1.0, f / e))
+        qx = p3.x + t * dx2
+        qy = p3.y + t * dy2
+        return math.hypot(p1.x - qx, p1.y - qy)
+
+    c = dx1 * dx12 + dy1 * dy12
+    if e < 1e-12:
+        # seg2 is a point
+        s = max(0.0, min(1.0, -c / a))
+        px = p1.x + s * dx1
+        py = p1.y + s * dy1
+        return math.hypot(px - p3.x, py - p3.y)
+
+    b = dx1 * dx2 + dy1 * dy2  # dot(d1, d2)
+    denom = a * e - b * b
+
+    if abs(denom) > 1e-12:
+        s = max(0.0, min(1.0, (b * f - c * e) / denom))
+    else:
+        s = 0.0  # parallel segments — use s=0
+
+    t = (b * s + f) / e
+    if t < 0.0:
+        t = 0.0
+        s = max(0.0, min(1.0, -c / a))
+    elif t > 1.0:
+        t = 1.0
+        s = max(0.0, min(1.0, (b - c) / a))
+
+    px = p1.x + s * dx1
+    py = p1.y + s * dy1
+    qx = p3.x + t * dx2
+    qy = p3.y + t * dy2
+    return math.hypot(px - qx, py - qy)
+
+
+def _polyline_polyline_min_dist(
+    pts_a: "tuple[Point, ...]", pts_b: "tuple[Point, ...]"
+) -> float:
+    """Return the minimum segment-segment distance between two polylines."""
+    min_d = float("inf")
+    for i in range(len(pts_a) - 1):
+        for j in range(len(pts_b) - 1):
+            d = _seg_seg_min_dist(pts_a[i], pts_a[i + 1], pts_b[j], pts_b[j + 1])
+            if d < min_d:
+                min_d = d
+                if min_d < 1e-9:
+                    return min_d  # early exit if touching
+    return min_d
+
+
 def _inflate_bbox(
     points: tuple, width: float, clearance: float
 ) -> tuple[int, int, int, int]:
+    """Legacy bbox helper — kept for unit-test backward compatibility only."""
+    _BBOX_SCALE = 1000
     xs = [float(p.x) for p in points]
     ys = [float(p.y) for p in points]
     half = width / 2.0 + clearance
@@ -171,4 +247,11 @@ def _inflate_bbox(
     )
 
 
-__all__ = ["DrcReport", "DrcViolation", "run_drc"]
+__all__ = [
+    "DrcReport",
+    "DrcViolation",
+    "_inflate_bbox",
+    "_polyline_polyline_min_dist",
+    "_seg_seg_min_dist",
+    "run_drc",
+]

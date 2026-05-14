@@ -23,7 +23,7 @@
     <line class="topology-edge" data-edge-id="IC1_pin2_seg4" data-kind="microstrip" x1="450.0" y1="408.0" x2="140.0" y2="452.0" />
     <line class="topology-edge" data-edge-id="IC1_pin2_seg5" data-kind="microstrip" x1="450.0" y1="624.0" x2="680.0" y2="218.0" />
     <line class="topology-edge" data-edge-id="IC1_pin2_seg6" data-kind="microstrip" x1="740.0" y1="218.0" x2="562.0" y2="580.0" />
-    <line class="topology-edge" data-edge-id="PWR_VDD_bus" data-kind="microstrip" x1="324.4" y1="302.0" x2="324.4" y2="358.0" />
+    <line class="topology-edge" data-edge-id="PWR_VDD_bus" data-kind="microstrip" x1="282.0" y1="480.0" x2="324.4" y2="358.0" />
     <line class="topology-edge" data-edge-id="R1_to_combiner" data-kind="microstrip" x1="200.0" y1="374.0" x2="450.0" y2="336.0" />
     <line class="topology-edge" data-edge-id="R2_to_TP1" data-kind="microstrip" x1="680.0" y1="374.0" x2="142.0" y2="80.0" />
     <line class="topology-edge" data-edge-id="R3_to_combiner" data-kind="microstrip" x1="200.0" y1="452.0" x2="450.0" y2="624.0" />

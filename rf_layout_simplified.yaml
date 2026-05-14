@@ -154,8 +154,8 @@ components:
     pin_nets:
       PIN_1: "RF_NET_1"
       PIN_2: "RF_NET_2"
-      PIN_3: "PWR_VDD"
-      PIN_4: "PWR_VDD"
+      PIN_3: "RF_INPUT"
+      PIN_4: "PWR_NET"
     properties:
       PartNumber: DEMO_IC
   C1:
@@ -650,18 +650,18 @@ edges:
     - IC1.PIN_3
     constraint:
       width: 3.6
-      target_length: 30.0
+      target_length: 80.0
     geometry:
       bend_style: mitered_45
   PWR_VDD_bus:
     type: microstrip
-    net: PWR_VDD
+    net: PWR_NET
     routing_class: rf_constrained
     connections:
-    - IC1.PIN_3
+    - TP2.PIN_1
     - IC1.PIN_4
     constraint:
       width: 3.6
-      target_length: 5.0
+      target_length: 25.5
     geometry:
       bend_style: mitered_45

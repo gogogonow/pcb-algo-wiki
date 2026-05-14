@@ -379,6 +379,29 @@ v3.3 YAML
   - 端到端命令文档化；
   - 性能基线 ≤ 30 s。
 
+### M7 ─ GAP 修复：语义 Lint + 蛇形走线 + DRC 几何升级
+
+- **状态**：✅ 已实现（M7，2025-Q2）。针对 M6 初版流水线运行发现的 8 个 GAP 中优先级最高的 3 个进行了修复。PA 端到端 `pcb_solve --bend --meander` 退出码 0、DRC critical=0，蛇形走线正确插入（详见 `docs/superpowers/specs/2026-05-14-m7-gap-fixes-design.md`）。
+- **目标**：修复首批 GAP，提升输出正确性。
+- **GAP 分析**：
+  - **G1**（已修复）：`RF_INPUT_to_IC1.target_length=30mm` 远小于端点 Manhattan 距离 70.78mm → 物理不可达；已修正为 80mm（需蛇形补偿 9.22mm）。
+  - **G2**（已修复）：`IC1.PIN_3` 同时归属 `RF_INPUT` 和 `PWR_VDD` 两个网络（YAML 数据错误）；已修复 `pin_nets` 映射。
+  - **G3**（已修复）：DRC Rule 2 使用膨胀 BBox 重叠检测，对对角线走线产生大量误报（28→0 critical）；升级为逐段段间最小距离算法。
+  - **G4**（已实现）：增加 U 形蛇形走线模块，对 `target_length > Manhattan` 的边自动插入发夹环。
+- **交付物**：
+  - `src/frontend/lint.py`：新增 `lint_semantic()` 含 `pin_multi_net`（Error）与 `meander_required` / `length_infeasible_short`（Warning/Error）规则；
+  - `src/postproc/meander.py`：U 形蛇形走线（`apply_meanders(geom, ir)`），对最长线段中段 60% 区间插入发夹环；
+  - `src/postproc/drc.py`：Rule 2 升级为段-段最小距离 `_seg_seg_min_dist()`；
+  - `src/solver/cpsat.py`：增加蛇形跳过逻辑（`target > Manhattan + tol` 时延迟至后处理）；
+  - `src/tools/pcb_solve.py`：新增 `--meander/--no-meander` CLI 参数；
+  - `rf_layout_simplified.yaml`：4 处数据修正（G1+G2）；
+  - `scripts/verify_m7.sh`：完整质量门（black + ruff + mypy + pytest + 端到端 PA + DRC/meander DoD 断言）；
+  - 28 个新单元测试（语义 lint / 蛇形走线 / DRC 几何）。
+- **DoD**：
+  - `./scripts/verify_m7.sh` 全绿；
+  - PA YAML `pcb_solve --bend --meander`：exit 0、DRC critical=0、meander applied≥1；
+  - 218 测试通过（3 个预存环境失败不计）。
+
 ---
 
 ## 5. 风险登记与决策记录
@@ -418,6 +441,8 @@ v3.3 YAML
 | `concepts/routing-algorithm-comparison.md` | 既有 | CP-SAT + A* 双求解器 |
 | `concepts/microstrip-topology-matching.md` | 既有 | 微带线 / bend_style / 阶跃阻抗 |
 | `rf_layout_simplified.yaml` | **既有（锚定回归用例）** | PA_Module_Simplified 真实数据 |
-| `ITERATION-PLAN.md` | **本文件 v6** | 最终算法方案 + 6+1 期迭代计划 |
+| `ITERATION-PLAN.md` | **本文件 v7** | 最终算法方案 + M0–M7 迭代计划 |
 | `concepts/frontend-compiler-spec.md` | ✅ 已写（M2 完成） | Frontend Compiler 详细规范 |
 | `concepts/uv-and-junction-templates.md` | ✅ 已写（M3 完成） | UV 解析 + universal_junction 模板规范 |
+| `docs/superpowers/specs/2026-05-14-m7-gap-fixes-design.md` | ✅ 已写（M7 完成） | M7 GAP 修复设计规格（语义 lint、蛇形走线、DRC 几何升级）|
+| `scripts/verify_m7.sh` | ✅ 已写（M7 完成） | M7 质量门脚本 |

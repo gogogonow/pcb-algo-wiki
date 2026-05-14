@@ -11,8 +11,8 @@ import yaml  # type: ignore[import-untyped]
 from schema.v33 import V33Layout
 
 from .expand_components import expand_components
-from .lint import lint_layout
-from .models import ExpandedPad, FrontendArtifact
+from .lint import lint_layout, lint_semantic
+from .models import ExpandedPad, FrontendArtifact, LintReport
 from .normalize_nodes import normalize_nodes
 from .obstacles import build_obstacles
 from .triage import triage_edges
@@ -39,6 +39,15 @@ def compile_layout(path: str | Path) -> FrontendArtifact:
 
     edges = triage_edges(layout)
     nodes = normalize_nodes(layout)
+
+    # M7: semantic cross-checks (pin_multi_net, length_infeasible_short, meander_required)
+    sem_errors, sem_warnings = lint_semantic(layout, fixed_terminals)
+    if sem_errors or sem_warnings:
+        lint_report = LintReport(
+            repairs=lint_report.repairs,
+            warnings=lint_report.warnings + tuple(sem_warnings),
+            errors=lint_report.errors + tuple(sem_errors),
+        )
 
     board = layout.global_constraints.board_outline
     board_dict: dict[str, Any] = {}
