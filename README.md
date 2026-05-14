@@ -8,11 +8,11 @@
 
 ## 0. 文档定位与版本
 
-本仓库目前包含 **设计文档 + M0/M1 基础实现**。它描述并提供：
+本仓库目前包含 **设计文档 + M0/M1/M2 基础实现**。它描述并提供：
 
 1. 上游 EDA 工具产出的 v3.3 YAML 数据规范；
 2. 后端布局布线引擎应当采用的算法方案；
-3. 已落地的 M0/M1 命令行工具与质量门；
+3. 已落地的 M0/M1/M2 命令行工具与质量门；
 4. 后续 6+1 期迭代开发计划。
 
 | 版本 | 状态 | 说明 |
@@ -179,12 +179,13 @@ edges:
 
 ```
 .
-├── README.md                                       # 本文档（v6 入口 + M0/M1 运行说明）
+├── README.md                                       # 本文档（v6 入口 + M0/M1/M2 运行说明）
 ├── ALGORITHM-OVERVIEW.md                           # v6 算法总览
 ├── ITERATION-PLAN.md                               # v6 算法方案 + 6+1 期开发计划
 ├── pyproject.toml                                  # 可编辑安装 + console scripts
 ├── rf_layout_simplified.yaml                       # 真实案例 (PA_Module_Simplified)
 ├── scripts/verify_m1.sh                            # M1 一键验证
+├── scripts/verify_m2.sh                            # M2 一键验证（含 frontend_compile 烟测）
 ├── tools/
 │   ├── topology_viz.py                             # 仓库根包装器
 │   └── schema_check.py                             # 仓库根包装器
@@ -209,7 +210,7 @@ edges:
 
 ---
 
-## 8. 本地运行（M0 / M1）
+## 8. 本地运行（M0 / M1 / M2）
 
 推荐先创建虚拟环境（部分 Linux 发行版对系统 Python 启用了 PEP 668）：
 
@@ -218,6 +219,9 @@ python3 -m venv .venv
 . .venv/bin/activate
 python3 -m pip install -e ".[dev]"
 ```
+
+> 注意：本仓库要求 Python ≥ 3.11。Ubuntu 22.04 默认仅有 3.10，可执行
+> `sudo apt-get install -y python3.11 python3.11-venv` 后再创建 `.venv`。
 
 若你的环境允许直接安装，也可直接执行：
 
@@ -244,7 +248,24 @@ schema_check rf_layout_simplified.yaml
 
 # 一键验证 M1 质量门
 ./scripts/verify_m1.sh
+
+# M2: 前端编译（Lint + expand + triage + normalize）
+frontend_compile rf_layout_simplified.yaml
+# 输出: out/PA_Module_Simplified.frontend.json
+# 预期 stdout:
+# fixed_pads: 9
+# uv_components: 9
+# obstacles: 7
+# edges: locked=15 free=7 flex=0 other=0
+# nodes: t_combiner_junction=2 t_junction=4 universal_junction=2
+# lint: repairs=3 warnings=2 errors=0
+
+# 一键验证 M2 质量门（含 verify_m1 全部步骤 + frontend_compile 烟测）
+./scripts/verify_m2.sh
 ```
+
+M2 产物 `out/PA_Module_Simplified.frontend.json` 的 schema 与字段含义见
+[`concepts/frontend-compiler-spec.md`](./concepts/frontend-compiler-spec.md)。
 
 ---
 
