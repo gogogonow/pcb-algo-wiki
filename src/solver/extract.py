@@ -106,8 +106,19 @@ def extract_geometry(
         # Route polylines: M4 emits straight (start, end) — bend modelling is M6.
         for edge_id, edge in ir.edges.items():
             ep_a, ep_b = cpsat.edge_endpoint_resolved.get(edge_id, edge.endpoints)
-            ax, ay = _resolve_xy(cpsat, ep_a, solver_get)
-            bx, by = _resolve_xy(cpsat, ep_b, solver_get)
+            try:
+                ax, ay = _resolve_xy(cpsat, ep_a, solver_get)
+                bx, by = _resolve_xy(cpsat, ep_b, solver_get)
+            except KeyError as exc:
+                import warnings
+
+                warnings.warn(
+                    f"extract_geometry: endpoint {exc} not in cpsat.endpoints for "
+                    f"edge {edge_id!r}; using (0,0) placeholder — UV resolution "
+                    "may be incomplete.",
+                    stacklevel=2,
+                )
+                ax = ay = bx = by = 0.0
             width_mm = (
                 float(edge.width)
                 if edge.width is not None

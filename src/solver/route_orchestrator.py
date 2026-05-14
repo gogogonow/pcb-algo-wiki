@@ -22,6 +22,8 @@ remains well-formed and downstream postproc / SVG render still work.
 
 from __future__ import annotations
 
+import logging
+import math
 from collections import defaultdict
 from dataclasses import dataclass, field
 
@@ -40,6 +42,8 @@ from .units import length_tolerance_um
 
 DEFAULT_MAX_ROUNDS = 10
 DEFAULT_MAX_RIPUP_PER_EDGE = 3
+
+_log = logging.getLogger(__name__)
 
 _PRIORITY = {
     RoutingClass.RF_CONSTRAINED_LOCKED: 0,
@@ -136,11 +140,22 @@ def _route_one(
     artifact: FrontendArtifact,
     routed: dict[str, RoutePolyline],
     cfg: RouteOrchestratorConfig,
-) -> OctilinearResult:
+) -> OctilinearResult | None:
     original = geom.routes[edge_id]
     edge = ir.edges[edge_id]
     start_pt = original.points[0]
     end_pt = original.points[-1]
+    if math.isclose(float(start_pt.x), float(end_pt.x), abs_tol=0.001) and math.isclose(
+        float(start_pt.y), float(end_pt.y), abs_tol=0.001
+    ):
+        _log.warning(
+            "route_orchestrator: edge %s has degenerate polyline (start==end at "
+            "(%.3f, %.3f) mm) — likely UV coordinate extraction bug; skipping.",
+            edge_id,
+            float(start_pt.x),
+            float(start_pt.y),
+        )
+        return None
     skip_terms = frozenset(edge.endpoints)
     skip_comps: set[str] = set()
     for term_key in edge.endpoints:
@@ -231,6 +246,9 @@ def route_all(
                 routed[edge_id] = geom.routes[edge_id]  # keep original polyline
                 continue
             res = _route_one(edge_id, geom, ir, artifact, routed, cfg)
+            if res is None:
+                queue.append(edge_id)
+                continue
             expansions_total += res.expansions
             if res.polyline is None:
                 blockers = _find_blockers(edge_id, geom, routed)

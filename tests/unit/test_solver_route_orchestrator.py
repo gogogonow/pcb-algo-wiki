@@ -299,3 +299,21 @@ def test_overshoot_edge_is_skipped() -> None:
     assert len(report.overshoot_edges) == 1, "edge should be overshoot_skipped"
     # Overshoot edge keeps its original two-point polyline in the output geometry.
     assert list(report.overshoot_edges)[0] in new_geom.routes
+
+
+def test_degenerate_start_eq_end_is_warned(caplog):
+    """When start==end in a route polyline, route_all should warn and skip routing."""
+    import logging
+    from solver.route_orchestrator import RouteOrchestratorConfig, route_all
+
+    geom, ir, artifact = _make_minimal_geom_and_ir(
+        edge_target_length_mm=10.0,
+        start_xy_mm=(5.0, 5.0),
+        end_xy_mm=(5.0, 5.0),  # degenerate: start == end
+    )
+    cfg = RouteOrchestratorConfig(max_rounds=1)
+    with caplog.at_level(logging.WARNING, logger="solver.route_orchestrator"):
+        new_geom, report = route_all(ir=ir, artifact=artifact, geom=geom, config=cfg)
+    assert any(
+        "degenerate" in rec.message.lower() for rec in caplog.records
+    ), "expected degenerate-start-eq-end warning in log"
