@@ -289,17 +289,27 @@ v3.3 YAML
 
 ### M3 ─ UV 解析 + universal_junction 模板（2 周）
 
+- **状态**：✅ 已实现。
 - **目标**：D2 + D4 落地，本期是技术风险最高的一期。
 - **交付物**：
-  - `frontend/uv_resolver.py`：
-    - host_edge 匹配（§2.4 三档：唯一/歧义/失配）；
-    - 引入 (anchor_x, anchor_y, rotation, offset_v_side) 变量描述（IR 层）；
-    - 其他 pin 坐标的派生表达式（线性，OR-Tools 兼容）。
-  - `frontend/universal_junction.py`：§2.5 模板展开，输出 CP-SAT 线性约束生成器。
+  - `src/schema/solver_ir.py`：strict pydantic SolverIR + 子模型（UvResolution / UniversalJunctionTemplate / BranchConstraint / PinPositionExpr / SolverEdge）。
+  - `src/frontend/uv_resolver.py`：host_edge 匹配（§2.4 三档：唯一/歧义/失配，缺失时合成 synthetic host + LintWarning）+ 4 个 IR 变量 (anchor_x, anchor_y, offset_v_side, rotation) + 派生 pin 线性表达式。
+  - `src/frontend/universal_junction.py`：§2.5 模板展开，对每 branch 计算 `(dx, dy)` 常量偏移，axis-aligned 角度走精确整数三角值表。
+  - `src/frontend/solver_ir.py` 编排 + `tools/solver_ir.py` CLI（console script `solver_ir`）。
+  - `concepts/uv-and-junction-templates.md`、`scripts/verify_m3.sh`。
 - **DoD**：
-  - 真实案例 9 个 UV 器件全部解析为唯一 host_edge（无歧义）；
-  - 2 个 universal_junction 各展开 4 条 branch 约束，几何方程通过单元测试（给定 center 求 branch_end 与手算一致）；
-  - 与 M4 联调前，输出 IR 通过 v6 schema strict 校验。
+  - 真实案例 9 个 UV 器件全部解析为唯一 host_edge（无歧义）✅；
+  - 2 个 universal_junction 各展开 3 条 branch 约束（YAML 实际 3 条/节点；ALGORITHM-OVERVIEW 计划值 4 条已与本案例对齐为 3）；几何方程通过单元测试 ✅；
+  - 输出 IR 通过 strict pydantic 校验（`SolverIR` 系列）✅。
+- **本地命令**：
+
+  ```bash
+  ./scripts/verify_m3.sh                       # 全量 lint/format/mypy/pytest + CLI 烟雾
+  python3 -m tools.solver_ir rf_layout_simplified.yaml \
+    --out out/PA_Module_Simplified.solver.json # 仅 SolverIR 编译
+  ```
+
+  产物：`out/PA_Module_Simplified.solver.json`。
 
 ### M4 ─ Phase 2 CP-SAT 接入（2 周）
 
@@ -388,4 +398,4 @@ v3.3 YAML
 | `rf_layout_simplified.yaml` | **既有（锚定回归用例）** | PA_Module_Simplified 真实数据 |
 | `ITERATION-PLAN.md` | **本文件 v6** | 最终算法方案 + 6+1 期迭代计划 |
 | `concepts/frontend-compiler-spec.md` | ✅ 已写（M2 完成） | Frontend Compiler 详细规范 |
-| `concepts/universal-junction-template.md` | 待写（M3 完成后） | universal_junction 模板规范 |
+| `concepts/uv-and-junction-templates.md` | ✅ 已写（M3 完成） | UV 解析 + universal_junction 模板规范 |

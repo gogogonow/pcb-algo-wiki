@@ -5,4 +5,7 @@ __pycache__/
 .pytest_cache/
 .test-artifacts/
 .venv-review/
+.venv/
+.mypy_cache/
+.ruff_cache/
 out/
