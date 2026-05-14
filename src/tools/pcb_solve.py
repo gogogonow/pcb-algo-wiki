@@ -26,7 +26,17 @@ import json
 import sys
 from pathlib import Path
 
-from postproc import apply_bends, apply_meanders, render_geometry_svg, run_drc, run_lvs
+from postproc import (
+    analyze_crossings,
+    apply_bends,
+    apply_meanders,
+    render_geometry_svg,
+    run_drc,
+    run_lvs,
+)
+from postproc.crossing_report_io import to_json as crossing_to_json
+from postproc.crossing_report_io import to_markdown as crossing_to_md
+from schema.v33 import load_v33_layout
 from solver import (
     DEFAULT_NUM_WORKERS,
     DEFAULT_TIME_LIMIT_S,
@@ -133,6 +143,31 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="Optional final SVG path (with footprint outlines + bend + DRC overlay).",
+    )
+    p.add_argument(
+        "--crossing-report-json",
+        type=Path,
+        default=None,
+        help="Optional M8 crossing diagnostics JSON path.",
+    )
+    p.add_argument(
+        "--crossing-report-md",
+        type=Path,
+        default=None,
+        help="Optional M8 crossing diagnostics Markdown path.",
+    )
+    p.add_argument(
+        "--show-pads",
+        dest="show_pads",
+        action="store_true",
+        default=True,
+        help="Render footprint pads in --final-svg (default ON, M8).",
+    )
+    p.add_argument(
+        "--no-show-pads",
+        dest="show_pads",
+        action="store_false",
+        help="Skip pad rendering in --final-svg.",
     )
     return p
 
@@ -345,13 +380,56 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.final_svg is not None:
         args.final_svg.parent.mkdir(parents=True, exist_ok=True)
+        layout_for_pads = None
+        if args.show_pads:
+            try:
+                layout_for_pads = load_v33_layout(args.layout)
+            except Exception as exc:  # pragma: no cover — best-effort
+                print(f"[warn] pad rendering disabled: {exc}", file=sys.stderr)
         args.final_svg.write_text(
             render_full_layout(
-                rendered_geom, bend=bend_report, drc=drc_report, lvs=lvs_report
+                rendered_geom,
+                bend=bend_report,
+                drc=drc_report,
+                lvs=lvs_report,
+                layout=layout_for_pads,
+                show_pads=args.show_pads,
             ),
             encoding="utf-8",
         )
         print(f"final-svg -> {args.final_svg}")
+
+    crossing_report = None
+    if args.crossing_report_json is not None or args.crossing_report_md is not None:
+        semantic_count = len(result.skipped_locked_edges) + sum(
+            1
+            for c in audit.length_checks
+            if c.error_fraction is not None and abs(c.error_fraction) >= 0.05
+        )
+        crossing_report = analyze_crossings(
+            geom,
+            result.ir,
+            audit.overlap_pairs,
+            semantic_issue_count=semantic_count,
+        )
+        print(
+            f"crossing: pairs={crossing_report.total_pairs} "
+            f"critical={crossing_report.critical_pair_count} "
+            f"gaps={len(crossing_report.gaps)} "
+            f"hotspots={len(crossing_report.region_hotspots)}"
+        )
+    if crossing_report is not None and args.crossing_report_json is not None:
+        args.crossing_report_json.parent.mkdir(parents=True, exist_ok=True)
+        args.crossing_report_json.write_text(
+            crossing_to_json(crossing_report), encoding="utf-8"
+        )
+        print(f"crossing-json -> {args.crossing_report_json}")
+    if crossing_report is not None and args.crossing_report_md is not None:
+        args.crossing_report_md.parent.mkdir(parents=True, exist_ok=True)
+        args.crossing_report_md.write_text(
+            crossing_to_md(crossing_report), encoding="utf-8"
+        )
+        print(f"crossing-md   -> {args.crossing_report_md}")
 
     if args.report_out is not None:
         args.report_out.parent.mkdir(parents=True, exist_ok=True)

@@ -402,6 +402,33 @@ v3.3 YAML
   - PA YAML `pcb_solve --bend --meander`：exit 0、DRC critical=0、meander applied≥1；
   - 218 测试通过（3 个预存环境失败不计）。
 
+### M8 ─ 走线交叉诊断 + Footprint Pad 渲染
+
+- **状态**：✅ 已实现（M8）。M7 全流程通过后，可视化输出仍能看到大量交叉、且无管脚显示；M8 在不动求解算法的前提下，新增"3 层诊断报告"（每对事实 → 根因聚合 → 算法 GAP）+ SVG pad 渲染，为 M9 算法改进提供数据驱动的优先级排序。
+- **目标**：
+  1. 把"看 SVG 数交叉"升级为"读 JSON/MD 报告找 GAP"；
+  2. SVG 增加 footprint pad 多边形，让端口/封装与走线的关系一目了然；
+  3. 报告自动给出优先级最高的算法 GAP 候选，驱动 M9 排期。
+- **核心交付**：
+  - `src/postproc/crossing_analysis.py`：3 层诊断核心
+    - **Layer 1 PairFact**：每对重叠的几何事实（µm 重叠、夹角、两段长度、共享端点等）；
+    - **Layer 2 根因聚合**：5 类规则 R1–R5 分类（容差噪声 / 同网汇聚 / 异网穿越 / 长穿短 / 锁长冲突）+ 5×5 grid 热点；
+    - **Layer 3 算法 GAP 检测**：6 条独立规则（CPSAT-NO-GEOM-FREEDOM / SA-DENSITY / DATA-OVERSPEC / TOPOLOGY-NO-LAYER / POSTPROC-MEANDER-EXPAND / PLACEMENT-DENSITY），priority_score = 消除对数 / 复杂度权重；
+  - `src/postproc/crossing_report_io.py`：JSON + Markdown 序列化（中文根因翻译）；
+  - `src/output/svg_full.py`：`_render_pads()` 基于 `geom.placements` 解析后位置 + `V33Layout` footprint pad 几何，绘制 22 个 PA pad 多边形（rect 精确，其它 shape bbox 兜底）；
+  - `src/tools/crossing_report.py` + `tools/crossing_report.py`：独立 CLI（`--json` / `--md` 输出报告，不需要重跑完整 pcb_solve）；
+  - `src/tools/pcb_solve.py`：新增 `--crossing-report-json` / `--crossing-report-md` / `--show-pads/--no-show-pads` 三个 flag；
+  - `scripts/verify_m8.sh`：质量门（断言 critical=0、≥1 GAP、≥20 个 pad polygon、四个 MD 章节齐全）；
+  - 35 个新单元测试（21 分类 / GAP / 热点，7 SVG pad，7 CLI/serialiser）。
+- **DoD**：
+  - `./scripts/verify_m8.sh` 全绿；
+  - PA YAML `pcb_solve --bend --meander --show-pads --crossing-report-md ...`：exit 0、DRC critical=0、SVG pad polygon ≥ 20、报告 ≥ 1 GAP；
+  - 244 测试通过（3 个预存环境失败不计）。
+- **关键发现 / M9 排期输入**：
+  - PA 数据上的 5 类根因分布：R4 长穿短 38% / R3 异网穿越 30% / R2 同网汇聚 23% / R5 锁长冲突 9%；R1 容差噪声 0%；
+  - 实际跑下来 priority_score 最高的 GAP **不是**先验假设的 `GAP-CPSAT-NO-GEOM-FREEDOM`（R5 占比仅 9%，未触达 30% 阈值），而是 `GAP-PLACEMENT-DENSITY`（priority 4.00，30/66 对集中在 (8,20)–(16,40) 8×20mm 热点内）；
+  - 推论：**M9 应优先做"布局分散性优化"（SA cost 增加 dispersion 项 / footprint margin / 板尺寸评估），而不是先动 CP-SAT 求解器**——这一改动是 M8 数据驱动决策的直接成果。
+
 ---
 
 ## 5. 风险登记与决策记录
@@ -446,3 +473,5 @@ v3.3 YAML
 | `concepts/uv-and-junction-templates.md` | ✅ 已写（M3 完成） | UV 解析 + universal_junction 模板规范 |
 | `docs/superpowers/specs/2026-05-14-m7-gap-fixes-design.md` | ✅ 已写（M7 完成） | M7 GAP 修复设计规格（语义 lint、蛇形走线、DRC 几何升级）|
 | `scripts/verify_m7.sh` | ✅ 已写（M7 完成） | M7 质量门脚本 |
+| `docs/superpowers/specs/2026-05-14-m8-crossing-diagnostics-design.md` | ✅ 已写（M8 完成） | M8 走线交叉诊断 + Pad 渲染设计规格 |
+| `scripts/verify_m8.sh` | ✅ 已写（M8 完成） | M8 质量门脚本 |
