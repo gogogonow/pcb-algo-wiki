@@ -15,6 +15,8 @@ from pathlib import Path
 
 from frontend.compile import compile_layout
 from frontend.models import FrontendArtifact
+from frontend.solver_ir import compile_solver_ir
+from postproc.meander import apply_meanders
 from schema.geometry_ir import (
     ComponentPlacement,
     GeometryIR,
@@ -26,7 +28,7 @@ from solver.units import MM_TO_UM
 
 from .channel_grid import GridConfig
 from .node_planner import NodePlan, plan_node_positions
-from .skeleton_router import SkeletonReport, route_skeleton
+from .skeleton_router import RouteOutcome, SkeletonReport, route_skeleton
 from .uv_adhesion import UvAdhesionReport, adhere_uv_components
 
 
@@ -95,6 +97,9 @@ def solve_layout_v2(
         rip_up_rounds=options.rip_up_rounds,
     )
     phase_a_wall = time.perf_counter() - t0
+
+    # ---- Length compensation: M7 hairpin meander on under-length routes ---
+    skeleton = _apply_length_compensation(yaml_path, artifact, skeleton)
 
     # ---- Phase B: UV adhesion ---------------------------------------------
     t1 = time.perf_counter()
@@ -224,6 +229,107 @@ def _routing_class(name: str) -> RoutingClass:
         return RoutingClass(name)
     except ValueError:
         return RoutingClass.RF_CONSTRAINED_FREE
+
+
+def _apply_length_compensation(
+    yaml_path: str | Path,
+    artifact: FrontendArtifact,
+    skeleton: SkeletonReport,
+) -> SkeletonReport:
+    """Apply M7 hairpin meander to skeleton routes whose length is below target.
+
+    Builds a minimal GeometryIR from the current skeleton, calls
+    :func:`postproc.meander.apply_meanders`, then writes any modified
+    polylines back into a fresh :class:`SkeletonReport`. Routes that already
+    meet target or have no target are passed through unchanged.
+    """
+
+    under_length = [
+        rid
+        for rid, r in skeleton.routes.items()
+        if r.success and r.target_mm is not None and r.length_mm < r.target_mm - 0.15
+    ]
+    if not under_length:
+        return skeleton
+
+    try:
+        ir = compile_solver_ir(yaml_path)
+    except Exception:
+        return skeleton
+
+    routes_ir: dict[str, RoutePolyline] = {}
+    for edge_id, r in skeleton.routes.items():
+        if not r.success or len(r.polyline_um) < 2:
+            continue
+        edge = artifact.edges.get(edge_id)
+        if edge is None:
+            continue
+        pts = tuple(Point(x=x / MM_TO_UM, y=y / MM_TO_UM) for x, y in r.polyline_um)
+        routes_ir[edge_id] = RoutePolyline(
+            edge_id=edge_id,
+            routing_class=_routing_class(edge.routing_class),
+            width=float(edge.width or 0.5),
+            points=pts,
+        )
+
+    board_w = float(artifact.board.get("width", 40.0))
+    board_h = float(artifact.board.get("height", 100.0))
+    geom = GeometryIR(
+        project=artifact.project_name or "unknown",
+        board=Board(width=board_w, height=board_h, origin=Point(x=0.0, y=0.0)),
+        placements={},
+        routes=routes_ir,
+        nodes={},
+        solve_status="FEASIBLE",
+        solve_wall_seconds=0.0,
+        objective_value=None,
+    )
+
+    try:
+        new_geom, _report = apply_meanders(geom, ir)
+    except Exception:
+        return skeleton
+
+    new_routes: dict[str, RouteOutcome] = {}
+    for edge_id, outcome in skeleton.routes.items():
+        new_route = new_geom.routes.get(edge_id)
+        if (
+            new_route is None
+            or new_route.points == routes_ir.get(edge_id, new_route).points
+        ):
+            new_routes[edge_id] = outcome
+            continue
+        new_poly = tuple(
+            (int(round(p.x * MM_TO_UM)), int(round(p.y * MM_TO_UM)))
+            for p in new_route.points
+        )
+        new_len = _polyline_length_mm(new_poly)
+        new_routes[edge_id] = RouteOutcome(
+            edge_id=outcome.edge_id,
+            polyline_um=new_poly,
+            length_mm=new_len,
+            target_mm=outcome.target_mm,
+            success=outcome.success,
+            rip_up_round=outcome.rip_up_round,
+            failure_reason=outcome.failure_reason,
+        )
+
+    return SkeletonReport(
+        routes=new_routes,
+        final_endpoint_um=dict(skeleton.final_endpoint_um),
+        rip_up_rounds=skeleton.rip_up_rounds,
+    )
+
+
+def _polyline_length_mm(points: tuple[tuple[int, int], ...]) -> float:
+    if len(points) < 2:
+        return 0.0
+    total_um = 0.0
+    for (ax, ay), (bx, by) in zip(points, points[1:]):
+        dx = bx - ax
+        dy = by - ay
+        total_um += (dx * dx + dy * dy) ** 0.5
+    return total_um / MM_TO_UM
 
 
 def _seed_um(xy: tuple[float, float] | None) -> tuple[int, int] | None:
