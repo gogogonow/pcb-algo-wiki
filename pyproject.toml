@@ -18,6 +18,7 @@ dependencies = [
 schema_check = "tools.schema_check:main"
 topology_viz = "tools.topology_viz:main"
 frontend_compile = "tools.frontend_compile:main"
+solver_ir = "tools.solver_ir:main"
 
 [project.optional-dependencies]
 dev = [
@@ -47,6 +48,7 @@ src = ["src", "tests", "tools"]
 "tools/schema_check.py" = ["E402"]
 "tools/topology_viz.py" = ["E402"]
 "tools/frontend_compile.py" = ["E402"]
+"tools/solver_ir.py" = ["E402"]
 
 [tool.mypy]
 python_version = "3.11"

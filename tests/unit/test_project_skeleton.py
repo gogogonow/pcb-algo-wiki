@@ -36,13 +36,24 @@ def test_schema_package_exports_schema_models() -> None:
 
     assert module.__all__ == [
         "Board",
+        "BranchConstraint",
+        "ExpressionTerm",
+        "PinPositionExpr",
+        "PinPositionKind",
         "Point",
+        "RotationDomain",
         "RoutingClass",
+        "SignedVKind",
+        "SolverEdge",
+        "SolverIR",
+        "UniversalJunctionTemplate",
+        "UvHostMatch",
+        "UvResolution",
+        "V33Layout",
         "V6Edge",
         "V6IR",
         "V6Node",
         "V6Terminal",
-        "V33Layout",
         "load_v33_layout",
     ]
 

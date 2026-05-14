@@ -8,11 +8,11 @@
 
 ## 0. 文档定位与版本
 
-本仓库目前包含 **设计文档 + M0/M1/M2 基础实现**。它描述并提供：
+本仓库目前包含 **设计文档 + M0/M1/M2/M3 基础实现**。它描述并提供：
 
 1. 上游 EDA 工具产出的 v3.3 YAML 数据规范；
 2. 后端布局布线引擎应当采用的算法方案；
-3. 已落地的 M0/M1/M2 命令行工具与质量门；
+3. 已落地的 M0/M1/M2/M3 命令行工具与质量门；
 4. 后续 6+1 期迭代开发计划。
 
 | 版本 | 状态 | 说明 |
@@ -179,13 +179,14 @@ edges:
 
 ```
 .
-├── README.md                                       # 本文档（v6 入口 + M0/M1/M2 运行说明）
+├── README.md                                       # 本文档（v6 入口 + M0/M1/M2/M3 运行说明）
 ├── ALGORITHM-OVERVIEW.md                           # v6 算法总览
 ├── ITERATION-PLAN.md                               # v6 算法方案 + 6+1 期开发计划
 ├── pyproject.toml                                  # 可编辑安装 + console scripts
 ├── rf_layout_simplified.yaml                       # 真实案例 (PA_Module_Simplified)
 ├── scripts/verify_m1.sh                            # M1 一键验证
 ├── scripts/verify_m2.sh                            # M2 一键验证（含 frontend_compile 烟测）
+├── scripts/verify_m3.sh                            # M3 一键验证（含 solver_ir 烟测）
 ├── tools/
 │   ├── topology_viz.py                             # 仓库根包装器
 │   └── schema_check.py                             # 仓库根包装器
@@ -210,7 +211,7 @@ edges:
 
 ---
 
-## 8. 本地运行（M0 / M1 / M2）
+## 8. 本地运行（M0 / M1 / M2 / M3）
 
 推荐先创建虚拟环境（部分 Linux 发行版对系统 Python 启用了 PEP 668）：
 
@@ -262,10 +263,28 @@ frontend_compile rf_layout_simplified.yaml
 
 # 一键验证 M2 质量门（含 verify_m1 全部步骤 + frontend_compile 烟测）
 ./scripts/verify_m2.sh
+
+# M3: SolverIR 编译（UV 解析 + universal_junction 模板）
+solver_ir rf_layout_simplified.yaml
+# 输出: out/PA_Module_Simplified.solver.json
+# 预期 stdout:
+# project: PA_Module_Simplified
+# board: 40.0 x 100.0
+# clearance: 0.15
+# terminals: 10
+# edges: 22
+# uv_resolutions: unique=9 ambiguous=0 missing=0
+# junction_templates: nodes=2 branches=6
+
+# 一键验证 M3 质量门（含 verify_m2 全部步骤 + solver_ir 烟测）
+./scripts/verify_m3.sh
 ```
 
 M2 产物 `out/PA_Module_Simplified.frontend.json` 的 schema 与字段含义见
 [`concepts/frontend-compiler-spec.md`](./concepts/frontend-compiler-spec.md)。
+
+M3 产物 `out/PA_Module_Simplified.solver.json` 的 schema、UV/junction 表达式语义见
+[`concepts/uv-and-junction-templates.md`](./concepts/uv-and-junction-templates.md)。
 
 ---
 
