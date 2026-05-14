@@ -353,6 +353,15 @@ python -m tools.crossing_report rf_layout_simplified.yaml \
 
 # 一键验证 M8 质量门（断言：critical=0、≥1 GAP、≥20 个 pad polygon、244 测试通过）
 ./scripts/verify_m8.sh
+
+# ---- M10：骨架优先三阶段路由器（v7-alt，已成为 pcb_solve 默认实现）----
+# Phase A 微带骨架（八角栅格 A* + 蛇形长度补偿 + Rip-up）→
+# Phase B UV 就近吸附 → Phase C flexible_path A*。
+pcb_solve rf_layout_simplified.yaml --out-dir out/
+# 等价显式入口（保留 v6 旧实现用 pcb_solve_v1）：
+#   pcb_solve_v2 rf_layout_simplified.yaml --out-dir out/
+# 每阶段持久化：out/{project}.{phaseA,phaseB,phaseC,final}.{svg,json}
+# 设计说明详见 concepts/skeleton-first-router.md
 ```
 
 M2 产物 `out/PA_Module_Simplified.frontend.json` 的 schema 与字段含义见
