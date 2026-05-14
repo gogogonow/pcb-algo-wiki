@@ -481,6 +481,65 @@ v3.3 YAML
      22 条 RF 边的 octilinear 布线不够）。
 - **设计文档**：`docs/superpowers/specs/2026-05-14-m9-octilinear-routing-design.md`。
 - **概念文档**：`concepts/octilinear-router.md`。
+- **M9 效果复盘 — 根因分析（深度）**：
+
+  **测量数据**（`out/PA_Module_Simplified.m9.json`）：
+  - routed = 5 / 22，unrouted = 17（大部分 ripup_count 已打满 MAX=3 仍失败）
+  - crossing critical = 52（与 M8 持平，路由器对此毫无贡献）
+  - IC1_pin1_seg6 target=20mm actual=7.24mm（err=−63%）
+  - IC1_pin2_seg6 target=20mm actual=0.26mm（err=−99%）
+  - R2_to_TP1 target=10mm actual=0mm（端点重合）
+
+  **根因 #1（最根本）：CP-SAT 不感知走线可路由性**
+
+  CP-SAT 的目标函数最小化组合器件间距、限制 UV 组件到 IC1 附近，完全没有
+  "这些端点之间有没有可行的物理路径"的意识。结果 8 个 RLC 全部被压缩到 IC1
+  周围约 25mm×10mm 的区域内，22 条 RF 走线的起终点全部聚集在这片区域；
+  octilinear 路由器在此区域面对的有效可通行格比例极低。
+
+  **根因 #2：SA `crossing_weight=100` 对 placement 能量影响不足**
+
+  SA 能量在典型运行中从约 190,000 降到约 146,000（降幅 < 25%）；
+  crossing_weight × penalty 对总能量的贡献不到 0.5%，根本无法驱动 placement
+  分散。SA 需要至少 `crossing_weight ≥ 5,000`（相当于 1 条 crossing ≈
+  一个温度步长的扰动），才能让 placement 在能量上"感觉到"走线密度。
+
+  **根因 #3：障碍图 pad halo 300µm 堵死 IC1 附近通路**
+
+  IC1 有 4 个 pin，pin 间距约 0.5mm；每个 pad halo 300µm 半径内为障碍，
+  相邻 pin 的 halo 几乎完全覆盖 IC1 外围所有格点（grid step=100µm）。
+  每条新布线不但要躲自身起终点 halo，还要绕过已布线段的 BBox（含
+  clearance 膨胀 0.3mm）。第 2–5 条布线后可用格已接近饱和，A* 找不到路。
+
+  **根因 #4：部分锁长边目标长度在端点 Manhattan 距离以下（物理不可达）**
+
+  IC1_pin1_seg6 的端点 C2.PIN_2 ↔ TP4.PIN_1；CP-SAT 为最小化间距把 C2
+  放在 IC1 附近（约 (19,49)mm），而 TP4 固定在 (35,0)mm，两点 Manhattan
+  距离 ≈ 16mm。但 octilinear A* 最短折线已达 ~7mm（被 obstacles 绕路）。
+  target=20mm → A* 路径长于 target，进入 "overshoot" 分支，锁长段无法满足。
+  meander 也没有办法将 7mm 的折线补到 20mm（需要往里填 13mm 的曲折，
+  而 M8 meander 仅支持原点一侧的简单 S 弯）。
+
+  **根因 #5：R2_to_TP1 actual=0（UV 端点坐标提取缺陷）**
+
+  R2 是 UV 组件；其 PIN_1 坐标由 CP-SAT 决定，但提取进 solver.json 的
+  `terminals` 字典时 key `R2.PIN_1` 不存在（只有固定端点才在 terminals 里）。
+  audit.py 处理 polyline_length 时拿到空坐标，2 点折线退化为零距离，
+  报告 actual=0。这是一个坐标提取的 bug，和路由算法无关。
+
+  **M9.1 优先修复清单（按影响降序）**：
+  1. **SA crossing_weight 调高到 5,000–10,000**；同时在 SA 中加 dispersion 项
+     （最小化最近邻距离之和的倒数），强迫 UV 组件分散。
+  2. **R2.PIN_1 等 UV 端点坐标提取**：解析 CP-SAT 输出时把所有 UV 组件 pad
+     的 solved 坐标写入 terminals dict，确保 audit + router 都能获得正确坐标。
+  3. **pad halo 自适应化**：halo = max(line_width/2 + clearance, 100µm)，
+     而非固定 300µm；对细线 (0.2mm) 放行路径。
+  4. **目标长度可达性预检**：在 route_orchestrator 里，若
+     `astar_path_length > target + tolerance`，标记该边为 `overshoot_skip`
+     并继续（不做 ripup 浪费），同时告警要求 M9.1 调整 placement。
+  5. **meander 延伸策略升级**：当路径长 < target 且差距 > 3mm 时，插入多段
+     S 弯（serpentine meander）而不是单次折叠；或考虑 A* 的长度引导模式
+     （偏好更长路径而不是最短路径）。
 
 ---
 

@@ -67,6 +67,14 @@ def render_geometry_svg(
                     f'cy="{y(float(pad.point.y)):.2f}" r="2" '
                     f'fill="{_FOOTPRINT_STROKE}"/>'
                 )
+            # Label for testpoints / single-pad components.
+            anchor_x = x(xs[0])
+            anchor_y = y(ys[0])
+            parts.append(
+                f'<text x="{anchor_x + 3:.2f}" y="{anchor_y - 3:.2f}" '
+                f'font-family="sans-serif" font-size="8" '
+                f'fill="{_FOOTPRINT_STROKE}">{escape(placement.component)}</text>'
+            )
             continue
         bx = min(xs)
         by = min(ys)
@@ -93,6 +101,20 @@ def render_geometry_svg(
             f'<polyline points="{pts}" fill="none" stroke="{stroke}" '
             f'stroke-width="{width_px:.2f}" stroke-linecap="round" '
             'stroke-linejoin="round" opacity="0.78"/>'
+        )
+        # Endpoint terminal markers (small hollow circles).
+        for pt in (route.points[0], route.points[-1]):
+            parts.append(
+                f'<circle cx="{x(float(pt.x)):.2f}" cy="{y(float(pt.y)):.2f}" '
+                f'r="2.8" fill="none" stroke="{stroke}" stroke-width="1.0" opacity="0.9"/>'
+            )
+        # Edge-id label at route midpoint.
+        n = len(route.points)
+        mid = route.points[n // 2]
+        parts.append(
+            f'<text x="{x(float(mid.x)) + 3:.2f}" y="{y(float(mid.y)) - 3:.2f}" '
+            'font-family="sans-serif" font-size="6" fill="#0f172a" opacity="0.85">'
+            f"{escape(route.edge_id)}</text>"
         )
 
     # Junction / free node markers.

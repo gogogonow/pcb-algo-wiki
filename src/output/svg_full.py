@@ -59,17 +59,18 @@ def _render_pads(
     *,
     x_fn,  # type: ignore[no-untyped-def]
     y_fn,  # type: ignore[no-untyped-def]
-) -> list[str]:
-    """Render every pad of every placed component as an SVG polygon.
+) -> tuple[list[str], int]:
+    """Render every pad of every placed component as an SVG polygon + pin label.
 
-    Pad **positions** come from :class:`GeometryIR.placements` (the
-    post-solve resolved coordinates), while pad **dimensions** and the
-    per-pin local orientation come from the original v3.3 layout's
-    footprint library. Components present only in the layout (with no
-    GeometryIR placement, e.g. data-only entries) are skipped.
+    Returns a tuple of (svg_elements, polygon_count). Pad **positions** come
+    from :class:`GeometryIR.placements` (the post-solve resolved coordinates),
+    while pad **dimensions** and the per-pin local orientation come from the
+    original v3.3 layout's footprint library. Components present only in the
+    layout (with no GeometryIR placement, e.g. data-only entries) are skipped.
     """
 
     parts: list[str] = []
+    polygon_count = 0
     components = layout.components
     footprints = layout.footprints
 
@@ -110,7 +111,15 @@ def _render_pads(
                 f'stroke="{_PAD_STROKE}" stroke-width="0.6" opacity="0.85">'
                 f"<title>{label}</title></polygon>"
             )
-    return parts
+            polygon_count += 1
+            # Visible pin-number label centred on the pad.
+            parts.append(
+                f'<text x="{x_fn(wx):.2f}" y="{y_fn(wy) + 3:.2f}" '
+                f'font-family="sans-serif" font-size="5.5" text-anchor="middle" '
+                f'fill="{_PAD_STROKE}" font-weight="bold">'
+                f"{escape(pad_placement.pin)}</text>"
+            )
+    return parts, polygon_count
 
 
 def render_full_layout(
@@ -137,8 +146,9 @@ def render_full_layout(
         return (bh - (v + margin_mm)) * px_per_mm
 
     pad_parts: list[str] = []
+    pad_polygon_count = 0
     if layout is not None and show_pads:
-        pad_parts = _render_pads(layout, geom, x_fn=_x, y_fn=_y)
+        pad_parts, pad_polygon_count = _render_pads(layout, geom, x_fn=_x, y_fn=_y)
 
     if drc is not None and drc.violations:
         for v in drc.violations:
@@ -179,7 +189,7 @@ def render_full_layout(
         else:
             footer_parts.append(f"LVS mismatch={len(lvs.mismatches)}")
     if pad_parts:
-        footer_parts.append(f"pads={len(pad_parts)}")
+        footer_parts.append(f"pads={pad_polygon_count}")
 
     if pad_parts or overlays or footer_parts:
         # Inject pads BEFORE routes/overlays/footer so routes draw on top.
