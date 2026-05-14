@@ -48,6 +48,10 @@ class OctilinearConfig:
     max_expansions: int = 1_000_000
     endpoint_halo_cells: int = 2
     """Cell-radius around start/goal that is forced free (lets the trace exit pads)."""
+    dir_lock_cells: int = 3
+    """Grid cells from start/goal within which direction deviations are penalised."""
+    dir_lock_penalty: float = 10.0
+    """Extra cost added when moving against the locked direction within dir_lock_cells."""
 
 
 @dataclass(frozen=True)
@@ -80,6 +84,25 @@ def _turn_extra_cost(
     if angle <= 46.0:
         return cfg.turn_cost_45
     return cfg.turn_cost_90
+
+
+def _dir_lock_extra(
+    cell: tuple[int, int],
+    direction: tuple[int, int],
+    lock_dir: tuple[int, int] | None,
+    ref_cell: tuple[int, int],
+    lock_cells: int,
+    penalty: float,
+) -> float:
+    if lock_dir is None or lock_cells <= 0:
+        return 0.0
+    dist = max(abs(cell[0] - ref_cell[0]), abs(cell[1] - ref_cell[1]))
+    if dist > lock_cells:
+        return 0.0
+    dot = direction[0] * lock_dir[0] + direction[1] * lock_dir[1]
+    if dot < 0:
+        return penalty
+    return 0.0
 
 
 def _heuristic_octilinear(cell: tuple[int, int], goal: tuple[int, int]) -> float:
@@ -138,6 +161,8 @@ def search(
     config: OctilinearConfig | None = None,
     target_length_mm: float | None = None,
     length_tol_um: int = 0,
+    start_dir: tuple[int, int] | None = None,
+    end_dir: tuple[int, int] | None = None,
 ) -> OctilinearResult:
     """Run octilinear A* from ``start`` to ``goal`` and return the polyline.
 
@@ -217,7 +242,21 @@ def search(
                 continue
             if nb in obstacles.obstacles and nb not in free:
                 continue
-            cost = _step_cost(d) + _turn_extra_cost(prev_dir, d, cfg)
+            cost = (
+                _step_cost(d)
+                + _turn_extra_cost(prev_dir, d, cfg)
+                + _dir_lock_extra(
+                    nb, d, start_dir, start, cfg.dir_lock_cells, cfg.dir_lock_penalty
+                )
+                + _dir_lock_extra(
+                    nb,
+                    d,
+                    (-end_dir[0], -end_dir[1]) if end_dir is not None else None,
+                    goal,
+                    cfg.dir_lock_cells,
+                    cfg.dir_lock_penalty,
+                )
+            )
             tentative = g_score[current] + cost
             if tentative < g_score.get(nb, float("inf")):
                 g_score[nb] = tentative

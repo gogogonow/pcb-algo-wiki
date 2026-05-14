@@ -155,3 +155,32 @@ def test_octilinear_no_overshoot_when_path_below_target() -> None:
     assert res.length_overshoot is False
     # Sanity: shortest polyline length ≈ 24 mm, comfortably below target.
     assert res.length_um < math.ceil(40_000)
+
+
+def test_start_dir_respected() -> None:
+    """A* respects start_dir for the first few steps."""
+    from solver.obstacle_map import GridBounds, ObstacleMap
+
+    bounds = GridBounds(0, 0, 200, 200)
+    omap = ObstacleMap(bounds=bounds, obstacles=set(), step_um=1_000)
+
+    # Start (5,5) → goal (15,5) in mm, start_dir=(+1,0)=right
+    result = search(
+        start_xy_mm=(5.0, 5.0),
+        goal_xy_mm=(15.0, 5.0),
+        obstacles=omap,
+        config=OctilinearConfig(dir_lock_cells=3, dir_lock_penalty=10.0),
+        start_dir=(1, 0),
+        end_dir=(-1, 0),
+    )
+    assert result.polyline is not None
+    pts = result.polyline
+    assert pts[1].x > pts[0].x, "first step must move in +X direction"
+    assert abs(pts[1].y - pts[0].y) < 0.01, "first step must be horizontal"
+
+
+def test_dir_lock_cells_defaults_to_nonnegative() -> None:
+    """OctilinearConfig must have dir_lock_cells with a non-negative default."""
+    cfg = OctilinearConfig()
+    assert hasattr(cfg, "dir_lock_cells")
+    assert cfg.dir_lock_cells >= 0

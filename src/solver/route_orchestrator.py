@@ -133,6 +133,36 @@ def _is_overshoot(
     return bool(manhattan > target_length_mm + tol_mm)
 
 
+def _pin_exit_dir(
+    endpoint_name: str,
+    artifact: FrontendArtifact,
+) -> tuple[int, int] | None:
+    """Derive octilinear exit direction from ExpandedPad.orientation.
+
+    orientation is the absolute angle (degrees) of the trace-exit direction from
+    the pin, measured CCW from +X (right=0°, up=90°, left=180°, down=-90°).
+    We snap to the nearest of the 8 octilinear directions.
+    """
+    parts = endpoint_name.split(".")
+    if len(parts) != 2:
+        return None
+    comp_name, pin_name = parts
+    comp = artifact.components.get(comp_name) or artifact.uv_components.get(comp_name)
+    if comp is None:
+        return None
+    for pad in comp.pads:
+        if pad.pin == pin_name and pad.orientation is not None:
+            angle_rad = math.radians(float(pad.orientation))
+            dx = round(math.cos(angle_rad))
+            dy = round(math.sin(angle_rad))
+            dx = max(-1, min(1, dx))
+            dy = max(-1, min(1, dy))
+            if dx == 0 and dy == 0:
+                return None
+            return (dx, dy)
+    return None
+
+
 def _route_one(
     edge_id: str,
     geom: GeometryIR,
@@ -194,6 +224,8 @@ def _route_one(
         config=cfg.octilinear,
         target_length_mm=target_length_mm,
         length_tol_um=tol_um,
+        start_dir=_pin_exit_dir(edge.endpoints[0], artifact),
+        end_dir=_pin_exit_dir(edge.endpoints[1], artifact),
     )
 
 
