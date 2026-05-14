@@ -329,6 +329,30 @@ pcb_solve rf_layout_simplified.yaml \
 
 # 一键验证 M6 质量门（含 verify_m5 全部步骤 + pcb_solve M6 + DRC critical 断言）
 ./scripts/verify_m6.sh
+
+# ---- M7：语义 lint + 蛇形走线 + DRC 几何升级 ----
+pcb_solve rf_layout_simplified.yaml \
+    --time-limit 10 --workers 8 --bend --meander \
+    --drc-out out/PA_Module_Simplified.m7.drc.json \
+    --final-svg out/PA_Module_Simplified.m7.final.svg
+./scripts/verify_m7.sh
+
+# ---- M8：走线交叉诊断 + Footprint Pad 渲染 ----
+# 端到端跑求解 + 输出 3 层交叉诊断（JSON + Markdown），并在 SVG 中渲染 pad 多边形
+pcb_solve rf_layout_simplified.yaml \
+    --time-limit 10 --workers 8 --bend --meander --show-pads \
+    --crossing-report-json out/PA_Module_Simplified.crossing.json \
+    --crossing-report-md   out/PA_Module_Simplified.crossing.md \
+    --final-svg out/PA_Module_Simplified.m8.final.svg
+
+# 仅生成交叉诊断报告（独立 CLI，不需要其它输出）
+python -m tools.crossing_report rf_layout_simplified.yaml \
+    --time-limit 5 --workers 4 \
+    --json out/crossing.json --md out/crossing.md
+# 报告含 4 节：根因分布 / 区域热点 / 算法 GAP（按 priority 排序）/ 重叠对明细
+
+# 一键验证 M8 质量门（断言：critical=0、≥1 GAP、≥20 个 pad polygon、244 测试通过）
+./scripts/verify_m8.sh
 ```
 
 M2 产物 `out/PA_Module_Simplified.frontend.json` 的 schema 与字段含义见
