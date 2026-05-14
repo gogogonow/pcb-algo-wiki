@@ -8,6 +8,7 @@ from frontend.compile import compile_layout
 from frontend.solver_ir import compile_solver_ir
 from solver.sa_floating import (
     SaConfig,
+    SaPlacement,
     compute_energy,
     hints_from_sa_result,
     run_sa,
@@ -74,3 +75,31 @@ def test_compute_energy_decreases_when_anchor_moves_inside_board() -> None:
     e_in = compute_energy(ir, artifact, res.placements, cfg)
     e_out = compute_energy(ir, artifact, far, cfg)
     assert e_out > e_in
+
+
+def test_dispersion_energy_increases_when_close() -> None:
+    """Dispersion energy is higher when anchors cluster than when spread out."""
+    from solver.sa_floating import _dispersion_penalty
+
+    ir, _ = _load_pa()
+    close = {
+        "a": SaPlacement(anchor_x_um=0, anchor_y_um=0, side=1),
+        "b": SaPlacement(anchor_x_um=500, anchor_y_um=0, side=1),  # 0.5 mm apart
+    }
+    far = {
+        "a": SaPlacement(anchor_x_um=0, anchor_y_um=0, side=1),
+        "b": SaPlacement(anchor_x_um=100_000, anchor_y_um=0, side=1),  # 100 mm apart
+    }
+    e_close = _dispersion_penalty(ir, close, weight=1.0)
+    e_far = _dispersion_penalty(ir, far, weight=1.0)
+    assert e_close > e_far, f"expected {e_close} > {e_far}"
+
+
+def test_crossing_weight_default_is_5000() -> None:
+    assert SaConfig().crossing_weight == 5_000.0
+
+
+def test_dispersion_weight_default_exists() -> None:
+    cfg = SaConfig()
+    assert hasattr(cfg, "dispersion_weight")
+    assert cfg.dispersion_weight > 0.0

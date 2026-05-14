@@ -62,8 +62,10 @@ class SaConfig:
     boundary_weight: float = 100.0
     attract_weight: float = 1.0
     repulse_weight: float = 50.0
-    crossing_weight: float = 100.0
+    crossing_weight: float = 5_000.0
     """M9: penalises pairs of UV-host edges whose endpoint-line segments collide."""
+    dispersion_weight: float = 200.0
+    """Penalises UV anchors crowding together; pushes them to spread across the board."""
     seed: int | None = 0xC0FFEE
 
 
@@ -322,13 +324,39 @@ def _crossing_penalty(
     return weight * energy / 1_000_000.0
 
 
+def _dispersion_penalty(
+    ir: SolverIR,
+    placements: dict[str, SaPlacement],
+    weight: float,
+) -> float:
+    """Penalise UV anchors crowding together.
+
+    Energy = weight × Σ_{i<j} 1 / (d_ij² + ε) where d_ij is the Euclidean
+    distance between anchors i and j (in mm).  The ε = 0.01 mm² floor prevents
+    division-by-zero when anchors coincide.
+    """
+    if weight <= 0.0:
+        return 0.0
+    del ir  # not used; signature matches other penalty functions
+    items = list(placements.values())
+    energy = 0.0
+    eps_mm2 = 0.01
+    for i in range(len(items)):
+        for j in range(i + 1, len(items)):
+            dx = (items[i].anchor_x_um - items[j].anchor_x_um) / 1_000.0
+            dy = (items[i].anchor_y_um - items[j].anchor_y_um) / 1_000.0
+            d2 = dx * dx + dy * dy + eps_mm2
+            energy += 1.0 / d2
+    return weight * energy
+
+
 def compute_energy(
     ir: SolverIR,
     artifact: FrontendArtifact,
     placements: dict[str, SaPlacement],
     cfg: SaConfig,
 ) -> float:
-    """Sum of HPWL + boundary + attract + repulse + crossing over all UVs."""
+    """Sum of HPWL + boundary + attract + repulse + crossing + dispersion over all UVs."""
     e = 0.0
     for comp_id, p in placements.items():
         e += _hpwl_for_uv(ir, artifact, placements, comp_id)
@@ -338,6 +366,7 @@ def compute_energy(
         )
     e += _pairwise_repulse(ir, placements, cfg.repulse_weight)
     e += _crossing_penalty(ir, artifact, placements, cfg.crossing_weight)
+    e += _dispersion_penalty(ir, placements, cfg.dispersion_weight)
     return e
 
 
