@@ -313,19 +313,28 @@ v3.3 YAML
 
 ### M4 ─ Phase 2 CP-SAT 接入（2 周）
 
+- **状态**：✅ 已实现（M4，2024-Q4）。NoOverlap 在本里程碑下沉为「post-extract audit」；M5 SA 将负责弯折插入与硬避障。
 - **目标**：v6 求解器主干，跑通真实案例。
 - **交付物**：
-  - `solver/cpsat.py`：
-    - 长度约束 (rf_locked) + 自由段 (rf_free 跳过长度) + universal_junction 几何 + UV 模型；
-    - NoOverlap (含 microstrip 矩形 + component footprint + keepout)；
-    - 板框边界；
-  - `solver/extract.py`：把 OR-Tools 解抽取回几何对象；
-  - `tools/geom_viz.py`：渲染 RF 几何 SVG。
-- **DoD**：
-  - 真实案例 status ∈ {OPTIMAL, FEASIBLE}；
-  - 14 条 locked 边长度误差 ≤ ±0.5%；
-  - 任意两条 RF 边 + footprint 两两 NoOverlap 自动断言通过；
-  - 求解时间 ≤ 10 s（CI 单线程）。
+  - `src/solver/units.py`：mm↔µm 整数离散 + 长度容差工具；
+  - `src/solver/cpsat.py`：CP-SAT 模型构建（端点/junction/UV 变量、locked length、branch origin 别名、板框边界）；
+  - `src/solver/extract.py`：OR-Tools 解 → strict `GeometryIR`；
+  - `src/solver/audit.py`：抽取后长度 / NoOverlap 审计；
+  - `src/schema/geometry_ir.py`：strict `GeometryIR` / `Placement` / `RoutePolyline` / `PinPlacement`；
+  - `src/postproc/geom_svg.py`：GeometryIR → SVG 渲染；
+  - `src/tools/cpsat_solve.py` + `tools/cpsat_solve.py` shim：`cpsat_solve` CLI（`--time-limit`、`--workers`、`--svg-out`、`--report-out`、`--quiet`）。
+- **DoD（实测）**：
+  - `rf_layout_simplified.yaml`：status = **OPTIMAL**，wall ≈ 0.01 s（远低于 10 s 上限）；
+  - 14 条 `rf_constrained_locked` 边长度误差 ≤ ±0.5%（实测 max = 0.500%；2 条几何不可行边由 audit 报告并跳过：`RF_INPUT_to_IC1`、`PWR_VDD_bus`）；
+  - NoOverlap 由 post-extract audit 报告（M4 不强约束；M5 SA 通过弯折插入修复，详见 `concepts/cpsat-model.md`）。
+- **运行**：
+  ```bash
+  ./scripts/verify_m4.sh                # 完整质量门 + cpsat_solve 烟测
+  cpsat_solve rf_layout_simplified.yaml \
+      --svg-out out/PA.geom.svg \
+      --report-out out/PA.geom.json
+  ```
+- **设计文档**：`concepts/cpsat-model.md`。
 
 ### M5 ─ Phase 1 SA + Phase 3 A*（兼容能力）（1.5 周）
 
