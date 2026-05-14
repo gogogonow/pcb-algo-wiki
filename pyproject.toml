@@ -22,6 +22,7 @@ frontend_compile = "tools.frontend_compile:main"
 solver_ir = "tools.solver_ir:main"
 cpsat_solve = "tools.cpsat_solve:main"
 pcb_solve = "tools.pcb_solve:main"
+pcb_solve_v1 = "tools.pcb_solve:main"
 pcb_solve_v2 = "tools.pcb_solve_v2:main"
 
 [project.optional-dependencies]

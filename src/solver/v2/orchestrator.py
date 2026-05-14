@@ -24,6 +24,7 @@ from schema.geometry_ir import (
     RoutePolyline,
 )
 from schema.v6_ir import Board, Point, RoutingClass
+from solver.astar_flex import AstarConfig, route_flexible_paths
 from solver.units import MM_TO_UM
 
 from .channel_grid import GridConfig
@@ -58,6 +59,7 @@ class PhaseBResult:
 class PhaseCResult:
     routed_flex_edges: list[str]
     wall_seconds: float
+    failed_flex_edges: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -111,25 +113,122 @@ def solve_layout_v2(
     )
     phase_b_wall = time.perf_counter() - t1
 
-    # ---- Phase C: flex (skipped for PA) -----------------------------------
+    # ---- Phase C: A* on flexible_path edges (no-op when none) ------------
     t2 = time.perf_counter()
-    phase_c_wall = time.perf_counter() - t2
-
-    # ---- Assemble GeometryIR ----------------------------------------------
     geometry = _assemble_geometry(
         artifact=artifact,
         plan=plan,
         skeleton=skeleton,
         adhesion=adhesion,
-        wall_seconds=phase_a_wall + phase_b_wall + phase_c_wall,
+        wall_seconds=phase_a_wall + phase_b_wall,
     )
+    flex_routed: list[str] = []
+    flex_failed: list[str] = []
+    try:
+        ir = compile_solver_ir(yaml_path)
+    except Exception:
+        ir = None
+    if ir is not None:
+        geometry, flex_routed, flex_failed = _route_flex_edges(
+            ir=ir, artifact=artifact, plan=plan, geometry=geometry
+        )
+    phase_c_wall = time.perf_counter() - t2
+
+    # Refresh wall in the final GeometryIR.
+    geometry = _with_wall_seconds(geometry, phase_a_wall + phase_b_wall + phase_c_wall)
 
     return OrchestratorV2Result(
         artifact=artifact,
         phase_a=PhaseAResult(skeleton=skeleton, plan=plan, wall_seconds=phase_a_wall),
         phase_b=PhaseBResult(adhesion=adhesion, wall_seconds=phase_b_wall),
-        phase_c=PhaseCResult(routed_flex_edges=[], wall_seconds=phase_c_wall),
+        phase_c=PhaseCResult(
+            routed_flex_edges=flex_routed,
+            failed_flex_edges=flex_failed,
+            wall_seconds=phase_c_wall,
+        ),
         geometry=geometry,
+    )
+
+
+def _route_flex_edges(
+    *,
+    ir: object,
+    artifact: FrontendArtifact,
+    plan: NodePlan,
+    geometry: GeometryIR,
+    grid_step_um: int = 500,
+) -> tuple[GeometryIR, list[str], list[str]]:
+    """Route every ``flexible_path`` edge using ``solver.astar_flex``.
+
+    Skeleton router only handles ``rf_constrained*`` edges, so flex edges are
+    absent from ``geometry.routes``. We seed each flex edge with a direct
+    two-point polyline using node_planner endpoints, then delegate to
+    :func:`solver.astar_flex.route_flexible_paths` which replaces the seeds
+    with obstacle-aware A* polylines.
+    """
+
+    flex_edge_ids = [
+        eid
+        for eid, edge in artifact.edges.items()
+        if edge.routing_class == "flexible_path"
+    ]
+    if not flex_edge_ids:
+        return geometry, [], []
+
+    seeded_routes = dict(geometry.routes)
+    for eid in flex_edge_ids:
+        edge = artifact.edges[eid]
+        if len(edge.connections) < 2:
+            continue
+        a, b = edge.connections[0], edge.connections[-1]
+        a_xy = plan.endpoint_xy.get(a)
+        b_xy = plan.endpoint_xy.get(b)
+        if a_xy is None or b_xy is None:
+            continue
+        seeded_routes[eid] = RoutePolyline(
+            edge_id=eid,
+            routing_class=RoutingClass.FLEXIBLE_PATH,
+            width=float(edge.width or 0.2),
+            points=(
+                Point(x=a_xy[0], y=a_xy[1]),
+                Point(x=b_xy[0], y=b_xy[1]),
+            ),
+        )
+
+    seeded_geom = GeometryIR(
+        project=geometry.project,
+        board=geometry.board,
+        placements=geometry.placements,
+        routes=seeded_routes,
+        nodes=geometry.nodes,
+        solve_status=geometry.solve_status,
+        solve_wall_seconds=geometry.solve_wall_seconds,
+        objective_value=geometry.objective_value,
+    )
+
+    try:
+        new_geom, report = route_flexible_paths(
+            ir=ir,  # type: ignore[arg-type]
+            artifact=artifact,
+            geom=seeded_geom,
+            config=AstarConfig(grid_step_um=grid_step_um),
+        )
+    except Exception:
+        return seeded_geom, [], list(flex_edge_ids)
+
+    return new_geom, list(report.routed_edges), list(report.failed_edges)
+
+
+def _with_wall_seconds(geometry: GeometryIR, wall_seconds: float) -> GeometryIR:
+    return GeometryIR(
+        project=geometry.project,
+        board=geometry.board,
+        placements=geometry.placements,
+        routes=geometry.routes,
+        nodes=geometry.nodes,
+        solve_status=geometry.solve_status,
+        solve_wall_seconds=float(max(wall_seconds, 0.0)),
+        objective_value=geometry.objective_value,
     )
 
 
@@ -371,6 +470,7 @@ def phase_summary(result: OrchestratorV2Result) -> dict[str, object]:
         },
         "phase_c": {
             "flex_routed": len(result.phase_c.routed_flex_edges),
+            "flex_failed": list(result.phase_c.failed_flex_edges),
             "wall_s": result.phase_c.wall_seconds,
         },
         "wall_total_s": result.geometry.solve_wall_seconds,

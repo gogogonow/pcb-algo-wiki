@@ -23,6 +23,10 @@ def test_skeleton_first_runs_end_to_end() -> None:
     # placements for every UV component.
     assert summary["phase_a"]["routed"] >= 1
     assert summary["phase_b"]["uv_placed"] == summary["phase_b"]["uv_total"]
+    # Phase C must be present in the summary (no flex edges in PA → 0 routed).
+    assert summary["phase_c"]["flex_routed"] == 0
+    assert summary["phase_c"]["flex_failed"] == []
+    assert "wall_s" in summary["phase_c"]
     # Status must be one of the schema-allowed values.
     assert result.geometry.solve_status in {
         "OPTIMAL",
