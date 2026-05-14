@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from frontend.models import FrontendArtifact
 from schema.geometry_ir import GeometryIR, RoutePolyline
 from schema.solver_ir import RoutingClass, SolverIR
+from schema.v6_ir import Point
 
 from .astar_octilinear import OctilinearConfig, OctilinearResult, search
 from .obstacle_map import (
@@ -105,6 +106,27 @@ def _find_blockers(
             continue
         blockers.append(other_id)
     return blockers
+
+
+def _is_overshoot(
+    start_pt: Point,
+    end_pt: Point,
+    target_length_mm: float | None,
+    tol_fraction: float = 0.1,
+) -> bool:
+    """True if Manhattan(start, end) exceeds target beyond tolerance.
+
+    We use Manhattan distance as a conservative lower bound on any achievable
+    polyline length (actual routing can only be longer).  If Manhattan > target
+    + tol, the edge is physically unreachable: routing and rip-up are pointless.
+    """
+    if target_length_mm is None:
+        return False
+    manhattan = abs(float(start_pt.x) - float(end_pt.x)) + abs(
+        float(start_pt.y) - float(end_pt.y)
+    )
+    tol_mm = target_length_mm * tol_fraction
+    return bool(manhattan > target_length_mm + tol_mm)
 
 
 def _route_one(
@@ -189,6 +211,24 @@ def route_all(
         queue = []
         for edge_id in pending:
             if edge_id in routed:
+                continue
+            # Overshoot precheck: skip locked edges whose endpoints are farther
+            # apart than the target length.  Manhattan distance is a lower bound
+            # on achievable polyline length; if it already exceeds target+tol,
+            # routing and rip-up are pointless.
+            edge_obj = ir.edges.get(edge_id)
+            t_mm: float | None = None
+            if (
+                edge_obj is not None
+                and getattr(edge_obj, "routing_class", None)
+                is RoutingClass.RF_CONSTRAINED_LOCKED
+                and edge_obj.target_length is not None
+            ):
+                t_mm = float(edge_obj.target_length)
+            original_pts = geom.routes[edge_id].points
+            if _is_overshoot(original_pts[0], original_pts[-1], t_mm):
+                overshoot.append(edge_id)
+                routed[edge_id] = geom.routes[edge_id]  # keep original polyline
                 continue
             res = _route_one(edge_id, geom, ir, artifact, routed, cfg)
             expansions_total += res.expansions

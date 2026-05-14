@@ -193,3 +193,109 @@ def test_route_all_records_unrouted_when_walled_off() -> None:
     # straight segment is the path it occupies); the bottom edge crossing
     # the wall must end up unrouted because rip-up is disabled here.
     assert "edge_top" in report.unrouted or "edge_bot" in report.unrouted
+
+
+def _make_minimal_geom_and_ir(
+    *,
+    edge_target_length_mm: float,
+    start_xy_mm: tuple[float, float],
+    end_xy_mm: tuple[float, float],
+) -> tuple[GeometryIR, SolverIR, FrontendArtifact]:
+    """Single RF_CONSTRAINED_LOCKED edge for overshoot tests."""
+    sx, sy = start_xy_mm
+    ex, ey = end_xy_mm
+    ir = SolverIR(
+        project="overshoot_test",
+        board=Board(origin=Point(x=0.0, y=0.0), width=100.0, height=100.0),
+        clearance=0.15,
+        terminals={
+            "S": V6Terminal(point=Point(x=sx, y=sy)),
+            "E": V6Terminal(point=Point(x=ex, y=ey)),
+        },
+        edges={
+            "over_edge": SolverEdge(
+                endpoints=("S", "E"),
+                routing_class=RoutingClass.RF_CONSTRAINED_LOCKED,
+                target_length=edge_target_length_mm,
+                width=0.3,
+            ),
+        },
+    )
+    geom = GeometryIR(
+        project=ir.project,
+        board=ir.board,
+        solve_status="OPTIMAL",
+        solve_wall_seconds=0.0,
+        routes={
+            "over_edge": RoutePolyline(
+                edge_id="over_edge",
+                routing_class=RoutingClass.RF_CONSTRAINED_LOCKED,
+                width=0.3,
+                points=(Point(x=sx, y=sy), Point(x=ex, y=ey)),
+            ),
+        },
+    )
+    pad_s = ExpandedPad(
+        component="S", pin="P", abs_x=sx, abs_y=sy, orientation=0.0, kind="fixed"
+    )
+    pad_e = ExpandedPad(
+        component="E", pin="P", abs_x=ex, abs_y=ey, orientation=0.0, kind="fixed"
+    )
+    artifact = FrontendArtifact(
+        project_name="overshoot_test",
+        board={"width": 100.0, "height": 100.0},
+        lint_report=LintReport(),
+        components={
+            "S": ComponentExpansion(
+                name="S",
+                footprint_ref=None,
+                placement_kind="fixed",
+                pads=(pad_s,),
+                bbox=BBox(
+                    min_x=sx - 0.5, min_y=sy - 0.5, max_x=sx + 0.5, max_y=sy + 0.5
+                ),
+            ),
+            "E": ComponentExpansion(
+                name="E",
+                footprint_ref=None,
+                placement_kind="fixed",
+                pads=(pad_e,),
+                bbox=BBox(
+                    min_x=ex - 0.5, min_y=ey - 0.5, max_x=ex + 0.5, max_y=ey + 0.5
+                ),
+            ),
+        },
+        fixed_terminals={"S": pad_s, "E": pad_e},
+    )
+    return geom, ir, artifact
+
+
+def test_is_overshoot_detects_unreachable() -> None:
+    """Unit-test _is_overshoot in isolation."""
+    from solver.route_orchestrator import _is_overshoot
+
+    start = Point(x=0.0, y=0.0)
+    end = Point(x=30.0, y=0.0)
+
+    # Manhattan=30mm > target=1mm + 10% tol → overshoot
+    assert _is_overshoot(start, end, target_length_mm=1.0)
+    # Manhattan=30mm <= target=50mm + 10% tol → reachable
+    assert not _is_overshoot(start, end, target_length_mm=50.0)
+    # No target → never overshoot
+    assert not _is_overshoot(start, end, target_length_mm=None)
+    # Manhattan==target → not overshoot (only strictly-greater triggers)
+    assert not _is_overshoot(start, end, target_length_mm=30.0)
+
+
+def test_overshoot_edge_is_skipped() -> None:
+    """Edge whose endpoints are farther apart than target_length → overshoot_skip."""
+    geom, ir, artifact = _make_minimal_geom_and_ir(
+        edge_target_length_mm=1.0,
+        start_xy_mm=(0.0, 0.0),
+        end_xy_mm=(30.0, 0.0),  # Manhattan=30mm >> 1mm target
+    )
+    cfg = RouteOrchestratorConfig(max_rounds=1)
+    new_geom, report = route_all(ir=ir, artifact=artifact, geom=geom, config=cfg)
+    assert len(report.overshoot_edges) == 1, "edge should be overshoot_skipped"
+    # Overshoot edge keeps its original two-point polyline in the output geometry.
+    assert list(report.overshoot_edges)[0] in new_geom.routes
