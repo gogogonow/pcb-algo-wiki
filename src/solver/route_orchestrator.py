@@ -128,12 +128,16 @@ def _route_one(
         comp_name = term_key.split(".")[0]
         if comp_name in artifact.components or comp_name in artifact.uv_components:
             skip_comps.add(comp_name)
+    edge_width_mm = (
+        float(edge.width) if (edge is not None and edge.width is not None) else None
+    )
     obstacles = build_obstacle_map(
         ir=ir,
         artifact=artifact,
         routed=routed,
         step_um=cfg.grid_step_um,
         pad_halo_um=cfg.pad_halo_um,
+        active_edge_width_mm=edge_width_mm,
         skip_terminals=skip_terms,
         skip_components=frozenset(skip_comps),
     )

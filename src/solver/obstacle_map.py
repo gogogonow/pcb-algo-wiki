@@ -43,6 +43,15 @@ DEFAULT_PAD_HALO_UM = 300
 """Half-side of the square obstacle around each fixed pad (µm)."""
 
 
+def adaptive_pad_halo_um(*, edge_width_mm: float, clearance_mm: float) -> int:
+    """Per-edge pad halo derived from physical geometry.
+
+    Halo = half the trace width + routing clearance, floored at 100 µm so the
+    grid always has at least one passable cell adjacent to the pad.
+    """
+    return max(100, int((edge_width_mm / 2.0 + clearance_mm) * 1_000))
+
+
 @dataclass(frozen=True)
 class GridBounds:
     ix_min: int
@@ -106,6 +115,7 @@ def build_obstacle_map(
     routed: dict[str, RoutePolyline] | None = None,
     step_um: int = DEFAULT_GRID_STEP_UM,
     pad_halo_um: int = DEFAULT_PAD_HALO_UM,
+    active_edge_width_mm: float | None = None,
     extra_inflate_um: int = 0,
     skip_terminals: frozenset[str] = frozenset(),
     skip_components: frozenset[str] = frozenset(),
@@ -129,6 +139,16 @@ def build_obstacle_map(
     obstacles: set[tuple[int, int]] = set()
     clearance_um = mm_to_um(float(ir.clearance))
 
+    # Use adaptive halo when caller provides edge width.
+    clearance_mm = float(ir.clearance)
+    effective_halo = (
+        adaptive_pad_halo_um(
+            edge_width_mm=active_edge_width_mm, clearance_mm=clearance_mm
+        )
+        if active_edge_width_mm is not None
+        else pad_halo_um
+    )
+
     # 1. Component bboxes.
     for source in (artifact.components, artifact.uv_components):
         for comp_name, comp in source.items():
@@ -148,7 +168,7 @@ def build_obstacle_map(
             continue
         cx = mm_to_um(float(term.point.x))
         cy = mm_to_um(float(term.point.y))
-        halo = pad_halo_um + extra_inflate_um
+        halo = effective_halo + extra_inflate_um
         for cell in _cells_in_bbox(cx - halo, cy - halo, cx + halo, cy + halo, step_um):
             obstacles.add(cell)
 
@@ -180,5 +200,6 @@ __all__ = [
     "DEFAULT_PAD_HALO_UM",
     "GridBounds",
     "ObstacleMap",
+    "adaptive_pad_halo_um",
     "build_obstacle_map",
 ]

@@ -121,3 +121,14 @@ def test_obstacle_map_grid_bounds_contains_only_in_board() -> None:
     assert om.bounds.contains((40, 40))  # 20mm/0.5mm step = 40
     assert not om.bounds.contains((-1, 0))
     assert not om.bounds.contains((41, 0))
+
+
+def test_adaptive_halo_narrow_trace_is_smaller():
+    """Narrow trace (0.2 mm) should yield a smaller halo than the 300 µm default."""
+    from solver.obstacle_map import adaptive_pad_halo_um
+
+    narrow = adaptive_pad_halo_um(edge_width_mm=0.2, clearance_mm=0.13)
+    wide = adaptive_pad_halo_um(edge_width_mm=3.9, clearance_mm=0.13)
+    assert narrow < 300, f"narrow halo {narrow} should be < 300µm"
+    assert wide > narrow, f"wide halo {wide} should exceed narrow halo"
+    assert narrow >= 100, f"halo floor must be ≥ 100µm, got {narrow}"
