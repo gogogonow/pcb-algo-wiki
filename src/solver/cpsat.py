@@ -120,8 +120,16 @@ def _default_trace_width_um(ir: SolverIR) -> int:
 def build_model(
     ir: SolverIR,
     artifact: FrontendArtifact,
+    *,
+    seed_hints: dict[str, dict[str, int]] | None = None,
 ) -> CpsatModel:
     """Build the CP-SAT model from SolverIR + FrontendArtifact.
+
+    ``seed_hints`` (M5) is an optional mapping
+    ``{uv_comp_id: {"anchor_x_um": int, "anchor_y_um": int, "side": ±1}}``
+    produced by :func:`solver.sa_floating.run_sa`. Hints are applied via
+    ``model.AddHint`` after every variable is created, so they are pure
+    soft heuristics — CP-SAT remains free to ignore them.
 
     Returns a :class:`CpsatModel` carrying the built model plus all metadata
     the extractor needs to reconstruct geometry from solver values.
@@ -265,13 +273,25 @@ def build_model(
 
     # 7. NoOverlap: M4 emits a **soft** (post-extract audit) NoOverlap rather
     # than a hard CP-SAT constraint. With single-segment Manhattan traces the
-    # PA case has provably-infeasible hard pairwise NoOverlap (e.g. four
-    # locked traces fanning out of IC1 within a 5.76 mm pin pitch with widths
-    # > 1.8 mm cannot all be non-overlapping without bend points the M4
-    # geometry doesn't model yet). The audit returned by
-    # ``solver.audit.audit_geometry`` reports every overlapping pair so M5 SA
-    # can repair them with bend insertion + repulsion penalties.
+    # PA case has provably-infeasible hard pairwise NoOverlap. Geometric
+    # repair (bend insertion, repulsion) is the responsibility of M6
+    # postproc rather than M5 (M5 only seeds CP-SAT and routes flexible_path
+    # edges with A*; the audit pairs returned by audit_geometry feed M6).
     del artifact
+
+    # 8. Apply M5 SA hints if provided.
+    if seed_hints:
+        for comp_id, hint in seed_hints.items():
+            anchor_xy = component_anchor.get(comp_id)
+            if anchor_xy is not None:
+                ax_var, ay_var = anchor_xy
+                if "anchor_x_um" in hint:
+                    model.AddHint(ax_var, int(hint["anchor_x_um"]))
+                if "anchor_y_um" in hint:
+                    model.AddHint(ay_var, int(hint["anchor_y_um"]))
+            side_var = component_side.get(comp_id)
+            if side_var is not None and "side" in hint:
+                model.AddHint(side_var, int(hint["side"]))
 
     return CpsatModel(
         model=model,

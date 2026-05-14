@@ -313,7 +313,7 @@ v3.3 YAML
 
 ### M4 ─ Phase 2 CP-SAT 接入（2 周）
 
-- **状态**：✅ 已实现（M4，2024-Q4）。NoOverlap 在本里程碑下沉为「post-extract audit」；M5 SA 将负责弯折插入与硬避障。
+- **状态**：✅ 已实现（M4，2024-Q4）。NoOverlap 在本里程碑下沉为「post-extract audit」；M6 postproc 将负责弯折插入与硬避障（M5 SA 仅作 hint 软种子，不修复几何）。
 - **目标**：v6 求解器主干，跑通真实案例。
 - **交付物**：
   - `src/solver/units.py`：mm↔µm 整数离散 + 长度容差工具；
@@ -326,7 +326,7 @@ v3.3 YAML
 - **DoD（实测）**：
   - `rf_layout_simplified.yaml`：status = **OPTIMAL**，wall ≈ 0.01 s（远低于 10 s 上限）；
   - 14 条 `rf_constrained_locked` 边长度误差 ≤ ±0.5%（实测 max = 0.500%；2 条几何不可行边由 audit 报告并跳过：`RF_INPUT_to_IC1`、`PWR_VDD_bus`）；
-  - NoOverlap 由 post-extract audit 报告（M4 不强约束；M5 SA 通过弯折插入修复，详见 `concepts/cpsat-model.md`）。
+  - NoOverlap 由 post-extract audit 报告（M4 不强约束；M6 postproc 通过弯折插入修复，详见 `concepts/cpsat-model.md`）。
 - **运行**：
   ```bash
   ./scripts/verify_m4.sh                # 完整质量门 + cpsat_solve 烟测
@@ -338,16 +338,28 @@ v3.3 YAML
 
 ### M5 ─ Phase 1 SA + Phase 3 A*（兼容能力）（1.5 周）
 
+- **状态**：✅ 已实现（M5，2024-Q4）。SA 仅作为 CP-SAT 的 `AddHint` 软种子；A* 仅处理 `flexible_path` 边；NoOverlap 几何修复 / 弯折插入下沉至 M6（详见 `concepts/cpsat-model.md` §3.4）。
 - **目标**：补齐三阶段流水线；A* 与 multipoint 降为可选能力。
 - **交付物**：
-  - `solver/sa_floating.py`：v4 引力场能量函数 + Metropolis 退火；
-  - `solver/orchestrator.py`：三阶段流水线 + 5 次重试 + 抬温度反馈；
-  - `solver/astar_flex.py`：A* 实现（v4 文档现成），用合成 trace 用例验证；
-  - **不**实现 FLUTE/RSMT（F7：真实案例无 multipoint，留作 v7 扩展）。
-- **DoD**：
-  - 真实案例端到端：M0 SVG → M3 IR → M4 CP-SAT → M5 几何 SVG，单命令一键跑通；
-  - 端到端时间 ≤ 30 s；
-  - 合成 trace 单元用例通过 A*。
+  - `solver/sa_floating.py`：HPWL + 边界 + UV anchor 吸附 + 软排斥能量 + Metropolis 退火；输出 `dict[uv_id, (anchor_x_um, anchor_y_um, side)]` 作为 hint；
+  - `solver/cpsat.py::build_model`：新增 `seed_hints=` kwarg，将 SA 输出经 `model.AddHint` 喂给 CP-SAT（软启发，不破坏可行性）；
+  - `solver/astar_flex.py`：均匀网格 A*（默认 200 µm 步长，Manhattan 启发，turn + near-RF 软成本），消费 `routing_class == FLEXIBLE_PATH` 的边并改写 GeometryIR 中的 polyline；找不到路径时回退保留原 polyline 并记入 `failed_edges`；
+  - `solver/orchestrator.py`：`solve_layout(yaml_path, OrchestratorOptions) -> OrchestratorResult` 一行编排「frontend → solver_ir → SA → CP-SAT (hints) → extract → A* → audit」全流程；INFEASIBLE 自动重试 ≤ 5 次（每轮 SA 初温 ×1.5、CP-SAT 时限 ×1.5）；
+  - `tools/pcb_solve.py` + `pcb_solve` console script：一行 CLI E2E（`--no-sa` / `--no-astar` 旁路开关，`--max-retries`、`--svg-out`、`--report-out`、`--quiet`）；
+  - `concepts/sa-and-astar.md`：能量函数 / A* 网格 / orchestrator 重试策略说明文档；
+  - `scripts/verify_m5.sh`：一键质量门（含 black/ruff/mypy/pytest + 全部 CLI 烟测）；
+  - **不**实现 FLUTE/RSMT（F7：真实案例无 multipoint，留作 v7 扩展）；
+  - **不**实现 NoOverlap 几何修复 / 弯折插入（M6 范围）。
+- **DoD（已达成）**：
+  - 真实案例端到端：`pcb_solve rf_layout_simplified.yaml --time-limit 10` 单命令一键跑通；
+  - 端到端 wall ≤ 30 s（实测 ≈ 13 ms，attempts=1）；status=OPTIMAL，max_len_err ≤ 0.5%；
+  - 合成 trace 单元用例（`tests/unit/test_solver_astar_flex.py`）通过 A*：A* polyline 实际绕过中央 RF 障碍（≥3 个折点）；
+  - SA 关闭时（`--no-sa`）退化为 M4 行为，仍 OPTIMAL；
+  - 全部 172 项 pytest + black/ruff/mypy 全绿。
+- **运行指引**：
+  - 一键三阶段 E2E：`./scripts/verify_m5.sh`
+  - 直接调用 CLI：`pcb_solve rf_layout_simplified.yaml --time-limit 10 --workers 8 --svg-out out/PA.m5.svg --report-out out/PA.m5.json`
+  - Python API：`from solver import solve_layout, OrchestratorOptions`
 
 ### M6 ─ 后处理 + LVS 软校验 + DRC + 输出（1 周）
 

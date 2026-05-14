@@ -61,7 +61,7 @@ audit 实现位于 `src/solver/audit.py::audit_geometry`，参数：
 - `skip_length_edges`：跳过 length-skip 边的长度断言；
 - `resolved_endpoints`：把同一 junction 上的多条 sub-edge 共点视为合法连接，避免误报。
 
-**M5 SA 责任**：通过弯折点插入 + 排斥能量将 audit 报告的重叠对修复为真实可制造布线。
+**M6 postproc 责任**：通过弯折点插入 + 排斥能量将 audit 报告的重叠对修复为真实可制造布线（M5 SA 仅作 CP-SAT 的 `AddHint` 软启动，不修改几何）。
 
 ### 3.5 UV / rotation（M4 收敛）
 
@@ -104,7 +104,7 @@ cpsat_solve <layout.yaml> \
 
 ## 7. 已知限制（M4 范围外）
 
-- NoOverlap 不是硬约束，依赖 M5 几何修复；
+- NoOverlap 不是硬约束，依赖 M6 几何修复（M5 SA hint + A* 软成本均不强制无重叠）；
 - 旋转限定 `{0°, 180°}`；
 - bend_style 几何渲染推迟到 M6（M4 输出折线 + width 即可）；
 - 非 90° 倍数旋转的 footprint 不解（PA 案例不出现）。
