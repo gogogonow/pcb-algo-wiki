@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 import subprocess
 
@@ -23,7 +24,7 @@ def test_main_reports_real_case_counts(capsys) -> None:
 
 def test_module_invocation_reports_real_case_counts() -> None:
     result = subprocess.run(
-        ["python3", "-m", "tools.schema_check", "rf_layout_simplified.yaml"],
+        [sys.executable, "-m", "tools.schema_check", "rf_layout_simplified.yaml"],
         capture_output=True,
         check=False,
         cwd=REPO_ROOT,
@@ -44,7 +45,7 @@ def test_module_invocation_reports_real_case_counts() -> None:
 
 def test_module_invocation_for_missing_input_exits_cleanly() -> None:
     result = subprocess.run(
-        ["python3", "-m", "tools.schema_check", "missing-input.yaml"],
+        [sys.executable, "-m", "tools.schema_check", "missing-input.yaml"],
         capture_output=True,
         check=False,
         cwd=REPO_ROOT,
