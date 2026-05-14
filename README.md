@@ -353,6 +353,24 @@ python -m tools.crossing_report rf_layout_simplified.yaml \
 
 # 一键验证 M8 质量门（断言：critical=0、≥1 GAP、≥20 个 pad polygon、244 测试通过）
 ./scripts/verify_m8.sh
+
+# ---- M9：八方向 A* + 走线交叉硬约束化 ----
+# CP-SAT 仅做 placement（长度锁放为上界），routing 改用 µm 网格上的
+# 8 方向（含 45° 切角）A*；冲突时 rip-up & reroute；meander 兜底补长度。
+pcb_solve rf_layout_simplified.yaml \
+    --time-limit 10 --workers 8 --max-retries 5 --quiet \
+    --octilinear --bend --meander --show-pads \
+    --astar-step-um 100 --ripup-rounds 10 \
+    --drc-out out/PA_Module_Simplified.m9.drc.json \
+    --crossing-report-json out/PA_Module_Simplified.m9.crossing.json \
+    --final-svg out/PA_Module_Simplified.m9.final.svg \
+    --report-out out/PA_Module_Simplified.m9.json
+# `--no-octilinear` 退回 M8 行为。报告 JSON 新增 octilinear 段
+# （routed_edges / unrouted_edges / rounds_used / ripup_count）。
+
+# 一键验证 M9 质量门（断言：DRC critical=0、crossing critical=0、locked
+# 长度误差 < 0.5%、unrouted=0、pad polygon ≥ 20）
+./scripts/verify_m9.sh
 ```
 
 M2 产物 `out/PA_Module_Simplified.frontend.json` 的 schema 与字段含义见

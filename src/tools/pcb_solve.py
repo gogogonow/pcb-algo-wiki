@@ -38,9 +38,11 @@ from postproc.crossing_report_io import to_json as crossing_to_json
 from postproc.crossing_report_io import to_markdown as crossing_to_md
 from schema.v33 import load_v33_layout
 from solver import (
+    DEFAULT_GRID_STEP_UM,
     DEFAULT_NUM_WORKERS,
     DEFAULT_TIME_LIMIT_S,
     OrchestratorOptions,
+    RouteOrchestratorConfig,
     solve_layout,
 )
 from output import render_full_layout
@@ -169,6 +171,31 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_false",
         help="Skip pad rendering in --final-svg.",
     )
+    p.add_argument(
+        "--octilinear",
+        dest="octilinear",
+        action="store_true",
+        default=True,
+        help="Enable M9 octilinear A* router + CP-SAT length-lock relaxation (default ON).",
+    )
+    p.add_argument(
+        "--no-octilinear",
+        dest="octilinear",
+        action="store_false",
+        help="Disable octilinear router (M8 behaviour: CP-SAT straight-line traces only).",
+    )
+    p.add_argument(
+        "--ripup-rounds",
+        type=int,
+        default=10,
+        help="M9 rip-up-and-reroute round budget. Default 10.",
+    )
+    p.add_argument(
+        "--astar-step-um",
+        type=int,
+        default=DEFAULT_GRID_STEP_UM,
+        help=f"M9 octilinear grid step in µm. Default {DEFAULT_GRID_STEP_UM}.",
+    )
     return p
 
 
@@ -206,6 +233,18 @@ def _report_dict(result) -> dict:
             "routed_edges": list(result.astar.routed_edges),
             "failed_edges": list(result.astar.failed_edges),
         },
+        "octilinear": (
+            {
+                "routed_edges": list(result.route.routed),
+                "unrouted_edges": list(result.route.unrouted),
+                "rounds_used": result.route.rounds_used,
+                "ripup_count": dict(result.route.ripup_count),
+                "overshoot_edges": list(result.route.overshoot_edges),
+                "expansions_total": result.route.expansions_total,
+            }
+            if result.route is not None
+            else None
+        ),
         "length_checks": [
             {
                 "edge_id": c.edge_id,
@@ -267,9 +306,14 @@ def main(argv: list[str] | None = None) -> int:
     options = OrchestratorOptions(
         use_sa=not args.no_sa,
         use_astar=not args.no_astar,
+        use_octilinear=args.octilinear,
         time_limit_s=args.time_limit,
         num_workers=args.workers,
         max_retries=args.max_retries,
+        route_config=RouteOrchestratorConfig(
+            grid_step_um=args.astar_step_um,
+            max_rounds=args.ripup_rounds,
+        ),
     )
     result = solve_layout(args.layout, options=options)
 
@@ -292,13 +336,22 @@ def main(argv: list[str] | None = None) -> int:
         if not args.no_astar
         else " astar=off"
     )
+    if result.route is not None:
+        oct_msg = (
+            f" oct(routed={len(result.route.routed)},"
+            f"unrouted={len(result.route.unrouted)},"
+            f"rounds={result.route.rounds_used},"
+            f"overshoot={len(result.route.overshoot_edges)})"
+        )
+    else:
+        oct_msg = " oct=off"
     print(
         f"status={geom.solve_status} attempts={result.attempts} "
         f"wall={geom.solve_wall_seconds:.3f}s "
         f"locked_within_tol={audit.locked_edges_within_tolerance} "
         f"no_overlap_pass={audit.no_overlap_pass} "
         f"max_len_err={audit.max_length_error_fraction * 100:.3f}%"
-        f"{sa_msg}{astar_msg}"
+        f"{sa_msg}{astar_msg}{oct_msg}"
     )
 
     if not args.quiet:

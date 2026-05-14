@@ -17,8 +17,12 @@ def test_orchestrator_pa_optimal_in_one_attempt() -> None:
     pytest.importorskip("ortools.sat.python.cp_model")
     from solver.orchestrator import OrchestratorOptions, solve_layout
 
+    # M8 reference path: length lock enforced as equality by CP-SAT.
     result = solve_layout(
-        PA_YAML, options=OrchestratorOptions(time_limit_s=10.0, num_workers=4)
+        PA_YAML,
+        options=OrchestratorOptions(
+            time_limit_s=10.0, num_workers=4, use_octilinear=False
+        ),
     )
     assert result.geometry.solve_status in ("OPTIMAL", "FEASIBLE")
     assert result.attempts == 1
@@ -33,7 +37,9 @@ def test_orchestrator_no_sa_still_feasible() -> None:
 
     result = solve_layout(
         PA_YAML,
-        options=OrchestratorOptions(use_sa=False, time_limit_s=10.0, num_workers=4),
+        options=OrchestratorOptions(
+            use_sa=False, time_limit_s=10.0, num_workers=4, use_octilinear=False
+        ),
     )
     assert result.geometry.solve_status in ("OPTIMAL", "FEASIBLE")
     assert result.sa is None
@@ -53,6 +59,7 @@ def test_pcb_solve_cli_writes_svg_and_report(tmp_path: Path) -> None:
         "--workers",
         "4",
         "--quiet",
+        "--no-octilinear",
         "--svg-out",
         str(svg),
         "--report-out",

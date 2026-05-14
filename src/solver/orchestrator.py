@@ -28,6 +28,11 @@ from .cpsat import (
     solve_model,
 )
 from .extract import extract_geometry
+from .route_orchestrator import (
+    RouteOrchestratorConfig,
+    RouteOrchestratorReport,
+    route_all,
+)
 from .sa_floating import SaConfig, SaResult, hints_from_sa_result, run_sa
 
 
@@ -35,11 +40,14 @@ from .sa_floating import SaConfig, SaResult, hints_from_sa_result, run_sa
 class OrchestratorOptions:
     use_sa: bool = True
     use_astar: bool = True
+    use_octilinear: bool = True
+    """M9: enable octilinear A* router + CP-SAT length-lock relaxation."""
     time_limit_s: float = DEFAULT_TIME_LIMIT_S
     num_workers: int = DEFAULT_NUM_WORKERS
     max_retries: int = 5
     sa_config: SaConfig | None = None
     astar_config: AstarConfig | None = None
+    route_config: RouteOrchestratorConfig | None = None
 
 
 @dataclass
@@ -53,6 +61,8 @@ class OrchestratorResult:
     astar: AstarReport
     attempts: int
     skipped_locked_edges: list[tuple[str, str]] = field(default_factory=list)
+    route: RouteOrchestratorReport | None = None
+    """M9: octilinear router report (None when ``use_octilinear=False``)."""
 
     @property
     def status(self) -> str:
@@ -87,12 +97,15 @@ def _run_attempt(
                 boundary_weight=cfg.boundary_weight,
                 attract_weight=cfg.attract_weight,
                 repulse_weight=cfg.repulse_weight,
+                crossing_weight=cfg.crossing_weight,
                 seed=(cfg.seed or 0) + attempt,
             )
         sa_result = run_sa(ir, artifact, cfg)
         hints = hints_from_sa_result(sa_result)
 
-    cpsat = build_model(ir, artifact, seed_hints=hints)
+    cpsat = build_model(
+        ir, artifact, seed_hints=hints, relax_length_lock=options.use_octilinear
+    )
     time_limit = options.time_limit_s * (1.5**attempt)
     solve = solve_model(cpsat, time_limit_s=time_limit, num_workers=options.num_workers)
     geom = extract_geometry(ir=ir, artifact=artifact, cpsat=cpsat, result=solve)
@@ -134,6 +147,21 @@ def solve_layout(
     assert geom is not None and solve is not None and audit is not None
 
     astar_report = AstarReport()
+    route_report: RouteOrchestratorReport | None = None
+    if options.use_octilinear and last_status in ("OPTIMAL", "FEASIBLE"):
+        geom, route_report = route_all(
+            ir=ir,
+            artifact=artifact,
+            geom=geom,
+            config=options.route_config,
+        )
+        # Re-audit so length checks reflect the octilinear polylines.
+        audit = audit_geometry(
+            ir,
+            geom,
+            skip_length_edges={eid for eid, _ in skipped},
+            resolved_endpoints=None,
+        )
     if options.use_astar and last_status in ("OPTIMAL", "FEASIBLE"):
         geom, astar_report = route_flexible_paths(
             ir=ir,
@@ -159,6 +187,7 @@ def solve_layout(
         astar=astar_report,
         attempts=attempts,
         skipped_locked_edges=skipped,
+        route=route_report,
     )
 
 

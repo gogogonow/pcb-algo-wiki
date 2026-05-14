@@ -122,6 +122,7 @@ def build_model(
     artifact: FrontendArtifact,
     *,
     seed_hints: dict[str, dict[str, int]] | None = None,
+    relax_length_lock: bool = False,
 ) -> CpsatModel:
     """Build the CP-SAT model from SolverIR + FrontendArtifact.
 
@@ -262,7 +263,7 @@ def build_model(
                         )
                     )
                     continue
-                if direct_um < target_um - tol_um:
+                if direct_um < target_um - tol_um and not relax_length_lock:
                     # target > Manhattan: meander routing required.  CP-SAT can
                     # only produce straight-segment paths; meander insertion is
                     # deferred to the M7 postproc pass (apply_meanders).
@@ -281,6 +282,7 @@ def build_model(
                 ep_pair,
                 endpoints,
                 edge.target_length,
+                upper_only=relax_length_lock,
             )
             locked_edges.append(edge_id)
 
@@ -394,7 +396,21 @@ def _add_locked_length_constraint(
     endpoint_pair: tuple[str, str],
     endpoints: dict[str, EndpointHandle],
     target_length_mm: float,
+    *,
+    upper_only: bool = False,
 ) -> None:
+    """Constrain endpoint Manhattan distance to satisfy the length lock.
+
+    ``upper_only=False`` (legacy, M4-M8): equality within ±tol — the trace is
+    the straight Manhattan two-point line, so endpoint distance == target.
+
+    ``upper_only=True`` (M9 ``relax_length_lock``): only the upper bound
+    (Manhattan ≤ target + tol) is enforced. Endpoints may be closer; the
+    octilinear router (M9) is responsible for growing the trace via 45°
+    detours so the final polyline length matches target ± tol. Manhattan
+    > target + tol still implies physical infeasibility (no detour can
+    shorten the path), so the upper bound stays a hard constraint.
+    """
     a = endpoints[endpoint_pair[0]]
     b = endpoints[endpoint_pair[1]]
     target_um = mm_to_um(target_length_mm)
@@ -410,7 +426,8 @@ def _add_locked_length_constraint(
     model.AddAbsEquality(abs_dx, dx)
     model.AddAbsEquality(abs_dy, dy)
 
-    model.Add(abs_dx + abs_dy >= target_um - tol_um)
+    if not upper_only:
+        model.Add(abs_dx + abs_dy >= target_um - tol_um)
     model.Add(abs_dx + abs_dy <= target_um + tol_um)
 
 

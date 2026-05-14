@@ -8,6 +8,7 @@ report (locked-edge length error percentages).
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from schema.geometry_ir import GeometryIR
@@ -43,11 +44,36 @@ class AuditReport:
 
 
 def manhattan_length(geom: GeometryIR, edge_id: str) -> float:
+    """Sum of Manhattan |dx|+|dy| over the polyline (legacy M4 behaviour)."""
     points = geom.routes[edge_id].points
     total = 0.0
     for i in range(len(points) - 1):
         a, b = points[i], points[i + 1]
         total += abs(a.x - b.x) + abs(a.y - b.y)
+    return total
+
+
+def polyline_length(geom: GeometryIR, edge_id: str) -> float:
+    """Sum of Euclidean segment lengths over the polyline.
+
+    M9 introduces 45° (octilinear) segments whose physical length is
+    ``√2 × axis_step`` rather than ``2 × axis_step``. Length-lock auditing
+    must therefore use Euclidean rather than Manhattan distance to remain
+    consistent with the actual trace geometry.
+
+    Backward compatibility: a *2-point* polyline is the legacy CP-SAT
+    "two-endpoint" representation that implicitly stands for an axis-aligned
+    L-shape whose Manhattan length matches the locked target. We honour that
+    contract by reporting Manhattan length for 2-point polylines so M5–M8
+    behaviour is preserved.
+    """
+    points = geom.routes[edge_id].points
+    if len(points) <= 2:
+        return manhattan_length(geom, edge_id)
+    total = 0.0
+    for i in range(len(points) - 1):
+        a, b = points[i], points[i + 1]
+        total += math.hypot(a.x - b.x, a.y - b.y)
     return total
 
 
@@ -94,7 +120,7 @@ def audit_geometry(
             continue
         if edge_id in skip_length:
             continue
-        L = manhattan_length(geom, edge_id)
+        L = polyline_length(geom, edge_id)
         target = float(edge.target_length)
         err = (L - target) / target if target > 0 else 0.0
         length_checks.append(
@@ -156,4 +182,5 @@ __all__ = [
     "OverlapPair",
     "audit_geometry",
     "manhattan_length",
+    "polyline_length",
 ]

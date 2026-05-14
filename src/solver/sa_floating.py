@@ -62,6 +62,8 @@ class SaConfig:
     boundary_weight: float = 100.0
     attract_weight: float = 1.0
     repulse_weight: float = 50.0
+    crossing_weight: float = 100.0
+    """M9: penalises pairs of UV-host edges whose endpoint-line segments collide."""
     seed: int | None = 0xC0FFEE
 
 
@@ -235,13 +237,98 @@ def _pairwise_repulse(
     return weight * energy / 1_000_000.0
 
 
+def _segments_distance_squared_um(
+    a0: tuple[int, int],
+    a1: tuple[int, int],
+    b0: tuple[int, int],
+    b1: tuple[int, int],
+) -> float:
+    """Min squared distance between two line segments (µm²).
+
+    Used by the SA M9 crossing penalty. Returns 0 when the segments cross.
+    """
+
+    def dot(u: tuple[float, float], v: tuple[float, float]) -> float:
+        return u[0] * v[0] + u[1] * v[1]
+
+    d1 = (a1[0] - a0[0], a1[1] - a0[1])
+    d2 = (b1[0] - b0[0], b1[1] - b0[1])
+    r = (a0[0] - b0[0], a0[1] - b0[1])
+    a = dot(d1, d1)
+    e = dot(d2, d2)
+    f = dot(d2, r)
+    eps = 1e-9
+    if a <= eps and e <= eps:
+        return float(r[0] * r[0] + r[1] * r[1])
+    if a <= eps:
+        s = 0.0
+        t = max(0.0, min(1.0, f / e))
+    else:
+        c = dot(d1, r)
+        if e <= eps:
+            t = 0.0
+            s = max(0.0, min(1.0, -c / a))
+        else:
+            b_ = dot(d1, d2)
+            denom = a * e - b_ * b_
+            s = max(0.0, min(1.0, (b_ * f - c * e) / denom)) if denom != 0.0 else 0.0
+            t = (b_ * s + f) / e
+            if t < 0.0:
+                t = 0.0
+                s = max(0.0, min(1.0, -c / a))
+            elif t > 1.0:
+                t = 1.0
+                s = max(0.0, min(1.0, (b_ - c) / a))
+    cx = (a0[0] + d1[0] * s) - (b0[0] + d2[0] * t)
+    cy = (a0[1] + d1[1] * s) - (b0[1] + d2[1] * t)
+    return float(cx * cx + cy * cy)
+
+
+def _crossing_penalty(
+    ir: SolverIR,
+    artifact: FrontendArtifact,
+    placements: dict[str, SaPlacement],
+    weight: float,
+) -> float:
+    """M9 pairwise edge-segment near-distance penalty (analytic, fast).
+
+    For every edge whose two endpoints can be resolved (fixed terminals or UV
+    anchor approximations), construct the straight-line endpoint segment.
+    Accumulate ``max(0, clearance - min_dist)²`` over disjoint pairs.
+    """
+    if weight <= 0.0:
+        return 0.0
+    segments: list[tuple[tuple[int, int], tuple[int, int]]] = []
+    for edge in ir.edges.values():
+        ep_a, ep_b = edge.endpoints
+        a_xy = _endpoint_xy_um_no_recurse(ir, placements, ep_a)
+        b_xy = _endpoint_xy_um_no_recurse(ir, placements, ep_b)
+        if a_xy is None or b_xy is None:
+            continue
+        segments.append((a_xy, b_xy))
+    del artifact
+    clearance_um = mm_to_um(float(ir.clearance))
+    energy = 0.0
+    for i in range(len(segments)):
+        a0, a1 = segments[i]
+        for j in range(i + 1, len(segments)):
+            b0, b1 = segments[j]
+            if a0 == b0 or a0 == b1 or a1 == b0 or a1 == b1:
+                continue
+            d2 = _segments_distance_squared_um(a0, a1, b0, b1)
+            if d2 < clearance_um * clearance_um:
+                gap = clearance_um - math.sqrt(d2)
+                energy += gap * gap
+    return weight * energy / 1_000_000.0
+
+
 def compute_energy(
     ir: SolverIR,
     artifact: FrontendArtifact,
     placements: dict[str, SaPlacement],
     cfg: SaConfig,
 ) -> float:
-    """Sum of HPWL + boundary + attract + repulse over all UV components."""
+    """Sum of HPWL + boundary + attract + repulse + crossing over all UVs."""
     e = 0.0
     for comp_id, p in placements.items():
         e += _hpwl_for_uv(ir, artifact, placements, comp_id)
@@ -250,6 +337,7 @@ def compute_energy(
             ir, artifact, placements, comp_id, cfg.attract_weight
         )
     e += _pairwise_repulse(ir, placements, cfg.repulse_weight)
+    e += _crossing_penalty(ir, artifact, placements, cfg.crossing_weight)
     return e
 
 
