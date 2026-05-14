@@ -26,9 +26,9 @@ def test_plan_node_positions_assigns_unique_uv_seeds() -> None:
         by_net.setdefault(net, []).append(plan.uv_anchor_seed[uv_name])
     for net, seeds in by_net.items():
         rounded = {(round(x, 3), round(y, 3)) for x, y in seeds}
-        assert len(rounded) == len(seeds), (
-            f"UV seeds collide within net {net!r}: {seeds}"
-        )
+        assert len(rounded) == len(
+            seeds
+        ), f"UV seeds collide within net {net!r}: {seeds}"
 
     # Every endpoint string referenced by edges should resolve to a position.
     for edge in artifact.edges.values():
