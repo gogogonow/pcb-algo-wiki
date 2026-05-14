@@ -7,10 +7,8 @@ metadata:
   timestamp: '2026-05-12 14:10:39'
 global_constraints:
   routing:
-    default_trace_width: 0.254
+    default_trace_width: 0.254    #默认布线宽度
     default_clearance: 0.15
-    via_drill: 0.2
-    via_pad: 0.4
   stackup:
     layer_count: 1
     material: RO4350B
@@ -20,25 +18,25 @@ global_constraints:
     origin:
       x: 0.0
       y: 0.0
-    width: 40.0
-    height: 100.0
+    width: 40.0    #默认板框宽度
+    height: 100.0    #默认板框高度
   keepout_zones: []
 footprints:
-  "PKG_IC_4PIN":
+  "PKG_IC_4PIN":    #封装名
     description: 4-Pin RF IC Package
-    dimensions:
-      width: 12.03
-      length: 15.43
-      height: 2.29
+    dimensions:    #封装尺寸
+      width: 12.03    #封装宽度（水平向右为x轴朝向，垂直向上为y轴朝向，封装宽度沿y轴方向，封装中心点为xy坐标原点）
+      length: 15.43    #封装长度（水平向右为x轴朝向，垂直向上为y轴朝向，封装长度沿x轴方向，封装中心点为xy坐标原点）
+      height: 2.29    #封装高度
     pins:
       PIN_1:
-        local_x: 2.88
-        local_y: -5.0
-        local_orientation: -90
+        local_x: 2.88    #管脚1焊盘中心x位置（水平向右为x轴朝向，垂直向上为y轴朝向，以封装中心为原点计算）
+        local_y: -5.0    #管脚1焊盘中心y位置（水平向右为x轴朝向，垂直向上为y轴朝向，以封装中心为原点计算）
+        local_orientation: -90    #管脚1焊盘走线朝向，以前面xy坐标系为参考，-90表示向下走线
         pad_geometry:
-          shape: rect
-          width: 3.71
-          length: 3.84
+          shape: rect    #管脚1焊盘形状，rect为矩形
+          width: 3.71    #管脚1焊盘宽度（水平向右为x轴朝向，垂直向上为y轴朝向，焊盘宽度沿y轴方向）
+          length: 3.84    #管脚1焊盘长度（水平向右为x轴朝向，垂直向上为y轴朝向，焊盘长度沿x轴方向）
       PIN_2:
         local_x: -2.88
         local_y: -5.0
@@ -144,20 +142,20 @@ footprints:
           shape: cicle
           redius: 2.0
 components:
-  IC1:
-    footprint_ref: "PKG_IC_4PIN"
-    placement:
-      x: 12.1
-      y: 50.0
-      rotation: 0
-      is_floating: false
-    pin_nets:
-      PIN_1: "RF_NET_1"
-      PIN_2: "RF_NET_2"
-      PIN_3: "RF_INPUT"
-      PIN_4: "PWR_NET"
-    properties:
-      PartNumber: DEMO_IC
+  IC1:    #器件名
+    footprint_ref: "PKG_IC_4PIN"    #器件封装
+    placement:    #器件位置
+      x: 12.1    #x坐标有值表示位置固定，坐标原点为板框左下角位置
+      y: 50.0    #y坐标有值表示位置固定，坐标原点为板框左下角位置
+      rotation: 0    #器件是否旋转，0表示不旋转，90表示向上旋转，-90表示向下旋转，-180表示选装180度
+      is_floating: false    #false表示器件位置固定，后续布局布线不支持调整
+    pin_nets:    #器件管脚
+      PIN_1: "RF_NET_1"    #器件管脚1连接的网络名
+      PIN_2: "RF_NET_2"    #器件管脚2连接的网络名
+      PIN_3: "RF_INPUT"    #器件管脚3连接的网络名
+      PIN_4: "PWR_NET"    #器件管脚4连接的网络名
+    properties:    #器件其他属性
+      PartNumber: DEMO_IC    #器件编码
   C1:
     footprint_ref: "PKG_CAP"
     placement:
@@ -340,38 +338,38 @@ components:
     pin_nets:
       PIN_1: "DRIVER_OUT_R"
     properties: {}
-nodes:
-  IC1_pin1_seg1_universal_node:
-    type: universal_junction
-    semantic_intent:
+nodes:    #承载微带线连接点信息
+  IC1_pin1_seg1_universal_node:    #IC1的1管脚出来第一段微带线连接点
+    type: universal_junction    #表示有多个连接，连接点不止一个
+    semantic_intent:    #连接点类型，stepped_impedance为阶跃阻抗点，从宽微带线到细的，manifold_junction为梳状线
     - stepped_impedance
     - manifold_junction
-    connection_rules:
-      reference_edge: IC1_pin1_seg1
+    connection_rules:    #连接规则，承载微带线或附带RLC间连接位置详情
+      reference_edge: IC1_pin1_seg1    #连接点参考的微带线名称
       branches:
-      - edge: IC1_pin1_seg2
-        angle: 90
+      - edge: IC1_pin1_seg2    #IC1_pin1_seg2微带线
+        angle: 90    #90表示IC1_pin1_seg2微带线相对IC1_pin1_seg1微带线朝向向左转90度，例如IC1_pin1_seg1朝左，则IC1_pin1_seg2朝上
         origin:
-          offset_u: -3.94
-          offset_v: edge_left
+          offset_u: -3.94    #-3.94表示IC1_pin1_seg2微带线与IC1_pin1_seg1前面边距离3.94mm
+          offset_v: edge_left    #edge_left表示IC1_pin1_seg2与IC1_pin1_seg1左边相连
       - edge: IC1_pin1_seg3
         angle: 90
         origin:
           offset_u: -1.6
           offset_v: edge_left
       - edge: IC1_pin1_seg4
-        angle: 0
+        angle: 0    #0表示IC1_pin1_seg4与IC1_pin1_seg1方向一致
         origin:
-          offset_u: 0
-          offset_v: align_center
+          offset_u: align_left    #align_left表示IC1_pin1_seg4与IC1_pin1_seg1左边对齐
+          offset_v: edge_front    #edge_front表示IC1_pin1_seg4与IC1_pin1_seg1前向边相连
   IC1_pin1_seg2_end_split_pad:
-    type: t_junction
+    type: t_junction    #t_junction表示微带线一分二连接两个分叉的
     description: 微带线末端一分二焊盘
   IC1_pin1_seg3_end_split_pad:
     type: t_junction
     description: 微带线末端一分二焊盘
   IC1_pin1_seg5_start_combiner:
-    type: t_combiner_junction
+    type: t_combiner_junction    #t_combiner_junction表示微带线多个分叉合并汇聚到一个的节点
     description: 两个输出口汇聚的节点
   IC1_pin2_seg1_universal_node:
     type: universal_junction
@@ -382,10 +380,10 @@ nodes:
       reference_edge: IC1_pin2_seg1
       branches:
       - edge: IC1_pin2_seg2
-        angle: -90
+        angle: -90    #-90表示IC1_pin2_seg2微带线相对IC1_pin2_seg1微带线朝向向右转90度，例如IC1_pin2_seg2朝下，则IC1_pin2_seg2朝左
         origin:
           offset_u: -3.61
-          offset_v: edge_right
+          offset_v: edge_right    #edge_right表示IC1_pin2_seg2与IC1_pin2_seg1右边相连
       - edge: IC1_pin2_seg3
         angle: -90
         origin:
@@ -394,8 +392,8 @@ nodes:
       - edge: IC1_pin2_seg4
         angle: 0
         origin:
-          offset_u: 0
-          offset_v: align_center
+          offset_u: align_center
+          offset_v: edge_front
   IC1_pin2_seg2_end_split_pad:
     type: t_junction
     description: 微带线末端一分二焊盘
@@ -428,17 +426,17 @@ terminals:
     type: ground_plane
 edges:
   IC1_pin1_seg1:
-    type: microstrip
-    net: RF_NET_1
-    routing_class: rf_constrained
+    type: microstrip    #微带线类型，表示通过仿真得到，宽度长度不能变，但可以45度切角走线
+    net: RF_NET_1    #微带线所属的网络
+    routing_class: rf_constrained    #射频约束的，宽度、长度约束
     connections:
-    - IC1.PIN_1
+    - IC1.PIN_1    #微带线两端，可能为器件管脚，可能为前面定义的节点
     - IC1_pin1_seg1_universal_node
     constraint:
-      width: 3.6
-      target_length: 5.75
+      width: 3.6    #微带线宽度
+      target_length: 5.75    #微带线长度
     geometry:
-      bend_style: mitered_45
+      bend_style: mitered_45    #微带线可45度切角绕线
       launch_rule: normal
   IC1_pin1_seg2:
     type: microstrip
