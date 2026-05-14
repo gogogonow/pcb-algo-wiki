@@ -20,6 +20,7 @@ from schema.v33 import V33Layout
 
 _PAD_FILL = "#cbd5e1"
 _PAD_STROKE = "#475569"
+_PIN_LABEL_FONT_SIZE = 5.5
 
 
 def _pad_polygon_world(
@@ -124,7 +125,7 @@ def _render_pads(
             )
             parts.append(
                 f'<text x="{x_fn(wx):.2f}" y="{y_fn(wy) + 2:.2f}" '
-                f'font-family="sans-serif" font-size="5.5" text-anchor="middle" '
+                f'font-family="sans-serif" font-size="{_PIN_LABEL_FONT_SIZE}" text-anchor="middle" '
                 f'font-weight="bold" fill="#1e293b" opacity="0.9">'
                 f"{pin_label}</text>"
             )
