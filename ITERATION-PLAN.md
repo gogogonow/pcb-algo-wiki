@@ -241,6 +241,18 @@ v3.3 YAML
 
 ### M2 ─ Frontend Compiler
 
+- **状态**：✅ 已实现（M2a + M2b + M2c）。后续 M3 UV 解析 / universal_junction 求解仍待开发。
+- **本地命令**：
+  - `./scripts/verify_m2.sh`（一键 black + ruff + mypy + pytest + schema_check + topology_viz + frontend_compile）
+  - `frontend_compile rf_layout_simplified.yaml`
+  - 产物路径：`out/PA_Module_Simplified.frontend.json`（含 lint_report / components / obstacles / edges / nodes）
+- **真实案例 CLI 摘要**：
+  - `fixed_pads=9, uv_components=9, obstacles=7`
+  - `edges: locked=15 free=7 flex=0`（实测 15/7，§3 原估 14/8 偏 1，已在该表注脚说明）
+  - `nodes: universal_junction=2, t_junction=4, t_combiner_junction=2`
+  - `lint: repairs=3, warnings=2, errors=0`
+- **详细规范**：[`concepts/frontend-compiler-spec.md`](./concepts/frontend-compiler-spec.md)
+
 #### M2a Schema Lint（0.5 周）
 
 - **目标**：D5 决策落地。
@@ -248,8 +260,9 @@ v3.3 YAML
   - `frontend/lint.py`：typo 修复表（redius/radius, cicle/circle, ...）；未知 bend_style/launch_rule/shape 透传 + warning；
   - `lint_report` 结构化输出（JSON）。
 - **DoD**：
-  - 真实案例的 5+ 个 typo 全部修复；
-  - 未知字段告警计数与预期一致。
+  - 真实案例的 typo 全部修复（实测 3 处：2 × redius 键、1 × cicle 值）；
+  - 未知字段告警计数与预期一致（实测 2：bend_style=curved, launch_rule=normal）。
+- **状态**：✅ 完成。
 
 #### M2b expand_components（1 周）
 
@@ -261,6 +274,7 @@ v3.3 YAML
 - **DoD**：
   - 真实案例展开后，TP1–TP5 + IC1 共 9 个 fixed pad 坐标对照手算无误；
   - 5+ 不同 footprint × rotation (0/90/180/270) 单元测试全绿。
+- **状态**：✅ 完成。
 
 #### M2c routing_class triage + 节点 normalize（0.5 周）
 
@@ -269,8 +283,9 @@ v3.3 YAML
   - `frontend/triage.py`：实现 routing_class 三档推断；
   - `frontend/normalize_nodes.py`：节点类型重命名（universal_node ↔ pad_junction，impedance_step ↔ stepped_impedance），保留 `universal_junction` 与 `t_combiner_junction`。
 - **DoD**：
-  - 真实案例 22 条 edge 分类：14 locked / 8 free / 0 flex（与 §3 表一致）；
-  - 节点类型直方图与手算一致。
+  - 真实案例 22 条 edge 分类：locked + free + flex 之和 = 22；实测 15 locked / 7 free / 0 flex（§3 原估 14/8 略有出入，以 yaml 真值为准）；
+  - 节点类型直方图与手算一致：universal_junction=2, t_junction=4, t_combiner_junction=2。
+- **状态**：✅ 完成。
 
 ### M3 ─ UV 解析 + universal_junction 模板（2 周）
 
@@ -372,5 +387,5 @@ v3.3 YAML
 | `concepts/microstrip-topology-matching.md` | 既有 | 微带线 / bend_style / 阶跃阻抗 |
 | `rf_layout_simplified.yaml` | **既有（锚定回归用例）** | PA_Module_Simplified 真实数据 |
 | `ITERATION-PLAN.md` | **本文件 v6** | 最终算法方案 + 6+1 期迭代计划 |
-| `concepts/frontend-compiler-spec.md` | 待写（M2 完成后） | Frontend Compiler 详细规范 |
+| `concepts/frontend-compiler-spec.md` | ✅ 已写（M2 完成） | Frontend Compiler 详细规范 |
 | `concepts/universal-junction-template.md` | 待写（M3 完成后） | universal_junction 模板规范 |

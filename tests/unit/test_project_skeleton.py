@@ -8,12 +8,27 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.mark.parametrize(
     "package_name",
-    ["frontend", "solver", "postproc", "tools"],
+    ["solver", "postproc", "tools"],
 )
 def test_future_packages_are_importable_and_export_nothing(package_name: str) -> None:
     module = importlib.import_module(package_name)
 
     assert module.__all__ == []
+
+
+def test_frontend_package_exports_m2_compiler() -> None:
+    module = importlib.import_module("frontend")
+
+    for name in (
+        "compile_layout",
+        "lint_layout",
+        "expand_components",
+        "build_obstacles",
+        "triage_edges",
+        "normalize_nodes",
+        "FrontendArtifact",
+    ):
+        assert name in module.__all__
 
 
 def test_schema_package_exports_schema_models() -> None:
