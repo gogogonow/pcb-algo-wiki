@@ -105,42 +105,105 @@ def plan_node_positions(
         for pad in uv.pads:
             plan.endpoint_xy[f"{uv_name}.{pad.pin}"] = board_center
 
-    # 4. Junction nodes: centroid of incident edges' "other endpoint".
+    # 4. Junction nodes: centroid of incident edges' "other endpoint", then
+    #    project to satisfy target_length constraints (M10d).
     edge_endpoints = _edge_endpoints_by_node(artifact)
     for node_name, node in artifact.nodes.items():
-        candidates: list[tuple[float, float]] = []
-        for edge in edge_endpoints.get(node_name, ()):
-            other = next((ep for ep in edge.connections if ep != node_name), None)
-            if other and other in plan.endpoint_xy:
-                candidates.append(plan.endpoint_xy[other])
-        if candidates:
-            cx = sum(c[0] for c in candidates) / len(candidates)
-            cy = sum(c[1] for c in candidates) / len(candidates)
-        else:
-            cx, cy = board_center
-        plan.endpoint_xy[node_name] = (
-            _clamp(cx, 1.0, board_width_mm - 1.0),
-            _clamp(cy, 1.0, board_height_mm - 1.0),
+        pos = _seed_node_position(
+            node_name, edge_endpoints, plan.endpoint_xy, board_center
         )
-        # Light pull along universal_junction's reference_edge if available.
-        _ = node  # no-op; kept for future biasing
+        pos = _project_to_length_constraints(
+            node_name, pos, edge_endpoints, plan.endpoint_xy
+        )
+        plan.endpoint_xy[node_name] = (
+            _clamp(pos[0], 1.0, board_width_mm - 1.0),
+            _clamp(pos[1], 1.0, board_height_mm - 1.0),
+        )
+        _ = node  # reserved for branch-direction biasing
 
-    # 5. One relaxation pass: re-centre nodes once UVs got a seed.
-    for node_name in artifact.nodes:
-        candidates = []
-        for edge in edge_endpoints.get(node_name, ()):
-            other = next((ep for ep in edge.connections if ep != node_name), None)
-            if other and other in plan.endpoint_xy:
-                candidates.append(plan.endpoint_xy[other])
-        if candidates:
-            cx = sum(c[0] for c in candidates) / len(candidates)
-            cy = sum(c[1] for c in candidates) / len(candidates)
+    # 5. Two relaxation passes: re-centre nodes once neighbours moved, then
+    #    re-project against target_length to keep constrained edges feasible.
+    for _ in range(2):
+        for node_name in artifact.nodes:
+            pos = _seed_node_position(
+                node_name, edge_endpoints, plan.endpoint_xy, board_center
+            )
+            pos = _project_to_length_constraints(
+                node_name, pos, edge_endpoints, plan.endpoint_xy
+            )
             plan.endpoint_xy[node_name] = (
-                _clamp(cx, 1.0, board_width_mm - 1.0),
-                _clamp(cy, 1.0, board_height_mm - 1.0),
+                _clamp(pos[0], 1.0, board_width_mm - 1.0),
+                _clamp(pos[1], 1.0, board_height_mm - 1.0),
             )
 
     return plan
+
+
+def _seed_node_position(
+    node_name: str,
+    edge_endpoints: dict[str, list[TriagedEdge]],
+    endpoint_xy: dict[str, tuple[float, float]],
+    board_center: tuple[float, float],
+) -> tuple[float, float]:
+    candidates: list[tuple[float, float]] = []
+    for edge in edge_endpoints.get(node_name, ()):
+        other = next((ep for ep in edge.connections if ep != node_name), None)
+        if other and other in endpoint_xy:
+            candidates.append(endpoint_xy[other])
+    if not candidates:
+        return board_center
+    cx = sum(c[0] for c in candidates) / len(candidates)
+    cy = sum(c[1] for c in candidates) / len(candidates)
+    return cx, cy
+
+
+def _project_to_length_constraints(
+    node_name: str,
+    pos: tuple[float, float],
+    edge_endpoints: dict[str, list[TriagedEdge]],
+    endpoint_xy: dict[str, tuple[float, float]],
+) -> tuple[float, float]:
+    """Pull ``pos`` so each constrained incident edge can meet target_length.
+
+    Each constrained edge gives an upper bound: ``dist(pos, other) ≤
+    target_length × tol``. We Gauss-Seidel project: if violated, snap onto
+    the constraint circle in the direction of the current ``pos``.
+    """
+
+    tol = 1.1  # allow 10% slack so the router still has rip-up room
+    constraints: list[tuple[tuple[float, float], float]] = []
+    for edge in edge_endpoints.get(node_name, ()):
+        if edge.target_length is None or edge.target_length <= 0:
+            continue
+        other = next((ep for ep in edge.connections if ep != node_name), None)
+        if other is None or other not in endpoint_xy:
+            continue
+        constraints.append((endpoint_xy[other], edge.target_length * tol))
+
+    if not constraints:
+        return pos
+
+    x, y = pos
+    for _ in range(20):
+        moved = False
+        for (ox, oy), max_dist in constraints:
+            dx = x - ox
+            dy = y - oy
+            d = math.hypot(dx, dy)
+            if d <= max_dist:
+                continue
+            if d < 1e-9:
+                # Coincident: nudge along +x.
+                x = ox + max_dist
+                y = oy
+            else:
+                scale = max_dist / d
+                x = ox + dx * scale
+                y = oy + dy * scale
+            moved = True
+        if not moved:
+            break
+    return x, y
 
 
 def _clamp(value: float, lo: float, hi: float) -> float:
