@@ -113,15 +113,33 @@ def _solver_edges(layout: V33Layout) -> dict[str, SolverEdge]:
     return out
 
 
-def _fixed_terminals(layout: V33Layout) -> dict[str, V6Terminal]:
+def _fixed_terminals(
+    layout: V33Layout, fixed_pads: dict[str, Any]
+) -> dict[str, V6Terminal]:
+    """Project FrontendArtifact.fixed_terminals into the strict V6Terminal map.
+
+    M4 expects every fixed pad (testpoints + IC fixed-component pins) to be
+    available with real coordinates. The v3.3 ``terminals`` section only lists
+    net stubs (e.g. testpoints, GND), so we union those keys with every
+    ``ExpandedPad`` from the M2 expansion that has a resolved ``abs_x/abs_y``.
+    GND-style terminals without coordinates are skipped to keep the schema
+    invariant (Point requires finite floats).
+    """
+
     out: dict[str, V6Terminal] = {}
-    for term_id, term in layout.terminals.items():
-        # Terminals in v3.3 only carry net/component/pin metadata; their
-        # coordinates come from the fixed-component expansion. SolverIR keeps
-        # them as Point(0, 0) placeholders so the strict schema is satisfied;
-        # M4 substitutes the resolved fixed-pad coordinates from the
-        # FrontendArtifact at model-build time.
-        del term
+    for pad_id, pad in fixed_pads.items():
+        x = getattr(pad, "abs_x", None)
+        y = getattr(pad, "abs_y", None)
+        if x is None or y is None:
+            continue
+        out[pad_id] = V6Terminal(point=Point(x=float(x), y=float(y)))
+    # Preserve YAML-declared net-stub terminals without coordinates as a
+    # zero-anchored entry only when the M2 expansion did not already supply
+    # one. This keeps backwards-compatibility for callers that iterate the
+    # ``terminals`` section verbatim (e.g. visualisation regression tests).
+    for term_id in layout.terminals:
+        if term_id in out:
+            continue
         out[term_id] = V6Terminal(point=Point(x=0.0, y=0.0))
     return out
 
@@ -147,7 +165,7 @@ def compile_solver_ir(path: str | Path) -> SolverIR:
         project=project,
         board=_board_from_layout(layout),
         clearance=_clearance_from_layout(layout),
-        terminals=_fixed_terminals(layout),
+        terminals=_fixed_terminals(layout, artifact.fixed_terminals),
         edges=edges,
         uv_resolutions=uv_resolutions,
         junction_templates=junction_templates,

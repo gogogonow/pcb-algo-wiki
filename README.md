@@ -179,7 +179,7 @@ edges:
 
 ```
 .
-├── README.md                                       # 本文档（v6 入口 + M0/M1/M2/M3 运行说明）
+├── README.md                                       # 本文档（v6 入口 + M0/M1/M2/M3/M4 运行说明）
 ├── ALGORITHM-OVERVIEW.md                           # v6 算法总览
 ├── ITERATION-PLAN.md                               # v6 算法方案 + 6+1 期开发计划
 ├── pyproject.toml                                  # 可编辑安装 + console scripts
@@ -187,6 +187,7 @@ edges:
 ├── scripts/verify_m1.sh                            # M1 一键验证
 ├── scripts/verify_m2.sh                            # M2 一键验证（含 frontend_compile 烟测）
 ├── scripts/verify_m3.sh                            # M3 一键验证（含 solver_ir 烟测）
+├── scripts/verify_m4.sh                            # M4 一键验证（含 cpsat_solve 烟测）
 ├── tools/
 │   ├── topology_viz.py                             # 仓库根包装器
 │   └── schema_check.py                             # 仓库根包装器
@@ -211,7 +212,7 @@ edges:
 
 ---
 
-## 8. 本地运行（M0 / M1 / M2 / M3）
+## 8. 本地运行（M0 / M1 / M2 / M3 / M4）
 
 推荐先创建虚拟环境（部分 Linux 发行版对系统 Python 启用了 PEP 668）：
 
@@ -278,6 +279,19 @@ solver_ir rf_layout_simplified.yaml
 
 # 一键验证 M3 质量门（含 verify_m2 全部步骤 + solver_ir 烟测）
 ./scripts/verify_m3.sh
+
+# M4: CP-SAT 主求解器（端点 / junction / UV 变量 + locked length 约束）
+cpsat_solve rf_layout_simplified.yaml \
+    --svg-out out/PA_Module_Simplified.geom.svg \
+    --report-out out/PA_Module_Simplified.geom.json
+# 输出:
+#   out/PA_Module_Simplified.geom.svg  几何 SVG（板框 + footprint + 走线）
+#   out/PA_Module_Simplified.geom.json audit 报告（长度误差 + NoOverlap 列表）
+# 预期 stdout（典型）:
+# status=OPTIMAL wall=0.011s locked_within_tol=True no_overlap_pass=False max_len_err=0.500%
+
+# 一键验证 M4 质量门（含 verify_m3 全部步骤 + cpsat_solve 烟测）
+./scripts/verify_m4.sh
 ```
 
 M2 产物 `out/PA_Module_Simplified.frontend.json` 的 schema 与字段含义见
@@ -285,6 +299,9 @@ M2 产物 `out/PA_Module_Simplified.frontend.json` 的 schema 与字段含义见
 
 M3 产物 `out/PA_Module_Simplified.solver.json` 的 schema、UV/junction 表达式语义见
 [`concepts/uv-and-junction-templates.md`](./concepts/uv-and-junction-templates.md)。
+
+M4 CP-SAT 模型（变量 / 约束 / NoOverlap 取舍 / CLI 退出码）详见
+[`concepts/cpsat-model.md`](./concepts/cpsat-model.md)。
 
 ---
 

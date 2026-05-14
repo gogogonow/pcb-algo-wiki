@@ -1,3 +1,5 @@
-"""Post-processing package."""
+"""Post-processing package — M4 geometry SVG renderer."""
 
-__all__: list[str] = []
+from .geom_svg import render_geometry_svg
+
+__all__ = ["render_geometry_svg"]

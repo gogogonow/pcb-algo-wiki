@@ -1,19 +1,13 @@
 import importlib
 from pathlib import Path
 
-import pytest
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-@pytest.mark.parametrize(
-    "package_name",
-    ["solver", "postproc", "tools"],
-)
-def test_future_packages_are_importable_and_export_nothing(package_name: str) -> None:
-    module = importlib.import_module(package_name)
+def test_postproc_package_exports_m4_renderer() -> None:
+    module = importlib.import_module("postproc")
 
-    assert module.__all__ == []
+    assert "render_geometry_svg" in module.__all__
 
 
 def test_frontend_package_exports_m2_compiler() -> None:
@@ -37,11 +31,15 @@ def test_schema_package_exports_schema_models() -> None:
     assert module.__all__ == [
         "Board",
         "BranchConstraint",
+        "ComponentPlacement",
         "ExpressionTerm",
+        "GeometryIR",
+        "PinPlacement",
         "PinPositionExpr",
         "PinPositionKind",
         "Point",
         "RotationDomain",
+        "RoutePolyline",
         "RoutingClass",
         "SignedVKind",
         "SolverEdge",
@@ -64,4 +62,21 @@ def test_tools_package_resolves_to_src_package() -> None:
     assert (
         Path(module.__file__).resolve() == REPO_ROOT / "src" / "tools" / "__init__.py"
     )
+    # tools/__init__.py historically exported nothing; M4 added new CLI scripts
+    # imported directly via "tools.cpsat_solve" but the package __all__ stays
+    # empty by convention.
     assert module.__all__ == []
+
+
+def test_solver_package_exports_m4_api() -> None:
+    module = importlib.import_module("solver")
+
+    for name in (
+        "AuditReport",
+        "CpsatModel",
+        "audit_geometry",
+        "build_model",
+        "extract_geometry",
+        "solve_model",
+    ):
+        assert name in module.__all__

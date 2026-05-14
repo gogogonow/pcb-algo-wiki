@@ -12,6 +12,7 @@ dependencies = [
   "PyYAML>=6.0",
   "svgwrite>=1.4",
   "pytest>=8.0",
+  "ortools>=9.10",
 ]
 
 [project.scripts]
@@ -19,6 +20,7 @@ schema_check = "tools.schema_check:main"
 topology_viz = "tools.topology_viz:main"
 frontend_compile = "tools.frontend_compile:main"
 solver_ir = "tools.solver_ir:main"
+cpsat_solve = "tools.cpsat_solve:main"
 
 [project.optional-dependencies]
 dev = [
@@ -49,6 +51,7 @@ src = ["src", "tests", "tools"]
 "tools/topology_viz.py" = ["E402"]
 "tools/frontend_compile.py" = ["E402"]
 "tools/solver_ir.py" = ["E402"]
+"tools/cpsat_solve.py" = ["E402"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -58,3 +61,14 @@ warn_unused_configs = true
 [[tool.mypy.overrides]]
 module = ["topology", "topology.*"]
 ignore_errors = true
+
+[[tool.mypy.overrides]]
+# OR-Tools cp_model has incomplete type stubs (Add/NewIntVar/etc. are
+# dynamically generated). The solver package uses them extensively; defer
+# strict typing here until upstream stubs catch up.
+module = ["solver.cpsat", "solver.extract"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = ["ortools", "ortools.*"]
+ignore_missing_imports = true
