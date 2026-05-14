@@ -1,4 +1,18 @@
-# 功放 PCB 单层自动布局布线 —— 总体算法方案 v6
+# 功放 PCB 单层自动布局布线 —— 总体算法方案 v7
+
+> **v7 — 骨架优先三阶段路由器**（M10 系列交付）
+> Phase A 骨架路由 + Phase B UV 就近吸附 + Phase C flexible_path A*。
+> 设计稿：[`concepts/skeleton-first-router.md`](./concepts/skeleton-first-router.md)；迭代记录：[`ITERATION-PLAN.md`](./ITERATION-PLAN.md) §M10。
+>
+> v6（CP-SAT 联合 placement+geometry）作为对照实现保留为 `pcb_solve_v1`，源代码暂未删除以便回滚比对。
+>
+> 输入规范：v3.3（外部 EDA 接口）· 内部 IR：v6（继续沿用）· 求解器：v7 三阶段
+>
+> 以下章节保留 v6 的算法描述作为历史背景。当前默认入口（`pcb_solve` / `pcb_solve_v2`）实现的是 v7。
+
+---
+
+# 历史档案：功放 PCB 单层自动布局布线 —— 总体算法方案 v6
 
 > **基于真实案例 `rf_layout_simplified.yaml` (PA_Module_Simplified) 验证后的最终方案**
 >

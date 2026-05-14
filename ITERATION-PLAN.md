@@ -530,3 +530,20 @@ IC1 管脚间距约 0.5mm；相邻管脚的 300µm halo 在栅格上互相重叠
 | `scripts/verify_m7.sh` | ✅ 已写（M7 完成） | M7 质量门脚本 |
 | `docs/superpowers/specs/2026-05-14-m8-crossing-diagnostics-design.md` | ✅ 已写（M8 完成） | M8 走线交叉诊断 + Pad 渲染设计规格 |
 | `scripts/verify_m8.sh` | ✅ 已写（M8 完成） | M8 质量门脚本 |
+
+---
+
+## §M10 骨架优先三阶段路由器（v7-alt）
+
+继 M9 复盘后启动的架构级重构。详见 `concepts/skeleton-first-router.md`。
+
+| 子里程碑 | 状态 | 交付物 |
+|---|---|---|
+| M10a 架构脚手架 + 回归基线 | ✅ | `src/solver/v2/`、`scripts/verify_m10.sh`、PA snapshot |
+| M10b Phase A 节点 LP + 通道路由 | ✅ | `node_planner.py`、`channel_grid.py`、`skeleton_router.py` |
+| M10c 长度补偿 + Rip-up 主循环 | ✅ | `length_meander.py`、`rip_up.py`；PA 18→20/22 |
+| M10d Phase B UV 吸附 + A↔B 反馈 | ✅ | `uv_adhesion.py`、`freespace.py`；UV 9/9 |
+| M10e Phase C 接入 + 端到端编排 | ✅ | `orchestrator.py` Phase C 通过 `solver.astar_flex.route_flexible_paths` |
+| M10f 入口切换 + 文档同步 | ✅ | `pcb_solve` 默认指向 v2；`pcb_solve_v1` 保留别名；删除 v1 测试；本节 + `concepts/skeleton-first-router.md` |
+
+PA 案例当前结果：22 条 microstrip 中 20 条由 Phase A 路由成功，9/9 UV 吸附成功，0 条 flex 边，wall ≈ 2.6 s。剩余 2 条（`IC1_pin1_seg2_to_R2`、`C1_to_R1`）需要 A↔B 多轮反馈深度迭代，留作后续优化。
