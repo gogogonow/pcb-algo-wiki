@@ -26,7 +26,7 @@ import json
 import sys
 from pathlib import Path
 
-from postproc import apply_bends, render_geometry_svg, run_drc, run_lvs
+from postproc import apply_bends, apply_meanders, render_geometry_svg, run_drc, run_lvs
 from solver import (
     DEFAULT_NUM_WORKERS,
     DEFAULT_TIME_LIMIT_S,
@@ -102,6 +102,19 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="bend",
         action="store_false",
         help="Skip bend rendering — emit raw straight-segment polylines (M5 behaviour).",
+    )
+    p.add_argument(
+        "--meander",
+        dest="meander",
+        action="store_true",
+        default=False,
+        help="Apply U-shaped meander loops where target_length > actual routed length (M7).",
+    )
+    p.add_argument(
+        "--no-meander",
+        dest="meander",
+        action="store_false",
+        help="Skip meander insertion (default).",
     )
     p.add_argument(
         "--drc-out",
@@ -273,6 +286,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"svg -> {args.svg_out}")
 
     bend_report = None
+    meander_report = None
     drc_report = None
     lvs_report = None
     rendered_geom = geom
@@ -282,6 +296,14 @@ def main(argv: list[str] | None = None) -> int:
             f"bend: bended={len(bend_report.bended_edges)} "
             f"skip={len(bend_report.skipped_edges)} "
             f"warn={len(bend_report.warnings)}"
+        )
+
+    if args.meander:
+        rendered_geom, meander_report = apply_meanders(rendered_geom, result.ir)
+        print(
+            f"meander: applied={meander_report.total_meandered} "
+            f"skip={len(meander_report.skipped_edges)} "
+            f"warn={len(meander_report.warnings)}"
         )
 
     drc_report = run_drc(
@@ -339,6 +361,22 @@ def main(argv: list[str] | None = None) -> int:
                 "bended_edges": list(bend_report.bended_edges),
                 "skipped_edges": list(bend_report.skipped_edges),
                 "warnings": list(bend_report.warnings),
+            }
+        if meander_report is not None:
+            report["meander"] = {
+                "meandered_edges": [
+                    {
+                        "edge_id": r.edge_id,
+                        "original_length_mm": r.original_length_mm,
+                        "target_length_mm": r.target_length_mm,
+                        "achieved_length_mm": r.achieved_length_mm,
+                        "n_loops": r.n_loops,
+                        "loop_height_mm": r.loop_height_mm,
+                    }
+                    for r in meander_report.meandered_edges
+                ],
+                "skipped_edges": [r.edge_id for r in meander_report.skipped_edges],
+                "warnings": list(meander_report.warnings),
             }
         report["drc"] = _drc_dict(drc_report)
         report["lvs"] = _lvs_dict(lvs_report)

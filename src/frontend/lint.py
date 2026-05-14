@@ -1,8 +1,13 @@
-"""Schema lint pass (M2a).
+"""Schema lint pass (M2a) + semantic lint (M7).
 
 Walk the raw v3.3 dict, repair known typos, emit structured warnings for
 unknown enum values / unknown top-level fields, and return both the repaired
 dict and a ``LintReport`` snapshot.
+
+M7 adds ``lint_semantic()``:
+* ``pin_multi_net`` (Error): same terminal appears in edges with conflicting nets.
+* ``length_infeasible_short`` (Error): target_length < Manhattan(fixed endpoints).
+* ``meander_required`` (Warning): target_length > Manhattan(fixed endpoints).
 
 Design notes:
 
@@ -17,9 +22,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 import copy
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from .models import LintReport, LintRepair, LintWarning
+from .models import LintError, LintReport, LintRepair, LintWarning
+
+if TYPE_CHECKING:
+    from schema.v33 import V33Layout
+
+    from .models import ExpandedPad
 
 TYPO_FIX_TABLE: dict[str, str] = {
     "redius": "radius",
@@ -160,10 +170,125 @@ def _join(parent: str, child: str) -> str:
     return f"{parent}.{child}"
 
 
+# ---------------------------------------------------------------------------
+# M7: Semantic lint (runs on parsed V33Layout + expanded fixed terminals)
+# ---------------------------------------------------------------------------
+
+_LENGTH_TOL_MM = 0.5  # allowable error before flagging infeasible/meander
+
+
+def lint_semantic(
+    layout: "V33Layout",
+    fixed_terminals: "dict[str, ExpandedPad]",
+) -> tuple[list[LintError], list[LintWarning]]:
+    """Return (errors, warnings) from semantic cross-checks.
+
+    Rules:
+    - pin_multi_net (Error): same ``comp.PIN`` terminal in edges with different nets.
+    - length_infeasible_short (Error): target_length < Manhattan distance between
+      fixed endpoints by more than ``_LENGTH_TOL_MM``.
+    - meander_required (Warning): target_length > Manhattan distance (will need
+      serpentine routing to add extra length).
+    """
+    errors: list[LintError] = []
+    warnings: list[LintWarning] = []
+
+    comp_ids: set[str] = set(layout.components.keys())
+
+    # ------------------------------------------------------------------
+    # Rule: pin_multi_net
+    # ------------------------------------------------------------------
+    terminal_nets: dict[str, set[str]] = {}
+    terminal_edges: dict[str, list[str]] = {}
+    for edge_name, edge in layout.edges.items():
+        net = edge.net or ""
+        if not net:
+            continue
+        for conn in edge.connections:
+            if "." not in conn:
+                continue
+            comp_id, _pin = conn.split(".", 1)
+            if comp_id not in comp_ids:
+                continue  # node reference, not a component terminal
+            terminal_nets.setdefault(conn, set()).add(net)
+            terminal_edges.setdefault(conn, []).append(edge_name)
+
+    for terminal, nets in sorted(terminal_nets.items()):
+        if len(nets) > 1:
+            edges_involved = terminal_edges.get(terminal, [])
+            errors.append(
+                LintError(
+                    field_path=f"edges.*.connections[{terminal}]",
+                    code="pin_multi_net",
+                    message=(
+                        f"terminal {terminal!r} appears in {len(nets)} conflicting "
+                        f"nets {sorted(nets)!r} across edges {edges_involved!r}"
+                    ),
+                )
+            )
+
+    # ------------------------------------------------------------------
+    # Rule: length_infeasible_short / meander_required
+    # ------------------------------------------------------------------
+    for edge_name, edge in layout.edges.items():
+        if edge.constraint is None or edge.constraint.target_length is None:
+            continue
+        target = float(edge.constraint.target_length)
+
+        # Collect only connections that resolve to fixed pads with coordinates.
+        fixed_pads = []
+        for conn in edge.connections:
+            pad = fixed_terminals.get(conn)
+            if pad is None or pad.abs_x is None or pad.abs_y is None:
+                break  # non-fixed endpoint → skip this edge
+            fixed_pads.append(pad)
+        else:
+            # All connections are fixed pads; at least two needed.
+            if len(fixed_pads) < 2:
+                continue
+            # Use first ↔ last endpoint Manhattan distance.
+            p1, p2 = fixed_pads[0], fixed_pads[-1]
+            assert (
+                p1.abs_x is not None
+                and p1.abs_y is not None
+                and p2.abs_x is not None
+                and p2.abs_y is not None
+            )
+            manhattan = abs(p1.abs_x - p2.abs_x) + abs(p1.abs_y - p2.abs_y)
+
+            field = f"edges.{edge_name}.constraint.target_length"
+            if target < manhattan - _LENGTH_TOL_MM:
+                errors.append(
+                    LintError(
+                        field_path=field,
+                        code="length_infeasible_short",
+                        message=(
+                            f"target_length={target}mm < Manhattan={manhattan:.2f}mm "
+                            f"for fixed endpoints {edge.connections[0]!r} → "
+                            f"{edge.connections[-1]!r}; routing cannot achieve this length"
+                        ),
+                    )
+                )
+            elif target > manhattan + _LENGTH_TOL_MM:
+                warnings.append(
+                    LintWarning(
+                        field_path=field,
+                        code="meander_required",
+                        message=(
+                            f"target_length={target}mm > Manhattan={manhattan:.2f}mm; "
+                            f"meander will add {target - manhattan:.2f}mm via U-loops"
+                        ),
+                    )
+                )
+
+    return errors, warnings
+
+
 __all__ = [
     "KNOWN_BEND_STYLES",
     "KNOWN_LAUNCH_RULES",
     "KNOWN_PAD_SHAPES",
     "TYPO_FIX_TABLE",
     "lint_layout",
+    "lint_semantic",
 ]

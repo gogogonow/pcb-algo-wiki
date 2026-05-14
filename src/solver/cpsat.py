@@ -262,6 +262,19 @@ def build_model(
                         )
                     )
                     continue
+                if direct_um < target_um - tol_um:
+                    # target > Manhattan: meander routing required.  CP-SAT can
+                    # only produce straight-segment paths; meander insertion is
+                    # deferred to the M7 postproc pass (apply_meanders).
+                    skipped_locked_edges.append(
+                        (
+                            edge_id,
+                            f"fixed-endpoint Manhattan {direct_um/1000:.3f}mm < "
+                            f"target {edge.target_length:.3f}mm - tol; "
+                            f"meander routing required, length lock deferred to postproc",
+                        )
+                    )
+                    continue
             _add_locked_length_constraint(
                 model,
                 edge_id,
