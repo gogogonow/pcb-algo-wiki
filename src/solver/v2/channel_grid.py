@@ -234,18 +234,22 @@ def route_octilinear(
         return diag * (d_min // step) + ortho * ((d_max - d_min) // step)
 
     # State: (x, y, last_direction_idx_or_-1)
-    open_heap: list[tuple[int, int, int, int]] = []
+    # Heap entries carry the full state directly (x, y, dir_idx) so that
+    # multiple states at the same (x, y) with different incoming directions
+    # remain independently retrievable. The earlier implementation stored
+    # only (x, y) in the heap and recovered "the latest" state through a
+    # lookup table — which silently dropped expansions whenever a cell was
+    # reached twice from different directions and caused A* to give up
+    # well before exhausting the search space.
+    open_heap: list[tuple[int, int, int, int, int, int]] = []
     start_state = (sx, sy, -1)
     g_score: dict[tuple[int, int, int], int] = {start_state: 0}
     came_from: dict[tuple[int, int, int], tuple[int, int, int]] = {}
     counter = 0
-    heapq.heappush(open_heap, (h(sx, sy), counter, sx, sy))
+    heapq.heappush(open_heap, (h(sx, sy), counter, sx, sy, -1, 0))
 
     expansions = 0
-
-    # We need to track per-state to support turn penalty; emulate by re-keying.
     closed: set[tuple[int, int, int]] = set()
-    state_lookup: dict[tuple[int, int], tuple[int, int, int]] = {(sx, sy): start_state}
 
     while open_heap:
         if expansions >= grid.config.max_expansions:
@@ -257,10 +261,9 @@ def route_octilinear(
                 success=False,
                 failure_reason="max_expansions exhausted",
             )
-        _f, _ctr, x, y = heapq.heappop(open_heap)
-        # Recover state via best last-direction at (x, y).
-        state = state_lookup.get((x, y))
-        if state is None or state in closed:
+        _f, _ctr, x, y, last_dir, _g = heapq.heappop(open_heap)
+        state = (x, y, last_dir)
+        if state in closed:
             continue
         closed.add(state)
         expansions += 1
@@ -277,7 +280,7 @@ def route_octilinear(
             if grid.is_blocked(nx, ny, ignore_labels=ignore_labels):
                 continue
             tentative = cur_g + (cost_factor * step) // 100
-            if state[2] != -1 and state[2] != idx:
+            if last_dir != -1 and last_dir != idx:
                 tentative += grid.config.turn_penalty_um
             if max_length_um is not None and tentative > max_length_um:
                 continue
@@ -289,9 +292,10 @@ def route_octilinear(
                 continue
             g_score[new_state] = tentative
             came_from[new_state] = state
-            state_lookup[(nx, ny)] = new_state
             counter += 1
-            heapq.heappush(open_heap, (tentative + h(nx, ny), counter, nx, ny))
+            heapq.heappush(
+                open_heap, (tentative + h(nx, ny), counter, nx, ny, idx, tentative)
+            )
 
     return RoutedPath(
         edge_id=edge_id,

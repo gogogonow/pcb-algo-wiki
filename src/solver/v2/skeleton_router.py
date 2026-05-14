@@ -84,6 +84,19 @@ def _bucket_for_width(width: float | None) -> str:
 def _build_routing_plan(
     edges: Iterable[TriagedEdge], plan: NodePlan
 ) -> list[EdgeRoutingPlan]:
+    """Build the routing plan, sorted by priority (highest first).
+
+    Priority strategy (revised in M10c):
+        1. ``rf_constrained_locked`` and short (< 6 mm) — intra-cluster
+           connections must be routed first so they reserve dense space
+           before wide trunks.
+        2. ``rf_constrained_locked`` and long (>= 6 mm) — RF trunks.
+        3. Other ``rf_constrained_*`` (free / flex) — non-critical fillers.
+
+    Within each tier, edges are ordered by ``width × length`` descending
+    (wider edges still preferred since they need more room).
+    """
+
     out: list[EdgeRoutingPlan] = []
     for edge in edges:
         if not edge.routing_class.startswith("rf_constrained"):
@@ -95,8 +108,17 @@ def _build_routing_plan(
         bx, by = plan.endpoint_xy.get(b, (0.0, 0.0))
         manhattan = abs(ax - bx) + abs(ay - by)
         target = edge.target_length if edge.target_length else manhattan
+        is_locked = edge.routing_class == "rf_constrained_locked"
+        is_short = (edge.target_length or manhattan) < 6.0
+        # Tier base: short-locked = 1000, long-locked = 500, free = 100.
+        if is_locked and is_short:
+            tier_base = 1000.0
+        elif is_locked:
+            tier_base = 500.0
+        else:
+            tier_base = 100.0
         bucket_bonus = _WIDTH_GROUP_BONUS[_bucket_for_width(edge.width)]
-        priority = bucket_bonus + (edge.width or 0.5) * max(target, 1.0)
+        priority = tier_base + bucket_bonus + (edge.width or 0.5) * max(target, 1.0)
         out.append(
             EdgeRoutingPlan(
                 edge_id=edge.name,
@@ -202,17 +224,69 @@ def route_skeleton(
                     failure_reason="endpoint not resolved",
                 )
                 continue
+            # Determine which fixed components this edge touches, so we can
+            # ignore routes anchored on the same component (multiple segs
+            # fan out from IC1 pads and would otherwise mutually block).
+            ep_components = set()
+            for ep_name in (ep.start_endpoint, ep.goal_endpoint):
+                if "." in ep_name:
+                    ep_components.add(ep_name.split(".", 1)[0])
+            # Also ignore any fixed component whose bbox encloses an endpoint
+            # (e.g. a universal_node placed inside the IC1 footprint must be
+            # reachable, so the IC1 obstacle has to be transparent here).
+            for comp_name, comp in artifact.components.items():
+                if comp.placement_kind != "fixed" or comp.bbox is None:
+                    continue
+                bb = comp.bbox
+                for ep_name in (ep.start_endpoint, ep.goal_endpoint):
+                    xy = plan.endpoint_xy.get(ep_name)
+                    if xy is None:
+                        continue
+                    if bb.min_x <= xy[0] <= bb.max_x and bb.min_y <= xy[1] <= bb.max_y:
+                        ep_components.add(comp_name)
+                        break
             ignore = []
             for ep_name in (ep.start_endpoint, ep.goal_endpoint):
                 tag = pad_owners.get(ep_name)
                 if tag:
                     ignore.append(tag)
+            for comp_name in ep_components:
+                ignore.append(f"footprint:{comp_name}")
+            # Also ignore any sibling routes that share an endpoint OR share
+            # a fixed-component anchor with this edge (multiple microstrip
+            # segs fan out from the same IC pad / IC component).
+            for sibling_id, outcome in report.routes.items():
+                if sibling_id == ep.edge_id or not outcome.success:
+                    continue
+                sibling = next(
+                    (p for p in routes_plan if p.edge_id == sibling_id), None
+                )
+                if sibling is None:
+                    continue
+                sibling_eps = (sibling.start_endpoint, sibling.goal_endpoint)
+                shared_endpoint = (
+                    sibling.start_endpoint == ep.start_endpoint
+                    or sibling.goal_endpoint == ep.start_endpoint
+                    or sibling.start_endpoint == ep.goal_endpoint
+                    or sibling.goal_endpoint == ep.goal_endpoint
+                )
+                shared_component = any(
+                    "." in s and s.split(".", 1)[0] in ep_components
+                    for s in sibling_eps
+                )
+                if shared_endpoint or shared_component:
+                    ignore.append(f"route:{sibling_id}")
             ignore_tuple = tuple(ignore)
             start_um = (int(start[0] * MM_TO_UM), int(start[1] * MM_TO_UM))
             goal_um = (int(goal[0] * MM_TO_UM), int(goal[1] * MM_TO_UM))
             max_len_um: int | None = None
             if ep.target_length_mm is not None:
-                max_len_um = int(ep.target_length_mm * MM_TO_UM * 1.5)
+                # Cap upper-length to 1.3× target. The post-Phase-A meander
+                # pass extends under-length routes back up to target ±tol;
+                # over-length routes are harder to fix, so we constrain A*.
+                # Generous upper bound: A* often needs detour space; the
+                # post-Phase-A meander pass can pull under-length back up.
+                max_len_um = int(ep.target_length_mm * MM_TO_UM * 3.0)
             path = route_octilinear(
                 grid,
                 ep.edge_id,
@@ -246,7 +320,7 @@ def route_skeleton(
                 if attempts <= 2 and round_idx < rip_up_rounds:
                     # Rip up the most recently routed neighbour and retry.
                     seen_ripup += 1
-                    neighbour = _pick_neighbour_to_rip(report, ep)
+                    neighbour = _pick_neighbour_to_rip(report, ep, plan.endpoint_xy)
                     if neighbour:
                         grid.remove_routed(f"route:{neighbour}")
                         # Move ripped neighbour back to the pending queue.
@@ -291,14 +365,45 @@ def route_skeleton(
     return report
 
 
-def _pick_neighbour_to_rip(report: SkeletonReport, ep: EdgeRoutingPlan) -> str | None:
-    """Pick the most recently routed edge as a rip-up candidate."""
-    if not report.routes:
-        return None
+def _pick_neighbour_to_rip(
+    report: SkeletonReport,
+    ep: EdgeRoutingPlan,
+    plan_endpoints: dict[str, tuple[float, float]] | None = None,
+) -> str | None:
+    """Pick the route most likely to be blocking *ep*.
+
+    Strategy: among successfully routed edges, find the one whose polyline
+    has the most points inside the bounding box of the failed (start, goal)
+    pair (proxy for "blocks the corridor"). Falls back to the most recently
+    routed edge if no spatial overlap exists.
+    """
     successes = [r for r in report.routes.values() if r.success]
     if not successes:
         return None
-    return successes[-1].edge_id
+    if plan_endpoints is None:
+        return successes[-1].edge_id
+    start = plan_endpoints.get(ep.start_endpoint)
+    goal = plan_endpoints.get(ep.goal_endpoint)
+    if start is None or goal is None:
+        return successes[-1].edge_id
+    sx, sy = start[0] * MM_TO_UM, start[1] * MM_TO_UM
+    gx, gy = goal[0] * MM_TO_UM, goal[1] * MM_TO_UM
+    box = (
+        min(sx, gx) - 1000.0,
+        min(sy, gy) - 1000.0,
+        max(sx, gx) + 1000.0,
+        max(sy, gy) + 1000.0,
+    )
+    best: tuple[int, str] | None = None
+    for route in successes:
+        hits = sum(
+            1
+            for px, py in route.polyline_um
+            if box[0] <= px <= box[2] and box[1] <= py <= box[3]
+        )
+        if hits > 0 and (best is None or hits > best[0]):
+            best = (hits, route.edge_id)
+    return best[1] if best is not None else successes[-1].edge_id
 
 
 __all__ = [
