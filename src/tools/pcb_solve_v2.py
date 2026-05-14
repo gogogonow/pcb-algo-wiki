@@ -1,0 +1,191 @@
+"""``pcb_solve_v2`` CLI — M10 skeleton-first three-phase pipeline.
+
+Replacement for the v6 ``pcb_solve``: runs the new
+``Frontend → Phase A skeleton routing → Phase B UV adhesion → Phase C
+flex (no-op for PA) → Postproc`` flow and emits per-phase SVG/JSON
+artefacts so each stage can be reviewed independently.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+from output import render_full_layout
+from solver.v2 import OrchestratorV2Options, solve_layout_v2
+from solver.v2.orchestrator import OrchestratorV2Result, phase_summary
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="pcb_solve_v2",
+        description=(
+            "M10 skeleton-first router: routes microstrip skeleton first, "
+            "then snaps UV components to the routed endpoints."
+        ),
+    )
+    p.add_argument("layout", type=Path, help="Path to v3.3 YAML layout.")
+    p.add_argument(
+        "--out-dir",
+        type=Path,
+        default=Path("out"),
+        help="Directory for per-phase artefacts (default: ./out).",
+    )
+    p.add_argument(
+        "--clearance-mm",
+        type=float,
+        default=0.15,
+        help="Default routing clearance in mm (default 0.15).",
+    )
+    p.add_argument(
+        "--grid-step-um",
+        type=int,
+        default=200,
+        help="A* grid step in µm (default 200).",
+    )
+    p.add_argument(
+        "--rip-up-rounds",
+        type=int,
+        default=5,
+        help="Maximum rip-up & reroute rounds (default 5).",
+    )
+    p.add_argument(
+        "--svg-out",
+        type=Path,
+        default=None,
+        help="Optional final SVG path (default: <out_dir>/<project>.final.svg).",
+    )
+    p.add_argument(
+        "--report-out",
+        type=Path,
+        default=None,
+        help="Optional summary JSON path (default: <out_dir>/<project>.summary.json).",
+    )
+    p.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Skip per-edge progress printing.",
+    )
+    return p
+
+
+def _persist_phase_artefacts(
+    result: OrchestratorV2Result,
+    out_dir: Path,
+) -> dict[str, Path]:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    project = result.geometry.project
+    artefacts: dict[str, Path] = {}
+
+    summary = phase_summary(result)
+    summary_path = out_dir / f"{project}.summary.json"
+    summary_path.write_text(json.dumps(summary, indent=2, default=str))
+    artefacts["summary"] = summary_path
+
+    # Per-phase JSON (Phase A and B are the meaningful ones).
+    phase_a_path = out_dir / f"{project}.phaseA.json"
+    phase_a_path.write_text(
+        json.dumps(
+            {
+                "routes": [
+                    {
+                        "edge_id": r.edge_id,
+                        "polyline_um": r.polyline_um,
+                        "length_mm": r.length_mm,
+                        "target_mm": r.target_mm,
+                        "length_err_pct": r.length_err_pct,
+                        "success": r.success,
+                        "rip_up_round": r.rip_up_round,
+                        "failure_reason": r.failure_reason,
+                    }
+                    for r in result.phase_a.skeleton.routes.values()
+                ],
+                "rip_up_rounds": result.phase_a.skeleton.rip_up_rounds,
+                "wall_seconds": result.phase_a.wall_seconds,
+            },
+            indent=2,
+            default=str,
+        )
+    )
+    artefacts["phaseA"] = phase_a_path
+
+    phase_b_path = out_dir / f"{project}.phaseB.json"
+    phase_b_path.write_text(
+        json.dumps(
+            {
+                "placements": {
+                    name: {
+                        "anchor_x": p.anchor.x,
+                        "anchor_y": p.anchor.y,
+                        "rotation_deg": p.rotation_deg,
+                        "pads": [
+                            {"pin": pp.pin, "x": pp.point.x, "y": pp.point.y}
+                            for pp in p.pads
+                        ],
+                    }
+                    for name, p in result.phase_b.adhesion.placements.items()
+                },
+                "failed": result.phase_b.adhesion.failed,
+                "wall_seconds": result.phase_b.wall_seconds,
+            },
+            indent=2,
+            default=str,
+        )
+    )
+    artefacts["phaseB"] = phase_b_path
+
+    return artefacts
+
+
+def _emit_svg(result: OrchestratorV2Result, svg_path: Path) -> None:
+    svg_path.parent.mkdir(parents=True, exist_ok=True)
+    svg_text = render_full_layout(result.geometry)
+    svg_path.write_text(svg_text)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+
+    options = OrchestratorV2Options(
+        clearance_mm=args.clearance_mm,
+        grid_step_um=args.grid_step_um,
+        rip_up_rounds=args.rip_up_rounds,
+        out_dir=args.out_dir,
+    )
+    result = solve_layout_v2(args.layout, options=options)
+
+    artefacts = _persist_phase_artefacts(result, args.out_dir)
+
+    svg_path = args.svg_out or (args.out_dir / f"{result.geometry.project}.final.svg")
+    _emit_svg(result, svg_path)
+    artefacts["final_svg"] = svg_path
+
+    if args.report_out:
+        args.report_out.parent.mkdir(parents=True, exist_ok=True)
+        args.report_out.write_text(
+            json.dumps(phase_summary(result), indent=2, default=str)
+        )
+
+    routed_ok, routed_total = result.phase_a.skeleton.success_rate()
+    uv_placed = len(result.phase_b.adhesion.placements)
+    uv_total = len(result.artifact.uv_components)
+    wall_total = result.geometry.solve_wall_seconds
+    if not args.quiet:
+        print(
+            f"[v2] project={result.geometry.project} "
+            f"status={result.geometry.solve_status} "
+            f"phase_a={routed_ok}/{routed_total} "
+            f"uv={uv_placed}/{uv_total} "
+            f"wall={wall_total:.2f}s"
+        )
+        for name, path in artefacts.items():
+            print(f"  {name}: {path}")
+
+    return 0 if routed_ok > 0 else 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
