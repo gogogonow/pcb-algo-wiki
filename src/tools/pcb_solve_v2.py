@@ -1029,9 +1029,7 @@ def _apply_junction_templates(
                 theta = math.radians(float(branch.angle_deg))
                 bdx = ux * math.cos(theta) - uy * math.sin(theta)
                 bdy = ux * math.sin(theta) + uy * math.cos(theta)
-                token = (
-                    (branch_offset_u_tokens or {}).get(branch.edge_id, "").strip()
-                )
+                token = (branch_offset_u_tokens or {}).get(branch.edge_id, "").strip()
                 branch_edge = artifact.edges.get(branch.edge_id)
                 ref_w = (
                     float(ref_edge.width)
@@ -1106,10 +1104,7 @@ def _apply_junction_templates(
                         board_h,
                     )
                 branch_len = 1.0
-                if (
-                    branch_edge is not None
-                    and branch_edge.target_length is not None
-                ):
+                if branch_edge is not None and branch_edge.target_length is not None:
                     branch_len = max(float(branch_edge.target_length), 0.1)
                 target_xy = _clamp_board(
                     (
@@ -1120,9 +1115,7 @@ def _apply_junction_templates(
                     board_h,
                 )
                 positions[target] = target_xy
-                edge_endpoint_overrides.setdefault(branch.edge_id, {})[
-                    node_id
-                ] = anchor
+                edge_endpoint_overrides.setdefault(branch.edge_id, {})[node_id] = anchor
                 edge_endpoint_overrides.setdefault(branch.edge_id, {})[
                     target
                 ] = target_xy
