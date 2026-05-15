@@ -201,20 +201,6 @@ components:
       PIN_2: "DRIVER_OUT_L"
     properties:
       Value: 5.6pF
-  R2:
-    footprint_ref: "PKG_RF_TE"
-    placement:
-      type: parametric_uv
-      anchor_pin: PIN_1
-      reference_net: "PWR_NET"
-      origin:
-        offset_u: null
-        offset_v: auto
-      relative_rotation: null
-    pin_nets:
-      PIN_1: "PWR_NET"
-      PIN_2: "RF_NET_1"
-    properties: {}
   C3:
     footprint_ref: "PKG_CAP"
     placement:
@@ -288,16 +274,6 @@ components:
       PIN_1: "GND"
       PIN_2: "RF_NET_2"
     properties: {}
-  TP1:
-    footprint_ref: "PKG_TEST_POINT"
-    placement:
-      x: 5.0
-      y: 0
-      rotation: 0
-      is_floating: false
-    pin_nets:
-      PIN_1: "PWR_NET"
-    properties: {}
   TP2:
     footprint_ref: "PKG_TEST_POINT"
     placement:
@@ -347,11 +323,6 @@ nodes:    #承载微带线连接点信息
     connection_rules:    #连接规则，承载微带线或附带RLC间连接位置详情
       reference_edge: IC1_pin1_seg1    #连接点参考的微带线名称
       branches:
-      - edge: IC1_pin1_seg2    #IC1_pin1_seg2微带线
-        angle: 90    #90表示IC1_pin1_seg2微带线相对IC1_pin1_seg1微带线朝向向左转90度，例如IC1_pin1_seg1朝左，则IC1_pin1_seg2朝上
-        origin:
-          offset_u: -3.94    #-3.94表示IC1_pin1_seg2微带线与IC1_pin1_seg1前面边距离3.94mm
-          offset_v: edge_left    #edge_left表示IC1_pin1_seg2与IC1_pin1_seg1左边相连
       - edge: IC1_pin1_seg3
         angle: 90
         origin:
@@ -362,9 +333,6 @@ nodes:    #承载微带线连接点信息
         origin:
           offset_u: align_left    #align_left表示IC1_pin1_seg4与IC1_pin1_seg1左边对齐
           offset_v: edge_front    #edge_front表示IC1_pin1_seg4与IC1_pin1_seg1前向边相连
-  IC1_pin1_seg2_end_split_pad:
-    type: t_junction    #t_junction表示微带线一分二连接两个分叉的
-    description: 微带线末端一分二焊盘
   IC1_pin1_seg4_end_split_pad:
     type: t_junction
     description: 微带线末端一分二焊盘
@@ -404,8 +372,6 @@ nodes:    #承载微带线连接点信息
     type: t_combiner_junction
     description: 两个输出口汇聚的节点
 terminals:
-  TP1.PIN_1:
-    type: pad
   TP2.PIN_1:
     type: pad
   TP3.PIN_1:
@@ -438,27 +404,6 @@ edges:
     geometry:
       bend_style: mitered_45    #微带线可45度切角绕线
       launch_rule: normal
-  IC1_pin1_seg2:
-    type: microstrip
-    net: RF_NET_1
-    routing_class: rf_constrained
-    connections:
-    - IC1_pin1_seg1_universal_node
-    - IC1_pin1_seg2_end_split_pad
-    constraint:
-      width: 1.88
-      target_length: 1.29
-    geometry:
-      bend_style: mitered_45
-  IC1_pin1_seg2_to_R2:
-    type: microstrip
-    net: RF_NET_1
-    routing_class: rf_constrained
-    connections:
-    - IC1_pin1_seg2_end_split_pad
-    - R2.PIN_2
-    geometry:
-      bend_style: mitered_45
   IC1_pin1_seg3:
     type: microstrip
     net: RF_NET_1
@@ -530,18 +475,6 @@ edges:
       target_length: 20.0
     geometry:
       bend_style: mitered_45
-  R2_to_TP1:
-    type: microstrip
-    net: PWR_NET
-    routing_class: rf_constrained
-    connections:
-    - R2.PIN_1
-    - TP1.PIN_1
-    constraint:
-      width: 0.58
-      target_length: 10.0
-    geometry:
-      bend_style: curved
   IC1_pin2_seg1:
     type: microstrip
     net: RF_NET_2

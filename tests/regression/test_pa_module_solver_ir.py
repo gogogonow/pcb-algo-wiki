@@ -14,15 +14,14 @@ def test_pa_module_solver_ir_full_unique() -> None:
     ir = compile_solver_ir(YAML_PATH)
     assert ir.project == "PA_Module_Simplified"
     summary = host_match_summary(ir)
-    assert summary["unique"] == 7
+    # R2 removed; was 7 unique, now 6
+    assert summary["unique"] == 6
     assert summary["ambiguous"] == 0
     assert summary["missing"] == 2
 
 
 def test_pa_module_specific_uv_hosts() -> None:
     ir = compile_solver_ir(YAML_PATH)
-    # R2 (reference_net=PWR_NET) should match the only PWR_NET microstrip.
-    assert ir.uv_resolutions["R2"].host_edge_id == "R2_to_TP1"
     # C6 has anchor_pin=PIN_2, reference_net=RF_NET_2.
     assert ir.uv_resolutions["C6"].anchor_pin == "PIN_2"
     assert ir.uv_resolutions["C6"].reference_net == "RF_NET_2"
@@ -36,7 +35,8 @@ def test_pa_module_universal_junctions() -> None:
         "IC1_pin2_seg1_universal_node",
     }
     total_branches = sum(len(t.branches) for t in ir.junction_templates.values())
-    assert total_branches == 6  # 3 branches per junction in the real YAML
+    # IC1_pin1_seg2 branch removed; pin1 node now has 2 branches, pin2 node has 3
+    assert total_branches == 5
 
     # Sanity-check axis-aligned trig: angle=0/90/-90 produce exact integer cos/sin.
     for tpl in ir.junction_templates.values():

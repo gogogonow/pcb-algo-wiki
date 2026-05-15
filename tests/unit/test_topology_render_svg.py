@@ -13,7 +13,7 @@ def test_real_case_render_includes_expected_labels() -> None:
     svg = topology.render_topology_svg(graph)
     labels = _text_labels(svg)
 
-    assert {"IC1", "C1", "R2", "TP1", "IC1_pin1_seg1_universal_node"} <= labels
+    assert {"IC1", "C1", "R3", "IC1_pin1_seg1_universal_node"} <= labels
 
 
 def test_render_adds_distinct_groups_and_classes() -> None:
@@ -53,7 +53,7 @@ def test_real_case_render_includes_all_edges_in_deterministic_order() -> None:
     root = ET.fromstring(first_svg)
     edge_elements = _elements_with_class(root, "topology-edge")
 
-    assert len(edge_elements) == 22
+    assert len(edge_elements) == 19
     assert [element.attrib["data-edge-id"] for element in edge_elements] == sorted(
         edge.id for edge in graph.edges
     )
@@ -91,9 +91,9 @@ def test_real_case_single_pin_component_terminals_anchor_to_component_pin() -> N
     graph = load_topology_graph(REAL_CASE_PATH)
     root = ET.fromstring(topology.render_topology_svg(graph))
 
-    assert _edge_endpoint_coordinates(root, graph, "R2_to_TP1", "TP1.PIN_1") == (
-        "142.0",
-        "80.0",
+    assert _edge_endpoint_coordinates(root, graph, "PWR_VDD_bus", "TP2.PIN_1") == (
+        "282.0",
+        "480.0",
     )
     assert _edge_endpoint_coordinates(root, graph, "RF_INPUT_to_IC1", "TP3.PIN_1") == (
         "422.0",

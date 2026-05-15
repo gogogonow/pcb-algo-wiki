@@ -22,7 +22,7 @@ def test_main_writes_svg_to_explicit_output_path_and_creates_parent_dir(
     svg = output_path.read_text(encoding="utf-8")
     assert "<svg" in svg
     assert "IC1" in svg
-    assert "R2" in svg
+    assert "R3" in svg
 
 
 def test_main_defaults_real_case_output_path_from_project_name(

@@ -10,11 +10,11 @@ REAL_CASE_PATH = Path(__file__).resolve().parents[2] / "rf_layout_simplified.yam
 def test_real_case_extracts_expected_entity_counts() -> None:
     graph = load_topology_graph(REAL_CASE_PATH)
 
-    assert len(graph.fixed_components) == 6
-    assert len(graph.parametric_uv_components) == 9
-    assert len(graph.nodes) == 11
-    assert len(graph.terminals) == 10
-    assert len(graph.edges) == 22
+    assert len(graph.fixed_components) == 5
+    assert len(graph.parametric_uv_components) == 8
+    assert len(graph.nodes) == 10
+    assert len(graph.terminals) == 9
+    assert len(graph.edges) == 19
 
 
 def test_real_case_preserves_named_entities_and_classification() -> None:
@@ -22,11 +22,10 @@ def test_real_case_preserves_named_entities_and_classification() -> None:
 
     assert graph.get_component("IC1").placement_kind == "fixed"
     assert graph.get_component("C1").placement_kind == "parametric_uv"
-    assert graph.get_component("R2").placement_kind == "parametric_uv"
-    assert graph.get_component("TP1").placement_kind == "fixed"
+    assert graph.get_component("R3").placement_kind == "parametric_uv"
 
     assert graph.get_node("IC1_pin1_seg1_universal_node").kind == "universal_junction"
-    assert graph.get_node("IC1_pin1_seg2_end_split_pad").kind == "t_junction"
+    assert graph.get_node("IC1_pin1_seg4_end_split_pad").kind == "t_junction"
     assert graph.get_node("IC1_pin1_seg5_start_combiner").kind == "t_combiner_junction"
 
     assert graph.get_edge("IC1_pin1_seg1").kind == "microstrip"
@@ -36,7 +35,6 @@ def test_real_case_preserves_t_junction_classification() -> None:
     graph = load_topology_graph(REAL_CASE_PATH)
 
     assert {node.id for node in graph.nodes if node.kind == "t_junction"} == {
-        "IC1_pin1_seg2_end_split_pad",
         "IC1_pin1_seg3_end_split_pad",
         "IC1_pin1_seg4_end_split_pad",
         "IC1_pin2_seg2_end_split_pad",
@@ -51,9 +49,9 @@ def test_real_case_preserves_microstrip_connection_names() -> None:
     assert edge.source == "IC1.PIN_1"
     assert edge.target == "IC1_pin1_seg1_universal_node"
 
-    branch_edge = graph.get_edge("IC1_pin1_seg2_to_R2")
-    assert branch_edge.source == "IC1_pin1_seg2_end_split_pad"
-    assert branch_edge.target == "R2.PIN_2"
+    branch_edge = graph.get_edge("IC1_pin1_seg3_to_C5")
+    assert branch_edge.source == "IC1_pin1_seg3_end_split_pad"
+    assert branch_edge.target == "C5.PIN_1"
 
 
 def test_real_case_resolves_every_edge_endpoint() -> None:
@@ -65,9 +63,9 @@ def test_real_case_resolves_every_edge_endpoint() -> None:
         for endpoint in (edge.source, edge.target)
     }
 
-    assert resolved["R2.PIN_2"].entity_kind == "component"
-    assert resolved["R2.PIN_2"].entity_id == "R2"
-    assert resolved["R2.PIN_2"].pin_id == "PIN_2"
+    assert resolved["C2.PIN_1"].entity_kind == "component"
+    assert resolved["C2.PIN_1"].entity_id == "C2"
+    assert resolved["C2.PIN_1"].pin_id == "PIN_1"
 
     assert resolved["IC1.PIN_1"].entity_kind == "terminal"
     assert resolved["IC1.PIN_1"].entity_id == "IC1.PIN_1"
@@ -84,8 +82,8 @@ def test_real_case_resolves_every_edge_endpoint() -> None:
 def test_resolve_endpoint_rejects_unknown_component_pin() -> None:
     graph = load_topology_graph(REAL_CASE_PATH)
 
-    with pytest.raises(KeyError, match="R2.PIN_999"):
-        graph.resolve_endpoint("R2.PIN_999")
+    with pytest.raises(KeyError, match="C2.PIN_999"):
+        graph.resolve_endpoint("C2.PIN_999")
 
 
 def test_extract_topology_graph_rejects_non_mapping_root() -> None:

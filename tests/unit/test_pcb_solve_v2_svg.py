@@ -110,15 +110,12 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     payload = json.loads(pre_a_json.read_text(encoding="utf-8"))
     assert "yaml_geometric_constraints_applied" in payload
     assert any(
-        item.get("edge_id") == "IC1_pin1_seg2"
+        item.get("edge_id") == "IC1_pin1_seg3"
         and item.get("mode") == "strict_junction_rule"
         for item in payload["yaml_geometric_constraints_applied"]
     )
 
     by_edge = {edge["edge_id"]: edge for edge in payload["edges"]}
-    pin1_seg2 = by_edge["IC1_pin1_seg2"]["endpoint_positions_mm"][
-        "IC1_pin1_seg2_end_split_pad"
-    ]
     pin1_seg3 = by_edge["IC1_pin1_seg3"]["endpoint_positions_mm"][
         "IC1_pin1_seg3_end_split_pad"
     ]
@@ -128,7 +125,6 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     pin2_seg3 = by_edge["IC1_pin2_seg3"]["endpoint_positions_mm"][
         "IC1_pin2_seg3_end_split_pad"
     ]
-    assert abs(pin1_seg2["y"] - pin1_seg3["y"]) > 2.0
     assert abs(pin2_seg2["y"] - pin2_seg3["y"]) > 1.5
 
     # IC1 PIN_1 / PIN_2 local_orientation are -90 in YAML, so first segments
@@ -144,23 +140,16 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     assert pin1_node["y"] < pin1["y"]
     assert pin2_node["y"] < pin2["y"]
 
-    # IC1 PIN_1 seg2 branch should be interpreted relative to seg1 direction.
-    seg2_render = by_edge["IC1_pin1_seg2"]["render_endpoint_positions_mm"]
-    seg2_start = seg2_render["IC1_pin1_seg1_universal_node"]
-    seg2_end = seg2_render["IC1_pin1_seg2_end_split_pad"]
+    # IC1 PIN_1 seg3 branch should be interpreted relative to seg1 direction.
     seg3_render = by_edge["IC1_pin1_seg3"]["render_endpoint_positions_mm"]
     seg3_start = seg3_render["IC1_pin1_seg1_universal_node"]
     seg3_end = seg3_render["IC1_pin1_seg3_end_split_pad"]
     seg1_w = float(by_edge["IC1_pin1_seg1"]["width"])
-    # offset_v=edge_left and offset_u=-3.94 on a downward reference edge:
+    # offset_v=edge_left and offset_u=-1.6 on a downward reference edge:
     # launch point shifts +x (left edge) and +y (back from front edge).
-    assert seg2_start["x"] - pin1_node["x"] == pytest.approx(seg1_w / 2.0, abs=0.15)
-    assert seg2_start["y"] - pin1_node["y"] == pytest.approx(3.94, abs=0.2)
     assert seg3_start["x"] - pin1_node["x"] == pytest.approx(seg1_w / 2.0, abs=0.15)
     assert seg3_start["y"] - pin1_node["y"] == pytest.approx(1.6, abs=0.2)
-    # angle=90 means seg2 runs to the right from its launch point.
-    assert seg2_end["x"] > seg2_start["x"]
-    assert seg2_end["y"] == pytest.approx(seg2_start["y"], abs=0.2)
+    # angle=90 means seg3 runs to the right from its launch point.
     assert seg3_end["x"] > seg3_start["x"]
     assert seg3_end["y"] == pytest.approx(seg3_start["y"], abs=0.2)
 
@@ -178,14 +167,6 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     assert seg4_end["x"] == pytest.approx(seg4_start["x"], abs=0.2)
     assert seg4_end["y"] < seg4_start["y"]
 
-    # PreA prioritizes electrical connectivity: free branch to R2 PIN_2 should
-    # land on seg2 split endpoint. If package geometry cannot fully satisfy all
-    # pin targets, render should show a thin assist link.
-    seg2_to_r2 = by_edge["IC1_pin1_seg2_to_R2"]["render_endpoint_positions_mm"]
-    split_xy = seg2_to_r2["IC1_pin1_seg2_end_split_pad"]
-    r2_pin2_xy = seg2_to_r2["R2.PIN_2"]
-    assert r2_pin2_xy["x"] == pytest.approx(split_xy["x"], abs=1e-6)
-    assert r2_pin2_xy["y"] == pytest.approx(split_xy["y"], abs=1e-6)
     c1r1_to_combiner = by_edge["C1R1_to_combiner"]["render_endpoint_positions_mm"]
     c1r1_pin2 = c1r1_to_combiner["C1.PIN_2,R1.PIN_2"]
     seg5_start = c1r1_to_combiner["IC1_pin1_seg5_start_combiner"]
@@ -239,8 +220,6 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
         < 0.0
     )
     assert not seg4_to_seg6_cross
-    assert ">p1_seg2<" in svg
-    assert "p1_seg2-&gt;R2" not in svg
     assert 'class="prea-edge-bridge"' in svg
     assert 'class="prea-edge-bridge" data-edge-id="RF_INPUT_to_IC1"' in svg
     assert 'class="prea-edge-bridge" data-edge-id="PWR_VDD_bus"' in svg
@@ -254,7 +233,6 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     assert 'data-endpoint="C1.PIN_2"' not in svg
     assert 'data-endpoint="R1.PIN_1"' not in svg
     assert 'data-endpoint="R1.PIN_2"' not in svg
-    assert by_edge["IC1_pin1_seg2_to_R2"]["edge_short"] == "p1_seg2->R2"
 
     phase_a_svg = scratch_dir / "PA_Module_Simplified.phaseA.svg"
     phase_a_text = phase_a_svg.read_text(encoding="utf-8")
