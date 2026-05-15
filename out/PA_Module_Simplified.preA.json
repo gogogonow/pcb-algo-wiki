@@ -17,97 +17,23 @@
       "endpoint_positions_mm": {
         "IC1.PIN_1": {
           "x": 14.98,
-          "y": 45.0,
+          "y": 30.0,
           "kind": "fixed_pin"
         },
         "IC1_pin1_seg1_universal_node": {
           "x": 14.98,
-          "y": 39.25,
+          "y": 24.25,
           "kind": "node"
         }
       },
       "render_endpoint_positions_mm": {
         "IC1.PIN_1": {
           "x": 14.98,
-          "y": 45.0
+          "y": 30.0
         },
         "IC1_pin1_seg1_universal_node": {
           "x": 14.98,
-          "y": 39.25
-        }
-      }
-    },
-    {
-      "edge_id": "IC1_pin1_seg2",
-      "edge_short": "p1_seg2",
-      "routing_class": "rf_constrained_locked",
-      "connections": [
-        "IC1_pin1_seg1_universal_node",
-        "IC1_pin1_seg2_end_split_pad"
-      ],
-      "connections_short": [
-        "p1_seg1_u",
-        "p1_seg2_sp"
-      ],
-      "width": 1.88,
-      "target_length": 1.29,
-      "endpoint_positions_mm": {
-        "IC1_pin1_seg1_universal_node": {
-          "x": 14.98,
-          "y": 39.25,
-          "kind": "node"
-        },
-        "IC1_pin1_seg2_end_split_pad": {
-          "x": 15.0,
-          "y": 1.4,
-          "kind": "node"
-        }
-      },
-      "render_endpoint_positions_mm": {
-        "IC1_pin1_seg1_universal_node": {
-          "x": 16.78,
-          "y": 43.19
-        },
-        "IC1_pin1_seg2_end_split_pad": {
-          "x": 18.07,
-          "y": 43.19
-        }
-      }
-    },
-    {
-      "edge_id": "IC1_pin1_seg2_to_R2",
-      "edge_short": "p1_seg2->R2",
-      "routing_class": "rf_constrained_free",
-      "connections": [
-        "IC1_pin1_seg2_end_split_pad",
-        "R2.PIN_2"
-      ],
-      "connections_short": [
-        "p1_seg2_sp",
-        "R2.2"
-      ],
-      "width": null,
-      "target_length": null,
-      "endpoint_positions_mm": {
-        "IC1_pin1_seg2_end_split_pad": {
-          "x": 15.0,
-          "y": 1.4,
-          "kind": "node"
-        },
-        "R2.PIN_2": {
-          "x": 15.0,
-          "y": 1.4,
-          "kind": "virtual_rlc_pin"
-        }
-      },
-      "render_endpoint_positions_mm": {
-        "IC1_pin1_seg2_end_split_pad": {
-          "x": 15.0,
-          "y": 1.4
-        },
-        "R2.PIN_2": {
-          "x": 15.0,
-          "y": 1.4
+          "y": 24.25
         }
       }
     },
@@ -128,23 +54,23 @@
       "endpoint_positions_mm": {
         "IC1_pin1_seg1_universal_node": {
           "x": 14.98,
-          "y": 39.25,
+          "y": 24.25,
           "kind": "node"
         },
         "IC1_pin1_seg3_end_split_pad": {
           "x": 18.25,
-          "y": 40.85,
+          "y": 25.85,
           "kind": "other"
         }
       },
       "render_endpoint_positions_mm": {
         "IC1_pin1_seg1_universal_node": {
           "x": 16.78,
-          "y": 40.85
+          "y": 25.85
         },
         "IC1_pin1_seg3_end_split_pad": {
           "x": 18.25,
-          "y": 40.85
+          "y": 25.85
         }
       }
     },
@@ -165,23 +91,23 @@
       "endpoint_positions_mm": {
         "IC1_pin1_seg3_end_split_pad": {
           "x": 18.25,
-          "y": 40.85,
+          "y": 25.85,
           "kind": "other"
         },
         "C5.PIN_1": {
           "x": 18.25,
-          "y": 40.85,
+          "y": 25.85,
           "kind": "virtual_rlc_pin"
         }
       },
       "render_endpoint_positions_mm": {
         "IC1_pin1_seg3_end_split_pad": {
           "x": 18.25,
-          "y": 40.85
+          "y": 25.85
         },
         "C5.PIN_1": {
           "x": 18.25,
-          "y": 40.85
+          "y": 25.85
         }
       }
     },
@@ -202,23 +128,23 @@
       "endpoint_positions_mm": {
         "IC1_pin1_seg1_universal_node": {
           "x": 14.98,
-          "y": 39.25,
+          "y": 24.25,
           "kind": "node"
         },
         "IC1_pin1_seg4_end_split_pad": {
           "x": 15.98,
-          "y": 34.58,
+          "y": 19.58,
           "kind": "node"
         }
       },
       "render_endpoint_positions_mm": {
         "IC1_pin1_seg1_universal_node": {
           "x": 15.98,
-          "y": 39.25
+          "y": 24.25
         },
         "IC1_pin1_seg4_end_split_pad": {
           "x": 15.98,
-          "y": 34.58
+          "y": 19.58
         }
       }
     },
@@ -239,23 +165,23 @@
       "endpoint_positions_mm": {
         "IC1_pin1_seg4_end_split_pad": {
           "x": 15.98,
-          "y": 34.58,
+          "y": 19.58,
           "kind": "node"
         },
         "C1.PIN_1,R1.PIN_1": {
           "x": 15.98,
-          "y": 34.58,
+          "y": 19.58,
           "kind": "virtual_rlc_pin"
         }
       },
       "render_endpoint_positions_mm": {
         "IC1_pin1_seg4_end_split_pad": {
           "x": 15.98,
-          "y": 34.58
+          "y": 19.58
         },
         "C1.PIN_1,R1.PIN_1": {
           "x": 15.98,
-          "y": 34.58
+          "y": 19.58
         }
       }
     },
@@ -276,23 +202,23 @@
       "endpoint_positions_mm": {
         "C1.PIN_2,R1.PIN_2": {
           "x": 17.395000000000003,
-          "y": 34.58,
+          "y": 19.58,
           "kind": "virtual_rlc_pin"
         },
         "IC1_pin1_seg5_start_combiner": {
           "x": 17.395000000000003,
-          "y": 34.58,
+          "y": 19.58,
           "kind": "node"
         }
       },
       "render_endpoint_positions_mm": {
         "C1.PIN_2,R1.PIN_2": {
           "x": 17.395000000000003,
-          "y": 34.58
+          "y": 19.58
         },
         "IC1_pin1_seg5_start_combiner": {
           "x": 17.395000000000003,
-          "y": 34.58
+          "y": 19.58
         }
       }
     },
@@ -313,23 +239,23 @@
       "endpoint_positions_mm": {
         "IC1_pin1_seg5_start_combiner": {
           "x": 17.395000000000003,
-          "y": 34.58,
+          "y": 19.58,
           "kind": "node"
         },
         "C2.PIN_1": {
-          "x": 19.53644542562967,
-          "y": 30.373741390612103,
+          "x": 20.550829535029862,
+          "y": 16.0701367625172,
           "kind": "virtual_rlc_pin"
         }
       },
       "render_endpoint_positions_mm": {
         "IC1_pin1_seg5_start_combiner": {
           "x": 17.395000000000003,
-          "y": 34.58
+          "y": 19.58
         },
         "C2.PIN_1": {
-          "x": 19.53644542562967,
-          "y": 30.373741390612103
+          "x": 20.550829535029862,
+          "y": 16.0701367625172
         }
       }
     },
@@ -349,8 +275,8 @@
       "target_length": 20.0,
       "endpoint_positions_mm": {
         "C2.PIN_2": {
-          "x": 19.53644542562967,
-          "y": 29.003741390612102,
+          "x": 20.550829535029862,
+          "y": 14.7001367625172,
           "kind": "virtual_rlc_pin"
         },
         "TP4.PIN_1": {
@@ -361,48 +287,11 @@
       },
       "render_endpoint_positions_mm": {
         "C2.PIN_2": {
-          "x": 19.53644542562967,
-          "y": 29.003741390612102
+          "x": 20.550829535029862,
+          "y": 14.7001367625172
         },
         "TP4.PIN_1": {
           "x": 35.0,
-          "y": 0.0
-        }
-      }
-    },
-    {
-      "edge_id": "R2_to_TP1",
-      "edge_short": "R2->TP1",
-      "routing_class": "rf_constrained_locked",
-      "connections": [
-        "R2.PIN_1",
-        "TP1.PIN_1"
-      ],
-      "connections_short": [
-        "R2.1",
-        "TP1.1"
-      ],
-      "width": 0.58,
-      "target_length": 10.0,
-      "endpoint_positions_mm": {
-        "R2.PIN_1": {
-          "x": 15.0,
-          "y": 0.0,
-          "kind": "virtual_rlc_pin"
-        },
-        "TP1.PIN_1": {
-          "x": 5.0,
-          "y": 0.0,
-          "kind": "fixed_pin"
-        }
-      },
-      "render_endpoint_positions_mm": {
-        "R2.PIN_1": {
-          "x": 15.0,
-          "y": 0.0
-        },
-        "TP1.PIN_1": {
-          "x": 5.0,
           "y": 0.0
         }
       }
@@ -424,23 +313,23 @@
       "endpoint_positions_mm": {
         "IC1.PIN_2": {
           "x": 9.219999999999999,
-          "y": 45.0,
+          "y": 30.0,
           "kind": "fixed_pin"
         },
         "IC1_pin2_seg1_universal_node": {
           "x": 9.219999999999999,
-          "y": 39.25,
+          "y": 24.25,
           "kind": "node"
         }
       },
       "render_endpoint_positions_mm": {
         "IC1.PIN_2": {
           "x": 9.219999999999999,
-          "y": 45.0
+          "y": 30.0
         },
         "IC1_pin2_seg1_universal_node": {
           "x": 9.219999999999999,
-          "y": 39.25
+          "y": 24.25
         }
       }
     },
@@ -461,23 +350,23 @@
       "endpoint_positions_mm": {
         "IC1_pin2_seg1_universal_node": {
           "x": 9.219999999999999,
-          "y": 39.25,
+          "y": 24.25,
           "kind": "node"
         },
         "IC1_pin2_seg2_end_split_pad": {
           "x": 5.979999999999999,
-          "y": 42.86,
+          "y": 27.86,
           "kind": "node"
         }
       },
       "render_endpoint_positions_mm": {
         "IC1_pin2_seg1_universal_node": {
           "x": 7.269999999999999,
-          "y": 42.86
+          "y": 27.86
         },
         "IC1_pin2_seg2_end_split_pad": {
           "x": 5.979999999999999,
-          "y": 42.86
+          "y": 27.86
         }
       }
     },
@@ -498,23 +387,23 @@
       "endpoint_positions_mm": {
         "IC1_pin2_seg2_end_split_pad": {
           "x": 5.979999999999999,
-          "y": 42.86,
+          "y": 27.86,
           "kind": "node"
         },
         "C3.PIN_1": {
           "x": 5.979999999999999,
-          "y": 42.86,
+          "y": 27.86,
           "kind": "virtual_rlc_pin"
         }
       },
       "render_endpoint_positions_mm": {
         "IC1_pin2_seg2_end_split_pad": {
           "x": 5.979999999999999,
-          "y": 42.86
+          "y": 27.86
         },
         "C3.PIN_1": {
           "x": 5.979999999999999,
-          "y": 42.86
+          "y": 27.86
         }
       }
     },
@@ -535,23 +424,23 @@
       "endpoint_positions_mm": {
         "IC1_pin2_seg1_universal_node": {
           "x": 9.219999999999999,
-          "y": 39.25,
+          "y": 24.25,
           "kind": "node"
         },
         "IC1_pin2_seg3_end_split_pad": {
           "x": 5.799999999999999,
-          "y": 40.74,
+          "y": 25.74,
           "kind": "node"
         }
       },
       "render_endpoint_positions_mm": {
         "IC1_pin2_seg1_universal_node": {
           "x": 7.269999999999999,
-          "y": 40.74
+          "y": 25.74
         },
         "IC1_pin2_seg3_end_split_pad": {
           "x": 5.799999999999999,
-          "y": 40.74
+          "y": 25.74
         }
       }
     },
@@ -572,23 +461,23 @@
       "endpoint_positions_mm": {
         "IC1_pin2_seg3_end_split_pad": {
           "x": 5.799999999999999,
-          "y": 40.74,
+          "y": 25.74,
           "kind": "node"
         },
         "C6.PIN_2": {
           "x": 5.799999999999999,
-          "y": 40.74,
+          "y": 25.74,
           "kind": "virtual_rlc_pin"
         }
       },
       "render_endpoint_positions_mm": {
         "IC1_pin2_seg3_end_split_pad": {
           "x": 5.799999999999999,
-          "y": 40.74
+          "y": 25.74
         },
         "C6.PIN_2": {
           "x": 5.799999999999999,
-          "y": 40.74
+          "y": 25.74
         }
       }
     },
@@ -609,23 +498,23 @@
       "endpoint_positions_mm": {
         "IC1_pin2_seg1_universal_node": {
           "x": 9.219999999999999,
-          "y": 39.25,
+          "y": 24.25,
           "kind": "node"
         },
         "R3.PIN_1": {
           "x": 9.219999999999999,
-          "y": 34.58,
+          "y": 19.58,
           "kind": "virtual_rlc_pin"
         }
       },
       "render_endpoint_positions_mm": {
         "IC1_pin2_seg1_universal_node": {
           "x": 9.219999999999999,
-          "y": 39.25
+          "y": 24.25
         },
         "R3.PIN_1": {
           "x": 9.219999999999999,
-          "y": 34.58
+          "y": 19.58
         }
       }
     },
@@ -646,23 +535,23 @@
       "endpoint_positions_mm": {
         "R3.PIN_2": {
           "x": 10.68,
-          "y": 34.58,
+          "y": 19.58,
           "kind": "virtual_rlc_pin"
         },
         "IC1_pin2_seg5_start_combiner": {
           "x": 10.68,
-          "y": 34.58,
+          "y": 19.58,
           "kind": "node"
         }
       },
       "render_endpoint_positions_mm": {
         "R3.PIN_2": {
           "x": 10.68,
-          "y": 34.58
+          "y": 19.58
         },
         "IC1_pin2_seg5_start_combiner": {
           "x": 10.68,
-          "y": 34.58
+          "y": 19.58
         }
       }
     },
@@ -683,23 +572,23 @@
       "endpoint_positions_mm": {
         "IC1_pin2_seg5_start_combiner": {
           "x": 10.68,
-          "y": 34.58,
+          "y": 19.58,
           "kind": "node"
         },
         "C4.PIN_1": {
-          "x": 12.75347161964746,
-          "y": 30.440239687793923,
+          "x": 13.74764064226533,
+          "y": 16.11207830395178,
           "kind": "virtual_rlc_pin"
         }
       },
       "render_endpoint_positions_mm": {
         "IC1_pin2_seg5_start_combiner": {
           "x": 10.68,
-          "y": 34.58
+          "y": 19.58
         },
         "C4.PIN_1": {
-          "x": 12.75347161964746,
-          "y": 30.440239687793923
+          "x": 13.74764064226533,
+          "y": 16.11207830395178
         }
       }
     },
@@ -719,8 +608,8 @@
       "target_length": 20.0,
       "endpoint_positions_mm": {
         "C4.PIN_2": {
-          "x": 12.75347161964746,
-          "y": 29.040239687793925,
+          "x": 13.74764064226533,
+          "y": 14.71207830395178,
           "kind": "virtual_rlc_pin"
         },
         "TP5.PIN_1": {
@@ -731,8 +620,8 @@
       },
       "render_endpoint_positions_mm": {
         "C4.PIN_2": {
-          "x": 12.75347161964746,
-          "y": 29.040239687793925
+          "x": 13.74764064226533,
+          "y": 14.71207830395178
         },
         "TP5.PIN_1": {
           "x": 28.0,
@@ -757,23 +646,23 @@
       "endpoint_positions_mm": {
         "TP3.PIN_1": {
           "x": 25.0,
-          "y": 100.0,
+          "y": 85.0,
           "kind": "fixed_pin"
         },
         "IC1.PIN_3": {
           "x": 9.219999999999999,
-          "y": 55.0,
+          "y": 40.0,
           "kind": "fixed_pin"
         }
       },
       "render_endpoint_positions_mm": {
         "TP3.PIN_1": {
           "x": 25.0,
-          "y": 100.0
+          "y": 85.0
         },
         "IC1.PIN_3": {
           "x": 9.219999999999999,
-          "y": 55.0
+          "y": 40.0
         }
       }
     },
@@ -794,23 +683,23 @@
       "endpoint_positions_mm": {
         "TP2.PIN_1": {
           "x": 15.0,
-          "y": 80.0,
+          "y": 65.0,
           "kind": "fixed_pin"
         },
         "IC1.PIN_4": {
           "x": 14.98,
-          "y": 55.0,
+          "y": 40.0,
           "kind": "fixed_pin"
         }
       },
       "render_endpoint_positions_mm": {
         "TP2.PIN_1": {
           "x": 15.0,
-          "y": 80.0
+          "y": 65.0
         },
         "IC1.PIN_4": {
           "x": 14.98,
-          "y": 55.0
+          "y": 40.0
         }
       }
     }
@@ -832,8 +721,6 @@
     "C6.PIN_2",
     "R1.PIN_1",
     "R1.PIN_2",
-    "R2.PIN_1",
-    "R2.PIN_2",
     "R3.PIN_1",
     "R3.PIN_2"
   ],
@@ -852,22 +739,6 @@
       "connections": [
         "IC1.PIN_1",
         "IC1_pin1_seg1_universal_node"
-      ]
-    },
-    {
-      "edge_id": "IC1_pin1_seg2",
-      "mode": "strict_junction_rule",
-      "connections": [
-        "IC1_pin1_seg1_universal_node",
-        "IC1_pin1_seg2_end_split_pad"
-      ]
-    },
-    {
-      "edge_id": "IC1_pin1_seg2_to_R2",
-      "mode": "relaxed",
-      "connections": [
-        "IC1_pin1_seg2_end_split_pad",
-        "R2.PIN_2"
       ]
     },
     {
@@ -988,14 +859,6 @@
       "connections": [
         "TP2.PIN_1",
         "IC1.PIN_4"
-      ]
-    },
-    {
-      "edge_id": "R2_to_TP1",
-      "mode": "relaxed",
-      "connections": [
-        "R2.PIN_1",
-        "TP1.PIN_1"
       ]
     },
     {

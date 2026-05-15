@@ -198,6 +198,127 @@ def _pin_label_overlay(
     return "".join(parts)
 
 
+def _phase_a_diag_overlay(
+    result: OrchestratorV2Result,
+    geom: GeometryIR,
+    px_per_mm: float = 6.0,
+    margin_mm: float = 5.0,
+) -> str:
+    """Diagnostic overlay for Phase A: length errors, segment crossings,
+    and failed edge markers. Helps the user spot WI-A4/A5 issues at a glance.
+    """
+    board_h = float(geom.board.height) + 2 * margin_mm
+
+    def _x(mm: float) -> float:
+        return (mm + margin_mm) * px_per_mm
+
+    def _y(mm: float) -> float:
+        return (board_h - (mm + margin_mm)) * px_per_mm
+
+    parts: list[str] = []
+    routes = result.phase_a.skeleton.routes
+
+    # Length error labels (only when target is set).
+    for edge_id, route in routes.items():
+        if not route.success or route.target_mm is None or not route.polyline_um:
+            continue
+        mid = route.polyline_um[len(route.polyline_um) // 2]
+        mx, my = mid[0] / 1000.0, mid[1] / 1000.0
+        err = (route.length_mm - route.target_mm) / route.target_mm * 100.0
+        color = (
+            "#15803d" if abs(err) < 0.5 else ("#b45309" if abs(err) < 5 else "#b91c1c")
+        )
+        parts.append(
+            f'<text x="{_x(mx):.2f}" y="{_y(my) + 8:.2f}" '
+            f'font-family="sans-serif" font-size="5" fill="{color}" '
+            'text-anchor="middle" stroke="#ffffff" stroke-width="0.6" paint-order="stroke">'
+            f"L={route.length_mm:.1f}/{route.target_mm:.1f}({err:+.1f}%)</text>"
+        )
+
+    # Failed edges marker (red dashed line between endpoints).
+    for edge_id, route in routes.items():
+        if route.success:
+            continue
+        edge = result.artifact.edges.get(edge_id)
+        if edge is None:
+            continue
+        ep_xy = result.phase_a.plan.endpoint_xy
+        s = ep_xy.get(edge.connections[0])
+        g = ep_xy.get(edge.connections[1])
+        if s is None or g is None:
+            continue
+        parts.append(
+            f'<line x1="{_x(s[0]):.2f}" y1="{_y(s[1]):.2f}" '
+            f'x2="{_x(g[0]):.2f}" y2="{_y(g[1]):.2f}" '
+            'stroke="#dc2626" stroke-width="1.2" stroke-dasharray="3,2" />'
+        )
+
+    # Segment crossings (CCW intersection between different edges).
+    def _ccw(p, q, r):
+        return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+
+    def _seg_inter(a1, a2, b1, b2):
+        # Exact endpoint coincidence (junction shared) -> not a crossing.
+        if a1 == b1 or a1 == b2 or a2 == b1 or a2 == b2:
+            return None
+        # Tolerant near-coincidence (chamfered tail touches another chamfer).
+        eps = 250.0  # μm
+        for ea in (a1, a2):
+            for eb in (b1, b2):
+                if abs(ea[0] - eb[0]) < eps and abs(ea[1] - eb[1]) < eps:
+                    return None
+        d1 = _ccw(b1, b2, a1)
+        d2 = _ccw(b1, b2, a2)
+        d3 = _ccw(a1, a2, b1)
+        d4 = _ccw(a1, a2, b2)
+        if (d1 * d2 < 0) and (d3 * d4 < 0):
+            denom = (a2[0] - a1[0]) * (b2[1] - b1[1]) - (a2[1] - a1[1]) * (
+                b2[0] - b1[0]
+            )
+            if denom == 0:
+                return None
+            t = (
+                (b1[0] - a1[0]) * (b2[1] - b1[1]) - (b1[1] - a1[1]) * (b2[0] - b1[0])
+            ) / denom
+            return (a1[0] + t * (a2[0] - a1[0]), a1[1] + t * (a2[1] - a1[1]))
+        return None
+
+    segs: list[tuple[str, tuple[int, int], tuple[int, int]]] = []
+    for edge_id, route in routes.items():
+        if not route.success or len(route.polyline_um) < 2:
+            continue
+        for a, b in zip(route.polyline_um, route.polyline_um[1:]):
+            segs.append((edge_id, a, b))
+    seen: set[tuple[float, float]] = set()
+    for i in range(len(segs)):
+        eid_a, a1, a2 = segs[i]
+        for j in range(i + 1, len(segs)):
+            eid_b, b1, b2 = segs[j]
+            if eid_a == eid_b:
+                continue
+            pt = _seg_inter(a1, a2, b1, b2)
+            if pt is None:
+                continue
+            cx, cy = pt[0] / 1000.0, pt[1] / 1000.0
+            key = (round(cx, 2), round(cy, 2))
+            if key in seen:
+                continue
+            seen.add(key)
+            r = 4.5
+            parts.append(
+                f'<circle cx="{_x(cx):.2f}" cy="{_y(cy):.2f}" r="{r}" '
+                'fill="none" stroke="#dc2626" stroke-width="1.5" />'
+                f'<line x1="{_x(cx) - r:.2f}" y1="{_y(cy) - r:.2f}" '
+                f'x2="{_x(cx) + r:.2f}" y2="{_y(cy) + r:.2f}" '
+                'stroke="#dc2626" stroke-width="1.5" />'
+                f'<line x1="{_x(cx) - r:.2f}" y1="{_y(cy) + r:.2f}" '
+                f'x2="{_x(cx) + r:.2f}" y2="{_y(cy) - r:.2f}" '
+                'stroke="#dc2626" stroke-width="1.5" />'
+            )
+
+    return "".join(parts)
+
+
 def _render_svg(
     geom: GeometryIR,
     path: Path,
@@ -2044,7 +2165,8 @@ def _persist_phase_artefacts(
             f"Skeleton routing — {routed_ok}/{routed_total} microstrips routed | UV not yet placed",
             "#b45309",
         ),
-        overlay=_pin_label_overlay(phase_a_geom),
+        overlay=_pin_label_overlay(phase_a_geom)
+        + _phase_a_diag_overlay(result, phase_a_geom),
         layout=layout,
     )
     artefacts["phaseA_svg"] = phase_a_svg
