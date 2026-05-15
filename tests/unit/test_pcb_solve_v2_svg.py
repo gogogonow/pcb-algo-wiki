@@ -164,6 +164,33 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     r3_seg4 = by_edge["IC1_pin2_seg4"]["render_endpoint_positions_mm"]
     r3_chain = by_edge["R3_to_combiner"]["render_endpoint_positions_mm"]
     assert abs(r3_chain["R3.PIN_2"]["x"] - r3_seg4["R3.PIN_1"]["x"]) > 0.8
+    pin2_seg5 = by_edge["IC1_pin2_seg5"]["render_endpoint_positions_mm"]
+    pin2_seg5_start = pin2_seg5["IC1_pin2_seg5_start_combiner"]
+    c4_pin1 = pin2_seg5["C4.PIN_1"]
+    # If the final sink (TP5) is on board bottom, the seg5->seg6 chain should
+    # prefer a downward continuation instead of bending upward first.
+    assert c4_pin1["y"] < pin2_seg5_start["y"]
+    pin1_seg4 = by_edge["IC1_pin1_seg4"]["render_endpoint_positions_mm"]
+    pin2_seg6 = by_edge["IC1_pin2_seg6"]["render_endpoint_positions_mm"]
+    seg4_a = pin1_seg4["IC1_pin1_seg1_universal_node"]
+    seg4_b = pin1_seg4["IC1_pin1_seg4_end_split_pad"]
+    seg6_a = pin2_seg6["C4.PIN_2"]
+    seg6_b = pin2_seg6["TP5.PIN_1"]
+
+    def _orientation(
+        a: dict[str, float], b: dict[str, float], c: dict[str, float]
+    ) -> float:
+        return (b["x"] - a["x"]) * (c["y"] - a["y"]) - (b["y"] - a["y"]) * (
+            c["x"] - a["x"]
+        )
+
+    seg4_to_seg6_cross = (
+        _orientation(seg4_a, seg4_b, seg6_a) * _orientation(seg4_a, seg4_b, seg6_b)
+        < 0.0
+        and _orientation(seg6_a, seg6_b, seg4_a) * _orientation(seg6_a, seg6_b, seg4_b)
+        < 0.0
+    )
+    assert not seg4_to_seg6_cross
     assert ">p1_seg2<" in svg
     assert "p1_seg2-&gt;R2" not in svg
     assert 'class="prea-edge-bridge"' in svg

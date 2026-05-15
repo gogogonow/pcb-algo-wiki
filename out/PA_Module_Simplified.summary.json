@@ -1,29 +1,24 @@
 {
   "project": "PA_Module_Simplified",
-  "status": "FEASIBLE",
+  "status": "OPTIMAL",
   "phase_a": {
-    "routed": 21,
+    "routed": 22,
     "total": 22,
     "rip_up_rounds": 2,
-    "wall_s": 1.7097540740214754,
+    "wall_s": 1.9544393590185791,
     "max_len_err_pct": 171.95499999999998,
-    "failed": [
-      {
-        "edge_id": "C1R1_to_combiner",
-        "reason": "max_expansions exhausted"
-      }
-    ]
+    "failed": []
   },
   "phase_b": {
     "uv_placed": 9,
     "uv_total": 9,
-    "wall_s": 0.00020048799342475832,
+    "wall_s": 0.0002216429857071489,
     "failed": []
   },
   "phase_c": {
     "flex_routed": 0,
     "flex_failed": [],
-    "wall_s": 0.06582855098531581
+    "wall_s": 0.05929388798540458
   },
-  "wall_total_s": 1.775783113000216
+  "wall_total_s": 2.013954889989691
 }

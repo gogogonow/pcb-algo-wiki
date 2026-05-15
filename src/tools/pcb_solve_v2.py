@@ -892,6 +892,8 @@ def _solve_pre_a_positions(
     def _pitch_direction(
         anchor_ep: str,
         anchor_key: str,
+        other_ep: str,
+        other_key: str,
         anchor_xy: tuple[float, float],
         other_xy: tuple[float, float],
     ) -> tuple[float, float]:
@@ -903,6 +905,34 @@ def _solve_pre_a_positions(
         if dnorm <= 1e-6:
             dvx, dvy, dnorm = 1.0, 0.0, 1.0
         down_u = (dvx / dnorm, dvy / dnorm)
+        # Prefer downstream trend from the "other" pin when it already has a
+        # constrained route leg (e.g. C4.PIN_2 -> TP5), so chained segments
+        # continue toward sink direction instead of folding back.
+        for edge in artifact.edges.values():
+            if edge.edge_type != "microstrip" or len(edge.connections) != 2:
+                continue
+            if edge.target_length is None or float(edge.target_length) <= 0.0:
+                continue
+            a_id, b_id = edge.connections
+            a_tokens = _expand_endpoint_tokens(a_id)
+            b_tokens = _expand_endpoint_tokens(b_id)
+            if other_ep in a_tokens or other_key == a_id:
+                sink_id = b_id
+            elif other_ep in b_tokens or other_key == b_id:
+                sink_id = a_id
+            else:
+                continue
+            if sink_id not in positions:
+                continue
+            sx, sy = positions[sink_id]
+            dvx = sx - ax
+            dvy = sy - ay
+            dnorm = math.hypot(dvx, dvy)
+            if dnorm <= 1e-6:
+                continue
+            down_u = (dvx / dnorm, dvy / dnorm)
+            if sink_id in fixed:
+                break
 
         ref_u: tuple[float, float] | None = None
         for edge in artifact.edges.values():
@@ -1014,7 +1044,9 @@ def _solve_pre_a_positions(
         )
         if pitch <= 1e-6:
             continue
-        ux, uy = _pitch_direction(anchor_ep, anchor_key, (ax, ay), (bx, by))
+        ux, uy = _pitch_direction(
+            anchor_ep, anchor_key, other_ep, other_key, (ax, ay), (bx, by)
+        )
         moved = _clamp((ax + ux * pitch, ay + uy * pitch))
         positions[other_key] = moved
         positions[other_ep] = moved
@@ -1061,6 +1093,54 @@ def _solve_pre_a_positions(
     # Propagate constrained segment length from non-fixed trace endpoints toward
     # virtual pins (chain-first), so seg5/seg6-like edges set the UV anchor
     # location instead of leaving long stretched hops.
+    def _virtual_downstream_u(
+        dst_id: str, src_xy: tuple[float, float]
+    ) -> tuple[float, float] | None:
+        tokens = _expand_endpoint_tokens(dst_id)
+        if len(tokens) != 1:
+            return None
+        endpoint = tokens[0]
+        if "." not in endpoint:
+            return None
+        comp_id, pin = endpoint.split(".", 1)
+        uv = artifact.uv_components.get(comp_id)
+        if uv is None or len(uv.pads) != 2:
+            return None
+        peer_pin = next((pad.pin for pad in uv.pads if pad.pin != pin), None)
+        if peer_pin is None:
+            return None
+        peer_ep = f"{comp_id}.{peer_pin}"
+        sx, sy = src_xy
+        preferred: tuple[float, float] | None = None
+        for edge in artifact.edges.values():
+            if edge.edge_type != "microstrip" or len(edge.connections) != 2:
+                continue
+            if edge.target_length is None or float(edge.target_length) <= 0.0:
+                continue
+            a_id, b_id = edge.connections
+            a_tokens = _expand_endpoint_tokens(a_id)
+            b_tokens = _expand_endpoint_tokens(b_id)
+            if peer_ep in a_tokens:
+                sink_id = b_id
+            elif peer_ep in b_tokens:
+                sink_id = a_id
+            else:
+                continue
+            if sink_id not in positions:
+                continue
+            tx, ty = positions[sink_id]
+            dvx = tx - sx
+            dvy = ty - sy
+            dnorm = math.hypot(dvx, dvy)
+            if dnorm <= 1e-6:
+                continue
+            cand = (dvx / dnorm, dvy / dnorm)
+            if sink_id in fixed:
+                return cand
+            if preferred is None:
+                preferred = cand
+        return preferred
+
     for edge in artifact.edges.values():
         if (
             edge.edge_type != "microstrip"
@@ -1081,7 +1161,10 @@ def _solve_pre_a_positions(
             dx = positions[dst_id][0] - sx
             dy = positions[dst_id][1] - sy
             norm = math.hypot(dx, dy)
-            if norm <= 1e-6:
+            hint_u = _virtual_downstream_u(dst_id, (sx, sy))
+            if hint_u is not None:
+                ux, uy = hint_u
+            elif norm <= 1e-6:
                 ux, uy = 1.0, 0.0
             else:
                 ux, uy = dx / norm, dy / norm
@@ -1121,7 +1204,9 @@ def _solve_pre_a_positions(
         )
         if pitch <= 1e-6:
             continue
-        ux, uy = _pitch_direction(anchor_ep, anchor_key, (ax, ay), (bx, by))
+        ux, uy = _pitch_direction(
+            anchor_ep, anchor_key, other_ep, other_key, (ax, ay), (bx, by)
+        )
         moved = _clamp((ax + ux * pitch, ay + uy * pitch))
         positions[other_key] = moved
         positions[other_ep] = moved
