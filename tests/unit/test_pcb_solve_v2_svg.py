@@ -129,6 +129,17 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     assert seg4_end["x"] == pytest.approx(seg4_start["x"], abs=0.2)
     assert seg4_end["y"] < seg4_start["y"]
 
+    # PreA prioritizes electrical connectivity: free branch to R2 PIN_2 should
+    # land on seg2 split endpoint. If package geometry cannot fully satisfy all
+    # pin targets, render should show a thin assist link.
+    seg2_to_r2 = by_edge["IC1_pin1_seg2_to_R2"]["render_endpoint_positions_mm"]
+    split_xy = seg2_to_r2["IC1_pin1_seg2_end_split_pad"]
+    r2_pin2_xy = seg2_to_r2["R2.PIN_2"]
+    assert r2_pin2_xy["x"] == pytest.approx(split_xy["x"], abs=1e-6)
+    assert r2_pin2_xy["y"] == pytest.approx(split_xy["y"], abs=1e-6)
+    assert 'class="prea-assist-link"' in svg
+    assert 'data-endpoint="R2.PIN_2"' in svg
+
     phase_a_svg = scratch_dir / "PA_Module_Simplified.phaseA.svg"
     phase_a_text = phase_a_svg.read_text(encoding="utf-8")
     assert 'stroke-linecap="butt"' in phase_a_text

@@ -271,6 +271,7 @@ def _render_pre_phase_svg(
         ".prea-virtual-endpoint{fill:#f59e0b;stroke:#92400e;stroke-width:1;}",
         ".prea-rlc-pad{fill:#cbd5e1;stroke:#475569;stroke-width:0.7;opacity:0.9;}",
         ".prea-rlc-bbox{fill:none;stroke:#0f766e;stroke-width:0.8;stroke-dasharray:2 2;opacity:0.9;}",
+        ".prea-assist-link{stroke:#475569;stroke-width:0.7;stroke-dasharray:2 2;opacity:0.95;}",
         ".prea-edge{fill:none;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.95;}",
         ".prea-label{fill:#0f172a;font-family:Arial,sans-serif;font-size:9px;}",
         "</style>",
@@ -306,6 +307,7 @@ def _render_pre_phase_svg(
             f"{escape(edge_id)} | {escape(width_text)} | {escape(length_text)}</text>"
         )
 
+    pad_centers: dict[str, tuple[float, float]] = {}
     if layout is not None:
         for comp_id, uv in artifact.uv_components.items():
             component = layout.components.get(comp_id)
@@ -378,6 +380,7 @@ def _render_pre_phase_svg(
                 plx, ply = local_xy[pin_name]
                 pcx = cx + ct * plx - st * ply
                 pcy = cy + st * plx + ct * ply
+                pad_centers[f"{comp_id}.{pin_name}"] = (pcx, pcy)
                 orient = rotation + float(pin.local_orientation or 0.0)
                 cp = math.cos(math.radians(orient))
                 sp = math.sin(math.radians(orient))
@@ -392,6 +395,18 @@ def _render_pre_phase_svg(
                 lines.append(
                     f'<polygon class="prea-rlc-pad" points="{" ".join(pad_pts)}"><title>{escape(comp_id)}.{escape(pin_name)}</title></polygon>'
                 )
+
+    for endpoint, (pad_x, pad_y) in sorted(pad_centers.items()):
+        target = positions.get(endpoint)
+        if target is None:
+            continue
+        tx, ty = target
+        if math.hypot(tx - pad_x, ty - pad_y) <= 0.2:
+            continue
+        lines.append(
+            f'<line class="prea-assist-link" data-endpoint="{escape(endpoint)}" '
+            f'x1="{_x(pad_x):.2f}" y1="{_y(pad_y):.2f}" x2="{_x(tx):.2f}" y2="{_y(ty):.2f}"/>'
+        )
 
     # Draw fixed points / node points / virtual endpoints.
     for endpoint, (px, py) in sorted(positions.items()):
@@ -665,6 +680,26 @@ def _solve_pre_a_positions(
                     edge_endpoint_overrides.setdefault(branch.edge_id, {})[
                         target
                     ] = target_xy
+
+    # PreA connectivity-first pass: unconstrained links from a trace node to a
+    # virtual RLC pin are snapped onto the trace endpoint so "is it connected"
+    # can be judged before distance optimization.
+    for edge in artifact.edges.values():
+        if (
+            edge.edge_type != "microstrip"
+            or len(edge.connections) != 2
+            or edge.target_length is not None
+        ):
+            continue
+        a_id, b_id = edge.connections
+        a_kind = _prea_endpoint_kind(artifact, a_id)
+        b_kind = _prea_endpoint_kind(artifact, b_id)
+        if a_kind == "virtual_rlc_pin" and b_kind != "virtual_rlc_pin":
+            positions[a_id] = positions[b_id]
+            constrained_endpoints.add(a_id)
+        elif b_kind == "virtual_rlc_pin" and a_kind != "virtual_rlc_pin":
+            positions[b_id] = positions[a_id]
+            constrained_endpoints.add(b_id)
 
     for _ in range(180):
         for edge in artifact.edges.values():
