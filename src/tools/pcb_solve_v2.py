@@ -12,6 +12,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 from output import render_full_layout
 from schema.geometry_ir import GeometryIR
@@ -99,9 +100,70 @@ def _build_phase_b_geom(result: OrchestratorV2Result) -> GeometryIR:
     )
 
 
-def _render_svg(geom: GeometryIR, path: Path) -> None:
+def _phase_banner(phase: str, description: str, color: str) -> str:
+    """Return an SVG <text> element showing the phase label near the top."""
+    return (
+        f'<text x="6" y="26" font-family="sans-serif" font-size="9" '
+        f'font-weight="bold" fill="{color}">'
+        f"[{escape(phase)}] {escape(description)}</text>"
+    )
+
+
+def _uv_highlight_overlay(geom: GeometryIR, uv_names: set[str], px_per_mm: float = 6.0, margin_mm: float = 5.0) -> str:
+    """SVG overlay that redraws UV-placed components in green so they stand out."""
+    board_h = float(geom.board.height) + 2 * margin_mm
+
+    def _x(mm: float) -> float:
+        return (mm + margin_mm) * px_per_mm
+
+    def _y(mm: float) -> float:
+        return (board_h - (mm + margin_mm)) * px_per_mm
+
+    parts: list[str] = []
+    for name, placement in geom.placements.items():
+        if name not in uv_names or not placement.pads:
+            continue
+        xs = [float(p.point.x) for p in placement.pads]
+        ys = [float(p.point.y) for p in placement.pads]
+        if max(xs) == min(xs) or max(ys) == min(ys):
+            for pad in placement.pads:
+                parts.append(
+                    f'<circle cx="{_x(float(pad.point.x)):.2f}" '
+                    f'cy="{_y(float(pad.point.y)):.2f}" r="3" '
+                    'fill="#16a34a" opacity="0.9"/>'
+                )
+            parts.append(
+                f'<text x="{_x(float(xs[0])) + 4:.2f}" '
+                f'y="{_y(float(ys[0])) - 3:.2f}" '
+                'font-family="sans-serif" font-size="8" fill="#15803d" font-weight="bold">'
+                f"{escape(name)}</text>"
+            )
+            continue
+        bx, by = min(xs), min(ys)
+        w = max(xs) - bx
+        h = max(ys) - by
+        parts.append(
+            f'<rect x="{_x(bx):.2f}" y="{_y(by + h):.2f}" '
+            f'width="{w * px_per_mm:.2f}" height="{h * px_per_mm:.2f}" '
+            'fill="#bbf7d0" stroke="#16a34a" stroke-width="1.5" opacity="0.9"/>'
+        )
+        parts.append(
+            f'<text x="{_x(bx):.2f}" y="{_y(by + h) - 2:.2f}" '
+            'font-family="sans-serif" font-size="8" fill="#15803d" font-weight="bold">'
+            f"{escape(name)}</text>"
+        )
+    return "".join(parts)
+
+
+def _render_svg(geom: GeometryIR, path: Path, *, banner: str = "", overlay: str = "") -> None:
+    """Write a rendered SVG to *path*, injecting an optional phase banner and overlay."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render_full_layout(geom))
+    svg = render_full_layout(geom)
+    if overlay:
+        svg = svg.replace("</svg>", overlay + "</svg>")
+    if banner:
+        svg = svg.replace("</svg>", banner + "</svg>")
+    path.write_text(svg)
 
 
 def _persist_phase_artefacts(
@@ -170,17 +232,50 @@ def _persist_phase_artefacts(
     artefacts["phaseB"] = phase_b_path
 
     # Per-phase SVG snapshots
+    routed_ok, routed_total = result.phase_a.skeleton.success_rate()
+    uv_names = set(result.phase_b.adhesion.placements.keys())
+    uv_placed = len(uv_names)
+    uv_total = len(result.artifact.uv_components)
+    flex_ok = len(result.phase_c.routed_flex_edges)
+    flex_failed = len(result.phase_c.failed_flex_edges)
+
     phase_a_svg = out_dir / f"{project}.phaseA.svg"
-    _render_svg(_build_phase_a_geom(result), phase_a_svg)
+    _render_svg(
+        _build_phase_a_geom(result),
+        phase_a_svg,
+        banner=_phase_banner(
+            "Phase A",
+            f"Skeleton routing — {routed_ok}/{routed_total} microstrips routed | UV not yet placed",
+            "#b45309",
+        ),
+    )
     artefacts["phaseA_svg"] = phase_a_svg
 
+    geom_b = _build_phase_b_geom(result)
     phase_b_svg = out_dir / f"{project}.phaseB.svg"
-    _render_svg(_build_phase_b_geom(result), phase_b_svg)
+    _render_svg(
+        geom_b,
+        phase_b_svg,
+        banner=_phase_banner(
+            "Phase B",
+            f"UV adhesion — {uv_placed}/{uv_total} components placed (highlighted green)",
+            "#15803d",
+        ),
+        overlay=_uv_highlight_overlay(geom_b, uv_names),
+    )
     artefacts["phaseB_svg"] = phase_b_svg
 
     # Phase C SVG = final geometry (flex routes already in result.geometry)
     phase_c_svg = out_dir / f"{project}.phaseC.svg"
-    _render_svg(result.geometry, phase_c_svg)
+    _render_svg(
+        result.geometry,
+        phase_c_svg,
+        banner=_phase_banner(
+            "Phase C",
+            f"Flex routing — {flex_ok} routed / {flex_failed} failed",
+            "#1d4ed8",
+        ),
+    )
     artefacts["phaseC_svg"] = phase_c_svg
 
     return artefacts
