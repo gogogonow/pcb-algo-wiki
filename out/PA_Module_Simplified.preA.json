@@ -48,18 +48,18 @@
           "kind": "node"
         },
         "IC1_pin1_seg2_end_split_pad": {
-          "x": 19.009999999999998,
+          "x": 18.07,
           "y": 43.19,
           "kind": "node"
         }
       },
       "render_endpoint_positions_mm": {
         "IC1_pin1_seg1_universal_node": {
-          "x": 17.72,
+          "x": 16.78,
           "y": 43.19
         },
         "IC1_pin1_seg2_end_split_pad": {
-          "x": 19.009999999999998,
+          "x": 18.07,
           "y": 43.19
         }
       }
@@ -75,7 +75,7 @@
       "target_length": null,
       "endpoint_positions_mm": {
         "IC1_pin1_seg2_end_split_pad": {
-          "x": 19.009999999999998,
+          "x": 18.07,
           "y": 43.19,
           "kind": "node"
         },
@@ -87,7 +87,7 @@
       },
       "render_endpoint_positions_mm": {
         "IC1_pin1_seg2_end_split_pad": {
-          "x": 19.009999999999998,
+          "x": 18.07,
           "y": 43.19
         },
         "R2.PIN_2": {
@@ -112,18 +112,18 @@
           "kind": "node"
         },
         "IC1_pin1_seg3_end_split_pad": {
-          "x": 18.884999999999998,
+          "x": 18.25,
           "y": 40.85,
           "kind": "node"
         }
       },
       "render_endpoint_positions_mm": {
         "IC1_pin1_seg1_universal_node": {
-          "x": 17.415,
+          "x": 16.78,
           "y": 40.85
         },
         "IC1_pin1_seg3_end_split_pad": {
-          "x": 18.884999999999998,
+          "x": 18.25,
           "y": 40.85
         }
       }
@@ -139,7 +139,7 @@
       "target_length": null,
       "endpoint_positions_mm": {
         "IC1_pin1_seg3_end_split_pad": {
-          "x": 18.884999999999998,
+          "x": 18.25,
           "y": 40.85,
           "kind": "node"
         },
@@ -151,7 +151,7 @@
       },
       "render_endpoint_positions_mm": {
         "IC1_pin1_seg3_end_split_pad": {
-          "x": 18.884999999999998,
+          "x": 18.25,
           "y": 40.85
         },
         "C5.PIN_1": {
@@ -400,18 +400,18 @@
           "kind": "node"
         },
         "IC1_pin2_seg2_end_split_pad": {
-          "x": 5.039999999999999,
+          "x": 5.979999999999999,
           "y": 42.86,
           "kind": "node"
         }
       },
       "render_endpoint_positions_mm": {
         "IC1_pin2_seg1_universal_node": {
-          "x": 6.329999999999999,
+          "x": 7.269999999999999,
           "y": 42.86
         },
         "IC1_pin2_seg2_end_split_pad": {
-          "x": 5.039999999999999,
+          "x": 5.979999999999999,
           "y": 42.86
         }
       }
@@ -427,7 +427,7 @@
       "target_length": null,
       "endpoint_positions_mm": {
         "IC1_pin2_seg2_end_split_pad": {
-          "x": 5.039999999999999,
+          "x": 5.979999999999999,
           "y": 42.86,
           "kind": "node"
         },
@@ -439,7 +439,7 @@
       },
       "render_endpoint_positions_mm": {
         "IC1_pin2_seg2_end_split_pad": {
-          "x": 5.039999999999999,
+          "x": 5.979999999999999,
           "y": 42.86
         },
         "C3.PIN_1": {
@@ -464,18 +464,18 @@
           "kind": "node"
         },
         "IC1_pin2_seg3_end_split_pad": {
-          "x": 5.164999999999999,
+          "x": 5.799999999999999,
           "y": 40.74,
           "kind": "node"
         }
       },
       "render_endpoint_positions_mm": {
         "IC1_pin2_seg1_universal_node": {
-          "x": 6.634999999999999,
+          "x": 7.269999999999999,
           "y": 40.74
         },
         "IC1_pin2_seg3_end_split_pad": {
-          "x": 5.164999999999999,
+          "x": 5.799999999999999,
           "y": 40.74
         }
       }
@@ -491,7 +491,7 @@
       "target_length": null,
       "endpoint_positions_mm": {
         "IC1_pin2_seg3_end_split_pad": {
-          "x": 5.164999999999999,
+          "x": 5.799999999999999,
           "y": 40.74,
           "kind": "node"
         },
@@ -503,7 +503,7 @@
       },
       "render_endpoint_positions_mm": {
         "IC1_pin2_seg3_end_split_pad": {
-          "x": 5.164999999999999,
+          "x": 5.799999999999999,
           "y": 40.74
         },
         "C6.PIN_2": {

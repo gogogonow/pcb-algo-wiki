@@ -101,17 +101,11 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     seg3_start = seg3_render["IC1_pin1_seg1_universal_node"]
     seg3_end = seg3_render["IC1_pin1_seg3_end_split_pad"]
     seg1_w = float(by_edge["IC1_pin1_seg1"]["width"])
-    seg2_w = float(by_edge["IC1_pin1_seg2"]["width"])
-    seg3_w = float(by_edge["IC1_pin1_seg3"]["width"])
     # offset_v=edge_left and offset_u=-3.94 on a downward reference edge:
     # launch point shifts +x (left edge) and +y (back from front edge).
-    assert seg2_start["x"] - pin1_node["x"] == pytest.approx(
-        (seg1_w + seg2_w) / 2.0, abs=0.15
-    )
+    assert seg2_start["x"] - pin1_node["x"] == pytest.approx(seg1_w / 2.0, abs=0.15)
     assert seg2_start["y"] - pin1_node["y"] == pytest.approx(3.94, abs=0.2)
-    assert seg3_start["x"] - pin1_node["x"] == pytest.approx(
-        (seg1_w + seg3_w) / 2.0, abs=0.15
-    )
+    assert seg3_start["x"] - pin1_node["x"] == pytest.approx(seg1_w / 2.0, abs=0.15)
     assert seg3_start["y"] - pin1_node["y"] == pytest.approx(1.6, abs=0.2)
     # angle=90 means seg2 runs to the right from its launch point.
     assert seg2_end["x"] > seg2_start["x"]

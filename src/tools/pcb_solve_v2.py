@@ -520,9 +520,11 @@ def _solve_pre_a_positions(
                         )
                     elif branch.signed_v_kind.value in ("edge_left", "edge_right"):
                         # Side tangency: one edge of branch touches the reference
-                        # side edge, so center offset is (Wref + Wbranch)/2.
-                        if ref_w > 0.0 and branch_w > 0.0:
-                            side_gap = (ref_w + branch_w) / 2.0
+                        # side edge. In butt-cap rendering, branch start x/y is
+                        # the branch side edge location, so lateral center offset
+                        # must be Wref/2 (independent of branch width).
+                        if ref_w > 0.0:
+                            side_gap = ref_w / 2.0
                         else:
                             side_gap = abs(float(branch.signed_v))
                         side_sign = (
