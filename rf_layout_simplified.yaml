@@ -365,7 +365,7 @@ nodes:    #承载微带线连接点信息
   IC1_pin1_seg2_end_split_pad:
     type: t_junction    #t_junction表示微带线一分二连接两个分叉的
     description: 微带线末端一分二焊盘
-  IC1_pin1_seg3_end_split_pad:
+  IC1_pin1_seg4_end_split_pad:
     type: t_junction
     description: 微带线末端一分二焊盘
   IC1_pin1_seg5_start_combiner:
@@ -486,25 +486,25 @@ edges:
     routing_class: rf_constrained
     connections:
     - IC1_pin1_seg1_universal_node
-    - C1.PIN_1
+    - IC1_pin1_seg4_end_split_pad    #表示一个微带线端点连接C和R
     constraint:
       width: 1.6
       target_length: 4.67
     geometry:
       bend_style: mitered_45
-  C1_to_R1:
+  IC1_pin1_seg4_to_C1R1:
     type: microstrip
     net: RF_NET_1
     routing_class: rf_constrained
     connections:
-    - C1.PIN_2
-    - R1.PIN_1
-  R1_to_combiner:
+    - IC1_pin1_seg4_end_split_pad
+    - C1.PIN_1,R1.PIN_1    #表示一个微带线端点连接C和R
+  C1R1_to_combiner:
     type: microstrip
     net: RF_NET_3
     routing_class: rf_constrained
     connections:
-    - R1.PIN_2
+    - C1.PIN_2,R1.PIN_2    #表示C和R连接到同一个端点
     - IC1_pin1_seg5_start_combiner
   IC1_pin1_seg5:
     type: microstrip
@@ -663,3 +663,12 @@ edges:
       target_length: 25.5
     geometry:
       bend_style: mitered_45
+  logical_bus_GND:
+    type: multipoint_net
+    net: "GND"
+    routing_class: unrouted_bus
+    connections: [ "R2.2", "C5.2", "C3.2", "C6.1"]
+    constraint:
+      width: null
+      target_length: null
+    note: Requires physical topology split
