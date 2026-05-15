@@ -272,6 +272,7 @@ def _render_pre_phase_svg(
         ".prea-rlc-pad{fill:#cbd5e1;stroke:#475569;stroke-width:0.7;opacity:0.9;}",
         ".prea-rlc-bbox{fill:none;stroke:#0f766e;stroke-width:0.8;stroke-dasharray:2 2;opacity:0.9;}",
         ".prea-assist-link{stroke:#475569;stroke-width:0.7;stroke-dasharray:2 2;opacity:0.95;}",
+        ".prea-edge-bridge{stroke:#64748b;stroke-width:0.9;stroke-dasharray:2 2;opacity:0.9;}",
         ".prea-edge{fill:none;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.95;}",
         ".prea-label{fill:#0f172a;font-family:Arial,sans-serif;font-size:9px;}",
         "</style>",
@@ -301,6 +302,33 @@ def _render_pre_phase_svg(
         overrides = edge_endpoint_overrides.get(edge_id, {})
         sx, sy = overrides.get(start_id, positions[start_id])
         ex, ey = overrides.get(end_id, positions[end_id])
+        main_sx, main_sy = sx, sy
+        main_ex, main_ey = ex, ey
+        bridge: tuple[float, float, float, float] | None = None
+        if edge.target_length is not None:
+            desired = float(edge.target_length)
+            seg_len = math.hypot(ex - sx, ey - sy)
+            start_kind = _prea_endpoint_kind(artifact, start_id)
+            end_kind = _prea_endpoint_kind(artifact, end_id)
+            if seg_len > desired + 1e-6 and (
+                (start_kind == "virtual_rlc_pin" and end_kind == "fixed_pin")
+                or (end_kind == "virtual_rlc_pin" and start_kind == "fixed_pin")
+            ):
+                if start_kind == "virtual_rlc_pin":
+                    vx, vy = sx, sy
+                    fx, fy = ex, ey
+                else:
+                    vx, vy = ex, ey
+                    fx, fy = sx, sy
+                ux = (fx - vx) / seg_len
+                uy = (fy - vy) / seg_len
+                px = vx + ux * desired
+                py = vy + uy * desired
+                if start_kind == "virtual_rlc_pin":
+                    main_sx, main_sy, main_ex, main_ey = vx, vy, px, py
+                else:
+                    main_sx, main_sy, main_ex, main_ey = px, py, vx, vy
+                bridge = (px, py, fx, fy)
         stroke_width = max(float(edge.width or 0.2) * px_per_mm, 1.2)
         length_text = (
             f"L={float(edge.target_length):.1f}mm"
@@ -310,15 +338,22 @@ def _render_pre_phase_svg(
         width_text = f"w={float(edge.width or 0.0):.1f}mm"
         lines.append(
             f'<line class="prea-edge" data-edge-id="{escape(edge_id)}" '
-            f'x1="{_x(sx):.2f}" y1="{_y(sy):.2f}" x2="{_x(ex):.2f}" y2="{_y(ey):.2f}" '
+            f'x1="{_x(main_sx):.2f}" y1="{_y(main_sy):.2f}" '
+            f'x2="{_x(main_ex):.2f}" y2="{_y(main_ey):.2f}" '
             f'stroke="#334155" stroke-width="{stroke_width:.2f}"><title>'
             f"{escape(edge_id)} | {escape(width_text)} | {escape(length_text)}</title></line>"
         )
+        if bridge is not None:
+            bx1, by1, bx2, by2 = bridge
+            lines.append(
+                f'<line class="prea-edge-bridge" data-edge-id="{escape(edge_id)}" '
+                f'x1="{_x(bx1):.2f}" y1="{_y(by1):.2f}" x2="{_x(bx2):.2f}" y2="{_y(by2):.2f}"/>'
+            )
         weight = float(edge.target_length) if edge.target_length is not None else 0.0
-        _add_endpoint_vector(start_id, ex - sx, ey - sy, weight)
-        _add_endpoint_vector(end_id, sx - ex, sy - ey, weight)
-        mx = (sx + ex) / 2.0
-        my = (sy + ey) / 2.0
+        _add_endpoint_vector(start_id, main_ex - main_sx, main_ey - main_sy, weight)
+        _add_endpoint_vector(end_id, main_sx - main_ex, main_sy - main_ey, weight)
+        mx = (main_sx + main_ex) / 2.0
+        my = (main_sy + main_ey) / 2.0
         short_edge_id = _prea_short_name(edge_id)
         if edge.target_length is not None:
             lines.append(
@@ -899,6 +934,80 @@ def _solve_pre_a_positions(
             and a_kind != "virtual_rlc_pin"
         ):
             positions[a_id] = positions[b_id]
+
+    # Propagate constrained segment length from non-fixed trace endpoints toward
+    # virtual pins (chain-first), so seg5/seg6-like edges set the UV anchor
+    # location instead of leaving long stretched hops.
+    for edge in artifact.edges.values():
+        if (
+            edge.edge_type != "microstrip"
+            or len(edge.connections) != 2
+            or edge.target_length is None
+            or float(edge.target_length) <= 0.0
+        ):
+            continue
+        a_id, b_id = edge.connections
+        for src_id, dst_id in ((a_id, b_id), (b_id, a_id)):
+            src_kind = _prea_endpoint_kind(artifact, src_id)
+            dst_kind = _prea_endpoint_kind(artifact, dst_id)
+            if src_id in fixed:
+                continue
+            if src_kind == "virtual_rlc_pin" or dst_kind != "virtual_rlc_pin":
+                continue
+            sx, sy = positions[src_id]
+            dx = positions[dst_id][0] - sx
+            dy = positions[dst_id][1] - sy
+            norm = math.hypot(dx, dy)
+            if norm <= 1e-6:
+                ux, uy = 1.0, 0.0
+            else:
+                ux, uy = dx / norm, dy / norm
+            target_len = float(edge.target_length)
+            moved = _clamp((sx + ux * target_len, sy + uy * target_len))
+            positions[dst_id] = moved
+            for token in _expand_endpoint_tokens(dst_id):
+                positions[token] = moved
+
+    # Re-lock package pitch after constrained propagation.
+    for comp_id, uv in artifact.uv_components.items():
+        if len(uv.pads) != 2:
+            continue
+        pin_to_local = {
+            pad.pin: (float(pad.local_x), float(pad.local_y)) for pad in uv.pads
+        }
+        pin_names = list(pin_to_local.keys())
+        anchor_pin = (
+            uv.uv_meta.anchor_pin
+            if uv.uv_meta is not None and uv.uv_meta.anchor_pin in pin_to_local
+            else pin_names[0]
+        )
+        other_pin = next((pin for pin in pin_names if pin != anchor_pin), None)
+        if other_pin is None:
+            continue
+        anchor_ep = f"{comp_id}.{anchor_pin}"
+        other_ep = f"{comp_id}.{other_pin}"
+        anchor_key = _endpoint_key_for(anchor_ep)
+        other_key = _endpoint_key_for(other_ep)
+        if anchor_key is None or other_key is None:
+            continue
+        ax, ay = positions[anchor_key]
+        bx, by = positions[other_key]
+        pitch = math.hypot(
+            pin_to_local[other_pin][0] - pin_to_local[anchor_pin][0],
+            pin_to_local[other_pin][1] - pin_to_local[anchor_pin][1],
+        )
+        if pitch <= 1e-6:
+            continue
+        dx = bx - ax
+        dy = by - ay
+        norm = math.hypot(dx, dy)
+        if norm <= 1e-6:
+            ux, uy = 1.0, 0.0
+        else:
+            ux, uy = dx / norm, dy / norm
+        moved = _clamp((ax + ux * pitch, ay + uy * pitch))
+        positions[other_key] = moved
+        positions[other_ep] = moved
 
     # Expand composite endpoints like "C1.PIN_1,R1.PIN_1" so each member pin
     # has a concrete coordinate for preA footprint rendering.

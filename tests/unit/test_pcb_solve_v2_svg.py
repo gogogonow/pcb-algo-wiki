@@ -152,8 +152,15 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
         c1r1_pin2["y"] - c1r1_from_seg4["y"],
     )
     assert c1r1_span < 3.0
+    seg5_render = by_edge["IC1_pin1_seg5"]["render_endpoint_positions_mm"]
+    seg5_len = math.hypot(
+        seg5_render["C2.PIN_1"]["x"] - seg5_render["IC1_pin1_seg5_start_combiner"]["x"],
+        seg5_render["C2.PIN_1"]["y"] - seg5_render["IC1_pin1_seg5_start_combiner"]["y"],
+    )
+    assert seg5_len == pytest.approx(4.72, abs=0.35)
     assert ">p1_seg2<" in svg
     assert "p1_seg2-&gt;R2" not in svg
+    assert 'class="prea-edge-bridge"' in svg
     assert 'data-endpoint="C1.PIN_1"' not in svg
     assert 'data-endpoint="C1.PIN_2"' not in svg
     assert 'data-endpoint="R1.PIN_1"' not in svg
