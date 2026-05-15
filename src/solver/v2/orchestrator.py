@@ -478,6 +478,7 @@ def phase_summary(result: OrchestratorV2Result) -> dict[str, object]:
 
 
 __all__ = [
+    "_assemble_geometry",
     "OrchestratorV2Options",
     "OrchestratorV2Result",
     "PhaseAResult",
