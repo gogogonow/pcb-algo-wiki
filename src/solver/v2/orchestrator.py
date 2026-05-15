@@ -75,6 +75,44 @@ class OrchestratorV2Result:
         return self.geometry.solve_status
 
 
+def _inject_prea_endpoints(
+    yaml_path: str | Path,
+    artifact: FrontendArtifact,
+    plan: NodePlan,
+    board_w: float,
+    board_h: float,
+) -> NodePlan:
+    """Refine ``plan.endpoint_xy`` using the PreA target_length-aware solver.
+
+    Lazy-imports :mod:`tools.pcb_solve_v2` to avoid a circular dependency
+    (pcb_solve_v2 imports the orchestrator at module top-level). Failures are
+    swallowed so the router still has the heuristic seeds to fall back on.
+    """
+    try:
+        from tools.pcb_solve_v2 import (
+            _load_branch_offset_u_tokens,
+            _load_junction_templates,
+            solve_pre_a_from_artifact,
+        )
+
+        templates = _load_junction_templates(layout_path=Path(yaml_path))
+        tokens = _load_branch_offset_u_tokens(layout_path=Path(yaml_path))
+        positions, _ = solve_pre_a_from_artifact(
+            artifact,
+            plan.endpoint_xy,
+            board_w=board_w,
+            board_h=board_h,
+            junction_templates=templates,
+            branch_offset_u_tokens=tokens,
+        )
+    except Exception:
+        return plan
+
+    for endpoint, xy in positions.items():
+        plan.endpoint_xy[endpoint] = xy
+    return plan
+
+
 def solve_layout_v2(
     yaml_path: str | Path,
     options: OrchestratorV2Options | None = None,
@@ -90,6 +128,8 @@ def solve_layout_v2(
     plan = plan_node_positions(
         artifact, board_width_mm=board_w, board_height_mm=board_h
     )
+    # Inject preA-refined endpoints (target_length aware) before A* router.
+    plan = _inject_prea_endpoints(yaml_path, artifact, plan, board_w, board_h)
     grid_cfg = GridConfig(step_um=options.grid_step_um)
     skeleton = route_skeleton(
         artifact,

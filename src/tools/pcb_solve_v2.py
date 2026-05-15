@@ -18,6 +18,7 @@ from xml.sax.saxutils import escape
 
 from output import render_full_layout
 from frontend.solver_ir import compile_solver_ir
+from frontend.compile import FrontendArtifact  # re-exported via compile module
 from schema.geometry_ir import GeometryIR
 from schema.solver_ir import UniversalJunctionTemplate
 from schema.v33 import V33Layout, load_v33_layout
@@ -1204,6 +1205,40 @@ def _propagate_constrained_edges(
             positions[b_id] = positions[a_id]
 
     return constrained_endpoints
+
+
+def solve_pre_a_from_artifact(
+    artifact: FrontendArtifact,
+    plan_xy: dict[str, tuple[float, float]],
+    *,
+    board_w: float,
+    board_h: float,
+    junction_templates: dict[str, UniversalJunctionTemplate] | None = None,
+    branch_offset_u_tokens: dict[str, str] | None = None,
+) -> tuple[dict[str, tuple[float, float]], dict[str, dict[str, tuple[float, float]]]]:
+    """Public PreA solver: relax endpoint positions to satisfy target_length.
+
+    Identical pipeline to :func:`_solve_pre_a_positions` but does not require
+    a fully constructed :class:`OrchestratorV2Result`. Intended to be called
+    BEFORE Phase A so the router can consume preA-refined endpoints.
+    """
+
+    class _Stub:
+        def __init__(self) -> None:
+            class _PA:
+                pass
+
+            self.artifact = artifact
+            self.phase_a = _PA()
+            self.phase_a.plan = type("P", (), {"endpoint_xy": dict(plan_xy)})()
+
+    return _solve_pre_a_positions(
+        _Stub(),  # type: ignore[arg-type]
+        board_w=board_w,
+        board_h=board_h,
+        junction_templates=junction_templates,
+        branch_offset_u_tokens=branch_offset_u_tokens,
+    )
 
 
 def _solve_pre_a_positions(
