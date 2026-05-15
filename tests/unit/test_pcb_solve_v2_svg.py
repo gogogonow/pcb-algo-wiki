@@ -116,9 +116,6 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     )
 
     by_edge = {edge["edge_id"]: edge for edge in payload["edges"]}
-    pin1_seg3 = by_edge["IC1_pin1_seg3"]["endpoint_positions_mm"][
-        "IC1_pin1_seg3_end_split_pad"
-    ]
     pin2_seg2 = by_edge["IC1_pin2_seg2"]["endpoint_positions_mm"][
         "IC1_pin2_seg2_end_split_pad"
     ]
