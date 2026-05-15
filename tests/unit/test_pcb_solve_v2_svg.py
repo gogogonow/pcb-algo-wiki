@@ -137,8 +137,15 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     r2_pin2_xy = seg2_to_r2["R2.PIN_2"]
     assert r2_pin2_xy["x"] == pytest.approx(split_xy["x"], abs=1e-6)
     assert r2_pin2_xy["y"] == pytest.approx(split_xy["y"], abs=1e-6)
+    c1r1_to_combiner = by_edge["C1R1_to_combiner"]["render_endpoint_positions_mm"]
+    c1r1_pin2 = c1r1_to_combiner["C1.PIN_2,R1.PIN_2"]
+    seg5_start = c1r1_to_combiner["IC1_pin1_seg5_start_combiner"]
+    assert c1r1_pin2["x"] == pytest.approx(seg5_start["x"], abs=1e-6)
+    assert c1r1_pin2["y"] == pytest.approx(seg5_start["y"], abs=1e-6)
+    assert "p1_seg2-&gt;R2" in svg
     assert 'class="prea-assist-link"' in svg
     assert 'data-endpoint="R2.PIN_2"' in svg
+    assert by_edge["IC1_pin1_seg2_to_R2"]["edge_short"] == "p1_seg2->R2"
 
     phase_a_svg = scratch_dir / "PA_Module_Simplified.phaseA.svg"
     phase_a_text = phase_a_svg.read_text(encoding="utf-8")

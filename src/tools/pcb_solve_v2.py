@@ -278,6 +278,19 @@ def _render_pre_phase_svg(
         f'<rect class="prea-board" x="{_x(0):.2f}" y="{_y(board_h):.2f}" width="{board_w * px_per_mm:.2f}" height="{board_h * px_per_mm:.2f}"/>',
     ]
 
+    endpoint_vectors: dict[str, list[tuple[float, float, float]]] = {}
+
+    def _add_endpoint_vector(
+        endpoint_id: str, vx: float, vy: float, weight: float
+    ) -> None:
+        norm = math.hypot(vx, vy)
+        if norm < 1e-9:
+            return
+        ux, uy = vx / norm, vy / norm
+        for token in _expand_endpoint_tokens(endpoint_id):
+            endpoint_vectors.setdefault(token, []).append((ux, uy, weight))
+        endpoint_vectors.setdefault(endpoint_id, []).append((ux, uy, weight))
+
     # Draw microstrip edges with width/length labels.
     for edge_id, edge in sorted(artifact.edges.items()):
         if edge.edge_type != "microstrip" or len(edge.connections) != 2:
@@ -294,6 +307,9 @@ def _render_pre_phase_svg(
             f'x1="{_x(sx):.2f}" y1="{_y(sy):.2f}" x2="{_x(ex):.2f}" y2="{_y(ey):.2f}" '
             f'stroke="#334155" stroke-width="{stroke_width:.2f}"/>'
         )
+        weight = float(edge.target_length) if edge.target_length is not None else 0.0
+        _add_endpoint_vector(start_id, ex - sx, ey - sy, weight)
+        _add_endpoint_vector(end_id, sx - ex, sy - ey, weight)
         mx = (sx + ex) / 2.0
         my = (sy + ey) / 2.0
         length_text = (
@@ -302,9 +318,10 @@ def _render_pre_phase_svg(
             else "L=n/a"
         )
         width_text = f"w={float(edge.width or 0.0):.1f}mm"
+        short_edge_id = _prea_short_name(edge_id)
         lines.append(
             f'<text class="prea-label" x="{_x(mx)+4:.2f}" y="{_y(my)-4:.2f}">'
-            f"{escape(edge_id)} | {escape(width_text)} | {escape(length_text)}</text>"
+            f"{escape(short_edge_id)} | {escape(width_text)} | {escape(length_text)}</text>"
         )
 
     pad_centers: dict[str, tuple[float, float]] = {}
@@ -346,6 +363,28 @@ def _render_pre_phase_svg(
                     continue
                 rotation = math.degrees(math.atan2(wdy, wdx) - math.atan2(ldy, ldx))
                 break
+            vector_candidates: list[tuple[float, float, float]] = []
+            for pad in uv.pads:
+                pin_ep = f"{comp_id}.{pad.pin}"
+                vector_candidates.extend(endpoint_vectors.get(pin_ep, ()))
+                pin_xy = positions.get(pin_ep)
+                if pin_xy is None:
+                    continue
+                for other_ep, other_xy in positions.items():
+                    if _prea_endpoint_kind(artifact, other_ep) == "virtual_rlc_pin":
+                        continue
+                    if (
+                        math.hypot(other_xy[0] - pin_xy[0], other_xy[1] - pin_xy[1])
+                        > 1e-6
+                    ):
+                        continue
+                    vector_candidates.extend(endpoint_vectors.get(other_ep, ()))
+            if vector_candidates:
+                vx, vy, _ = max(
+                    vector_candidates,
+                    key=lambda item: (item[2], abs(item[0]) + abs(item[1])),
+                )
+                rotation = math.degrees(math.atan2(vy, vx))
             ct = math.cos(math.radians(rotation))
             st = math.sin(math.radians(rotation))
             lax, lay = local_xy[anchor_pin]
@@ -416,7 +455,7 @@ def _render_pre_phase_svg(
                 f'<circle class="prea-fixed-point" cx="{_x(px):.2f}" cy="{_y(py):.2f}" r="3.2"/>'
             )
             lines.append(
-                f'<text class="prea-label" x="{_x(px)+4:.2f}" y="{_y(py)-4:.2f}">{escape(endpoint)}</text>'
+                f'<text class="prea-label" x="{_x(px)+4:.2f}" y="{_y(py)-4:.2f}">{escape(_prea_short_name(endpoint))}</text>'
             )
         elif kind == "node":
             lines.append(
@@ -428,7 +467,7 @@ def _render_pre_phase_svg(
             points = f"{cx:.2f},{cy-3.8:.2f} {cx+3.8:.2f},{cy:.2f} {cx:.2f},{cy+3.8:.2f} {cx-3.8:.2f},{cy:.2f}"
             lines.append(f'<polygon class="prea-virtual-endpoint" points="{points}"/>')
             lines.append(
-                f'<text class="prea-label" x="{cx+4:.2f}" y="{cy-4:.2f}">{escape(endpoint)}</text>'
+                f'<text class="prea-label" x="{cx+4:.2f}" y="{cy-4:.2f}">{escape(_prea_short_name(endpoint))}</text>'
             )
 
     if banner:
@@ -479,6 +518,24 @@ def _prea_endpoint_kind(artifact, endpoint_id: str) -> str:  # type: ignore[no-u
         if comp in artifact.uv_components:
             return "virtual_rlc_pin"
     return "other"
+
+
+def _expand_endpoint_tokens(endpoint_id: str) -> tuple[str, ...]:
+    if "," not in endpoint_id:
+        return (endpoint_id,)
+    return tuple(part.strip() for part in endpoint_id.split(",") if part.strip())
+
+
+def _prea_short_name(name: str) -> str:
+    out = name
+    out = out.replace("IC1_pin1_", "p1_")
+    out = out.replace("IC1_pin2_", "p2_")
+    out = out.replace("_universal_node", "_u")
+    out = out.replace("_end_split_pad", "_sp")
+    out = out.replace("_start_combiner", "_sc")
+    out = out.replace("_to_", "->")
+    out = out.replace(".PIN_", ".")
+    return out
 
 
 def _solve_pre_a_positions(
@@ -736,6 +793,23 @@ def _solve_pre_a_positions(
             else:
                 positions[a_id] = _clamp((ax + move_a[0], ay + move_a[1]))
                 positions[b_id] = _clamp((bx + move_b[0], by + move_b[1]))
+    # Re-apply connectivity locks after relaxation so virtual endpoints remain
+    # snapped to their associated trace endpoints even if that trace endpoint
+    # moved during constrained-length relaxation.
+    for edge in artifact.edges.values():
+        if (
+            edge.edge_type != "microstrip"
+            or len(edge.connections) != 2
+            or edge.target_length is not None
+        ):
+            continue
+        a_id, b_id = edge.connections
+        a_kind = _prea_endpoint_kind(artifact, a_id)
+        b_kind = _prea_endpoint_kind(artifact, b_id)
+        if a_kind == "virtual_rlc_pin" and b_kind != "virtual_rlc_pin":
+            positions[a_id] = positions[b_id]
+        elif b_kind == "virtual_rlc_pin" and a_kind != "virtual_rlc_pin":
+            positions[b_id] = positions[a_id]
     # Expand composite endpoints like "C1.PIN_1,R1.PIN_1" so each member pin
     # has a concrete coordinate for preA footprint rendering.
     for endpoint, xy in list(positions.items()):
@@ -810,8 +884,12 @@ def _persist_phase_artefacts(
                 "edges": [
                     {
                         "edge_id": edge.name,
+                        "edge_short": _prea_short_name(edge.name),
                         "routing_class": edge.routing_class,
                         "connections": list(edge.connections),
+                        "connections_short": [
+                            _prea_short_name(endpoint) for endpoint in edge.connections
+                        ],
                         "width": edge.width,
                         "target_length": edge.target_length,
                         "endpoint_positions_mm": {

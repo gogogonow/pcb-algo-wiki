@@ -2,10 +2,15 @@
   "edges": [
     {
       "edge_id": "IC1_pin1_seg1",
+      "edge_short": "p1_seg1",
       "routing_class": "rf_constrained_locked",
       "connections": [
         "IC1.PIN_1",
         "IC1_pin1_seg1_universal_node"
+      ],
+      "connections_short": [
+        "IC1.1",
+        "p1_seg1_u"
       ],
       "width": 3.6,
       "target_length": 5.75,
@@ -34,10 +39,15 @@
     },
     {
       "edge_id": "IC1_pin1_seg2",
+      "edge_short": "p1_seg2",
       "routing_class": "rf_constrained_locked",
       "connections": [
         "IC1_pin1_seg1_universal_node",
         "IC1_pin1_seg2_end_split_pad"
+      ],
+      "connections_short": [
+        "p1_seg1_u",
+        "p1_seg2_sp"
       ],
       "width": 1.88,
       "target_length": 1.29,
@@ -66,10 +76,15 @@
     },
     {
       "edge_id": "IC1_pin1_seg2_to_R2",
+      "edge_short": "p1_seg2->R2",
       "routing_class": "rf_constrained_free",
       "connections": [
         "IC1_pin1_seg2_end_split_pad",
         "R2.PIN_2"
+      ],
+      "connections_short": [
+        "p1_seg2_sp",
+        "R2.2"
       ],
       "width": null,
       "target_length": null,
@@ -98,10 +113,15 @@
     },
     {
       "edge_id": "IC1_pin1_seg3",
+      "edge_short": "p1_seg3",
       "routing_class": "rf_constrained_locked",
       "connections": [
         "IC1_pin1_seg1_universal_node",
         "IC1_pin1_seg3_end_split_pad"
+      ],
+      "connections_short": [
+        "p1_seg1_u",
+        "p1_seg3_sp"
       ],
       "width": 1.27,
       "target_length": 1.47,
@@ -130,10 +150,15 @@
     },
     {
       "edge_id": "IC1_pin1_seg3_to_C5",
+      "edge_short": "p1_seg3->C5",
       "routing_class": "rf_constrained_free",
       "connections": [
         "IC1_pin1_seg3_end_split_pad",
         "C5.PIN_1"
+      ],
+      "connections_short": [
+        "p1_seg3_sp",
+        "C5.1"
       ],
       "width": null,
       "target_length": null,
@@ -162,10 +187,15 @@
     },
     {
       "edge_id": "IC1_pin1_seg4",
+      "edge_short": "p1_seg4",
       "routing_class": "rf_constrained_locked",
       "connections": [
         "IC1_pin1_seg1_universal_node",
         "IC1_pin1_seg4_end_split_pad"
+      ],
+      "connections_short": [
+        "p1_seg1_u",
+        "p1_seg4_sp"
       ],
       "width": 1.6,
       "target_length": 4.67,
@@ -194,10 +224,15 @@
     },
     {
       "edge_id": "IC1_pin1_seg4_to_C1R1",
+      "edge_short": "p1_seg4->C1R1",
       "routing_class": "rf_constrained_free",
       "connections": [
         "IC1_pin1_seg4_end_split_pad",
         "C1.PIN_1,R1.PIN_1"
+      ],
+      "connections_short": [
+        "p1_seg4_sp",
+        "C1.1,R1.1"
       ],
       "width": null,
       "target_length": null,
@@ -226,16 +261,21 @@
     },
     {
       "edge_id": "C1R1_to_combiner",
+      "edge_short": "C1R1->combiner",
       "routing_class": "rf_constrained_free",
       "connections": [
         "C1.PIN_2,R1.PIN_2",
         "IC1_pin1_seg5_start_combiner"
       ],
+      "connections_short": [
+        "C1.2,R1.2",
+        "p1_seg5_sc"
+      ],
       "width": null,
       "target_length": null,
       "endpoint_positions_mm": {
         "C1.PIN_2,R1.PIN_2": {
-          "x": 23.0,
+          "x": 20.64,
           "y": 50.0,
           "kind": "virtual_rlc_pin"
         },
@@ -247,7 +287,7 @@
       },
       "render_endpoint_positions_mm": {
         "C1.PIN_2,R1.PIN_2": {
-          "x": 23.0,
+          "x": 20.64,
           "y": 50.0
         },
         "IC1_pin1_seg5_start_combiner": {
@@ -258,10 +298,15 @@
     },
     {
       "edge_id": "IC1_pin1_seg5",
+      "edge_short": "p1_seg5",
       "routing_class": "rf_constrained_locked",
       "connections": [
         "IC1_pin1_seg5_start_combiner",
         "C2.PIN_1"
+      ],
+      "connections_short": [
+        "p1_seg5_sc",
+        "C2.1"
       ],
       "width": 1.1,
       "target_length": 4.72,
@@ -290,10 +335,15 @@
     },
     {
       "edge_id": "IC1_pin1_seg6",
+      "edge_short": "p1_seg6",
       "routing_class": "rf_constrained_locked",
       "connections": [
         "C2.PIN_2",
         "TP4.PIN_1"
+      ],
+      "connections_short": [
+        "C2.2",
+        "TP4.1"
       ],
       "width": 1.1,
       "target_length": 20.0,
@@ -322,10 +372,15 @@
     },
     {
       "edge_id": "R2_to_TP1",
+      "edge_short": "R2->TP1",
       "routing_class": "rf_constrained_locked",
       "connections": [
         "R2.PIN_1",
         "TP1.PIN_1"
+      ],
+      "connections_short": [
+        "R2.1",
+        "TP1.1"
       ],
       "width": 0.58,
       "target_length": 10.0,
@@ -354,10 +409,15 @@
     },
     {
       "edge_id": "IC1_pin2_seg1",
+      "edge_short": "p2_seg1",
       "routing_class": "rf_constrained_locked",
       "connections": [
         "IC1.PIN_2",
         "IC1_pin2_seg1_universal_node"
+      ],
+      "connections_short": [
+        "IC1.2",
+        "p2_seg1_u"
       ],
       "width": 3.9,
       "target_length": 5.75,
@@ -386,10 +446,15 @@
     },
     {
       "edge_id": "IC1_pin2_seg2",
+      "edge_short": "p2_seg2",
       "routing_class": "rf_constrained_locked",
       "connections": [
         "IC1_pin2_seg1_universal_node",
         "IC1_pin2_seg2_end_split_pad"
+      ],
+      "connections_short": [
+        "p2_seg1_u",
+        "p2_seg2_sp"
       ],
       "width": 1.88,
       "target_length": 1.29,
@@ -418,10 +483,15 @@
     },
     {
       "edge_id": "IC1_pin2_seg2_to_C3",
+      "edge_short": "p2_seg2->C3",
       "routing_class": "rf_constrained_free",
       "connections": [
         "IC1_pin2_seg2_end_split_pad",
         "C3.PIN_1"
+      ],
+      "connections_short": [
+        "p2_seg2_sp",
+        "C3.1"
       ],
       "width": null,
       "target_length": null,
@@ -450,10 +520,15 @@
     },
     {
       "edge_id": "IC1_pin2_seg3",
+      "edge_short": "p2_seg3",
       "routing_class": "rf_constrained_locked",
       "connections": [
         "IC1_pin2_seg1_universal_node",
         "IC1_pin2_seg3_end_split_pad"
+      ],
+      "connections_short": [
+        "p2_seg1_u",
+        "p2_seg3_sp"
       ],
       "width": 1.27,
       "target_length": 1.47,
@@ -482,10 +557,15 @@
     },
     {
       "edge_id": "IC1_pin2_seg3_to_C6",
+      "edge_short": "p2_seg3->C6",
       "routing_class": "rf_constrained_free",
       "connections": [
         "IC1_pin2_seg3_end_split_pad",
         "C6.PIN_2"
+      ],
+      "connections_short": [
+        "p2_seg3_sp",
+        "C6.2"
       ],
       "width": null,
       "target_length": null,
@@ -514,10 +594,15 @@
     },
     {
       "edge_id": "IC1_pin2_seg4",
+      "edge_short": "p2_seg4",
       "routing_class": "rf_constrained_locked",
       "connections": [
         "IC1_pin2_seg1_universal_node",
         "R3.PIN_1"
+      ],
+      "connections_short": [
+        "p2_seg1_u",
+        "R3.1"
       ],
       "width": 1.6,
       "target_length": 4.67,
@@ -546,17 +631,22 @@
     },
     {
       "edge_id": "R3_to_combiner",
+      "edge_short": "R3->combiner",
       "routing_class": "rf_constrained_free",
       "connections": [
         "R3.PIN_2",
         "IC1_pin2_seg5_start_combiner"
       ],
+      "connections_short": [
+        "R3.2",
+        "p2_seg5_sc"
+      ],
       "width": null,
       "target_length": null,
       "endpoint_positions_mm": {
         "R3.PIN_2": {
-          "x": 21.45,
-          "y": 51.29903810567666,
+          "x": 20.450724565910164,
+          "y": 52.136519955321354,
           "kind": "virtual_rlc_pin"
         },
         "IC1_pin2_seg5_start_combiner": {
@@ -567,8 +657,8 @@
       },
       "render_endpoint_positions_mm": {
         "R3.PIN_2": {
-          "x": 21.45,
-          "y": 51.29903810567666
+          "x": 20.450724565910164,
+          "y": 52.136519955321354
         },
         "IC1_pin2_seg5_start_combiner": {
           "x": 20.450724565910164,
@@ -578,10 +668,15 @@
     },
     {
       "edge_id": "IC1_pin2_seg5",
+      "edge_short": "p2_seg5",
       "routing_class": "rf_constrained_locked",
       "connections": [
         "IC1_pin2_seg5_start_combiner",
         "C4.PIN_1"
+      ],
+      "connections_short": [
+        "p2_seg5_sc",
+        "C4.1"
       ],
       "width": 1.1,
       "target_length": 4.63,
@@ -610,10 +705,15 @@
     },
     {
       "edge_id": "IC1_pin2_seg6",
+      "edge_short": "p2_seg6",
       "routing_class": "rf_constrained_locked",
       "connections": [
         "C4.PIN_2",
         "TP5.PIN_1"
+      ],
+      "connections_short": [
+        "C4.2",
+        "TP5.1"
       ],
       "width": 1.1,
       "target_length": 20.0,
@@ -642,10 +742,15 @@
     },
     {
       "edge_id": "RF_INPUT_to_IC1",
+      "edge_short": "RF_INPUT->IC1",
       "routing_class": "rf_constrained_locked",
       "connections": [
         "TP3.PIN_1",
         "IC1.PIN_3"
+      ],
+      "connections_short": [
+        "TP3.1",
+        "IC1.3"
       ],
       "width": 3.6,
       "target_length": 80.0,
@@ -674,10 +779,15 @@
     },
     {
       "edge_id": "PWR_VDD_bus",
+      "edge_short": "PWR_VDD_bus",
       "routing_class": "rf_constrained_locked",
       "connections": [
         "TP2.PIN_1",
         "IC1.PIN_4"
+      ],
+      "connections_short": [
+        "TP2.1",
+        "IC1.4"
       ],
       "width": 3.6,
       "target_length": 25.5,
