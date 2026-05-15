@@ -23,6 +23,8 @@ from solver.v2.orchestrator import (
     phase_summary,
 )
 from solver.v2.uv_adhesion import UvAdhesionReport
+from topology.loaders import load_topology_graph
+from topology.render_svg import render_topology_svg
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -205,9 +207,21 @@ def _render_svg(
     path.write_text(svg)
 
 
+def _render_pre_phase_svg(yaml_path: Path, path: Path, *, banner: str = "") -> None:
+    """Render YAML-defined connectivity SVG before any Phase A routing."""
+    graph = load_topology_graph(yaml_path)
+    svg = render_topology_svg(graph)
+    if banner:
+        svg = svg.replace("</svg>", banner + "</svg>")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(svg, encoding="utf-8")
+
+
 def _persist_phase_artefacts(
     result: OrchestratorV2Result,
     out_dir: Path,
+    *,
+    layout_path: Path,
 ) -> dict[str, Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     project = result.geometry.project
@@ -217,6 +231,40 @@ def _persist_phase_artefacts(
     summary_path = out_dir / f"{project}.summary.json"
     summary_path.write_text(json.dumps(summary, indent=2, default=str))
     artefacts["summary"] = summary_path
+
+    # Pre-Phase-A: raw YAML topology connectivity snapshot.
+    pre_a_svg = out_dir / f"{project}.preA.svg"
+    _render_pre_phase_svg(
+        layout_path,
+        pre_a_svg,
+        banner=_phase_banner(
+            "Pre-A",
+            "YAML-defined microstrip connectivity (before Phase A routing)",
+            "#7c3aed",
+        ),
+    )
+    artefacts["preA_svg"] = pre_a_svg
+
+    pre_a_json = out_dir / f"{project}.preA.json"
+    pre_a_json.write_text(
+        json.dumps(
+            {
+                "edges": [
+                    {
+                        "edge_id": edge.name,
+                        "routing_class": edge.routing_class,
+                        "connections": list(edge.connections),
+                        "width": edge.width,
+                        "target_length": edge.target_length,
+                    }
+                    for edge in result.artifact.edges.values()
+                ]
+            },
+            indent=2,
+            default=str,
+        )
+    )
+    artefacts["preA"] = pre_a_json
 
     # Per-phase JSON (Phase A and B are the meaningful ones).
     phase_a_path = out_dir / f"{project}.phaseA.json"
@@ -340,7 +388,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     result = solve_layout_v2(args.layout, options=options)
 
-    artefacts = _persist_phase_artefacts(result, args.out_dir)
+    artefacts = _persist_phase_artefacts(
+        result, args.out_dir, layout_path=Path(args.layout)
+    )
 
     svg_path = args.svg_out or (args.out_dir / f"{result.geometry.project}.final.svg")
     _emit_svg(result, svg_path)

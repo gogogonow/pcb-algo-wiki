@@ -1,7 +1,13 @@
+from pathlib import Path
+
+from tools import pcb_solve_v2
 from tools.pcb_solve_v2 import _pin_label_overlay
 
 from schema.geometry_ir import ComponentPlacement, GeometryIR, PinPlacement
 from schema.v6_ir import Board, Point
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+REAL_CASE_PATH = REPO_ROOT / "rf_layout_simplified.yaml"
 
 
 def test_pin_label_overlay_renders_pin_numbers() -> None:
@@ -27,3 +33,14 @@ def test_pin_label_overlay_renders_pin_numbers() -> None:
 
     assert "PIN_1" in overlay
     assert "PIN_2" in overlay
+
+
+def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> None:
+    exit_code = pcb_solve_v2.main(
+        [str(REAL_CASE_PATH), "--out-dir", str(scratch_dir), "--quiet"]
+    )
+    pre_a_svg = scratch_dir / "PA_Module_Simplified.preA.svg"
+
+    assert exit_code == 0
+    assert pre_a_svg.exists()
+    assert 'class="topology-edge"' in pre_a_svg.read_text(encoding="utf-8")
