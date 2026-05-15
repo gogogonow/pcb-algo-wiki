@@ -75,6 +75,41 @@ class OrchestratorV2Result:
         return self.geometry.solve_status
 
 
+def _chamfer_skeleton_routes(
+    skeleton: SkeletonReport, grid_step_um: int
+) -> SkeletonReport:
+    """Apply 45° chamfering to every successful route polyline (post-meander)."""
+    from .skeleton_router import _chamfer_90deg_corners, _polyline_len_mm
+
+    new_routes: dict[str, RouteOutcome] = {}
+    new_endpoints = dict(skeleton.final_endpoint_um)
+    for edge_id, outcome in skeleton.routes.items():
+        if not outcome.success or len(outcome.polyline_um) < 3:
+            new_routes[edge_id] = outcome
+            continue
+        # Chamfer size: 2 grid steps; will not exceed half-segment length.
+        chamfered = _chamfer_90deg_corners(outcome.polyline_um, grid_step_um * 2)
+        if chamfered == outcome.polyline_um:
+            new_routes[edge_id] = outcome
+            continue
+        new_routes[edge_id] = RouteOutcome(
+            edge_id=outcome.edge_id,
+            polyline_um=chamfered,
+            length_mm=_polyline_len_mm(chamfered),
+            target_mm=outcome.target_mm,
+            success=outcome.success,
+            rip_up_round=outcome.rip_up_round,
+            failure_reason=outcome.failure_reason,
+        )
+        new_endpoints[edge_id + ":__start__"] = chamfered[0]
+        new_endpoints[edge_id + ":__end__"] = chamfered[-1]
+    return SkeletonReport(
+        routes=new_routes,
+        final_endpoint_um=skeleton.final_endpoint_um,
+        rip_up_rounds=skeleton.rip_up_rounds,
+    )
+
+
 def _inject_prea_endpoints(
     yaml_path: str | Path,
     artifact: FrontendArtifact,
@@ -142,6 +177,9 @@ def solve_layout_v2(
 
     # ---- Length compensation: M7 hairpin meander on under-length routes ---
     skeleton = _apply_length_compensation(yaml_path, artifact, skeleton)
+    # WI-A3: Re-apply 45° chamfering after meanders introduce rectangular
+    # hairpins. Strict invariant — Phase A must only contain 45° corners.
+    skeleton = _chamfer_skeleton_routes(skeleton, options.grid_step_um)
 
     # ---- Phase B: UV adhesion ---------------------------------------------
     t1 = time.perf_counter()

@@ -186,6 +186,106 @@ def _carve_pad_corridor(
     return out
 
 
+def _simplify_collinear(pts: tuple[tuple[int, int], ...]) -> list[tuple[int, int]]:
+    """Drop interior points that are collinear with their neighbours."""
+    if len(pts) <= 2:
+        return list(pts)
+    out: list[tuple[int, int]] = [pts[0]]
+    for i in range(1, len(pts) - 1):
+        ax, ay = out[-1]
+        bx, by = pts[i]
+        cx, cy = pts[i + 1]
+        # Cross product of (b-a) x (c-b); zero means collinear.
+        cross = (bx - ax) * (cy - by) - (by - ay) * (cx - bx)
+        if cross != 0:
+            out.append(pts[i])
+    out.append(pts[-1])
+    return out
+
+
+def _chamfer_90deg_corners(
+    pts: tuple[tuple[int, int], ...], chamfer_um: int
+) -> tuple[tuple[int, int], ...]:
+    """Insert 45° chamfer at every orthogonal corner.
+
+    The router's octilinear A* produces 8-direction polylines; 90° turns
+    occur where two axis-aligned segments meet perpendicularly. Each such
+    corner is replaced by two 45° turns (a triangular cap of side
+    ``chamfer_um``).
+    """
+    if len(pts) < 3 or chamfer_um <= 0:
+        return pts
+    simplified = _simplify_collinear(pts)
+    out: list[tuple[int, int]] = [simplified[0]]
+    for i in range(1, len(simplified) - 1):
+        ax, ay = simplified[i - 1]
+        bx, by = simplified[i]
+        cx, cy = simplified[i + 1]
+        dx1, dy1 = bx - ax, by - ay
+        dx2, dy2 = cx - bx, cy - by
+        is_axial1 = (dx1 == 0) ^ (dy1 == 0)
+        is_axial2 = (dx2 == 0) ^ (dy2 == 0)
+        # Only chamfer 90° corners formed by two axial segments.
+        if is_axial1 and is_axial2 and (dx1 * dx2 + dy1 * dy2 == 0):
+            len1 = abs(dx1) + abs(dy1)
+            len2 = abs(dx2) + abs(dy2)
+            cham = min(chamfer_um, len1 // 2, len2 // 2)
+            if cham <= 0:
+                out.append((bx, by))
+                continue
+            sx1 = 1 if dx1 > 0 else (-1 if dx1 < 0 else 0)
+            sy1 = 1 if dy1 > 0 else (-1 if dy1 < 0 else 0)
+            sx2 = 1 if dx2 > 0 else (-1 if dx2 < 0 else 0)
+            sy2 = 1 if dy2 > 0 else (-1 if dy2 < 0 else 0)
+            # Approach point: pull back from corner along incoming dir.
+            out.append((bx - sx1 * cham, by - sy1 * cham))
+            # Departure point: step away from corner along outgoing dir.
+            out.append((bx + sx2 * cham, by + sy2 * cham))
+        else:
+            out.append((bx, by))
+    out.append(simplified[-1])
+    return tuple(out)
+
+
+def _max_corner_angle_deviation(pts: tuple[tuple[int, int], ...]) -> float:
+    """Return the maximum |cos(theta)| where theta is the deviation from 45°
+    multiples at any interior corner. Zero means all corners are 45° / 90°
+    multiples (which combined with chamfering means all 45°). For diagnostic
+    use in tests."""
+    import math
+
+    worst = 0.0
+    for i in range(1, len(pts) - 1):
+        ax, ay = pts[i - 1]
+        bx, by = pts[i]
+        cx, cy = pts[i + 1]
+        d1 = math.hypot(bx - ax, by - ay)
+        d2 = math.hypot(cx - bx, cy - by)
+        if d1 < 1e-6 or d2 < 1e-6:
+            continue
+        ux = (bx - ax) / d1
+        uy = (by - ay) / d1
+        vx = (cx - bx) / d2
+        vy = (cy - by) / d2
+        cos_t = max(-1.0, min(1.0, ux * vx + uy * vy))
+        theta = math.degrees(math.acos(cos_t))
+        # Deviation from nearest 45° multiple (0, 45, 90, 135, 180).
+        dev = min(abs(theta - k * 45) for k in range(5))
+        worst = max(worst, dev)
+    return worst
+
+
+def _polyline_len_mm(pts: tuple[tuple[int, int], ...]) -> float:
+    if len(pts) < 2:
+        return 0.0
+    import math
+
+    total = 0.0
+    for (ax, ay), (bx, by) in zip(pts, pts[1:]):
+        total += math.hypot(bx - ax, by - ay)
+    return total / MM_TO_UM
+
+
 def route_skeleton(
     artifact: FrontendArtifact,
     plan: NodePlan,
@@ -297,23 +397,27 @@ def route_skeleton(
             )
             if path.success and path.points_um:
                 width_um = int(ep.width_mm * MM_TO_UM)
+                # Strict 45°: chamfer 90° corners. Chamfer size = max(width,
+                # 2 grid steps) so the triangular cap is always visible.
+                chamfer_um = max(width_um, config.step_um * 2)
+                chamfered = _chamfer_90deg_corners(path.points_um, chamfer_um)
                 grid.add_routed_polyline(
-                    path.points_um,
+                    chamfered,
                     width_um=width_um,
                     clearance_um=clearance_um,
                     label=f"route:{ep.edge_id}",
                 )
                 report.routes[ep.edge_id] = RouteOutcome(
                     edge_id=ep.edge_id,
-                    polyline_um=path.points_um,
-                    length_mm=path.length_mm(),
+                    polyline_um=chamfered,
+                    length_mm=_polyline_len_mm(chamfered),
                     target_mm=ep.target_length_mm,
                     success=True,
                     rip_up_round=round_idx,
                 )
                 # Stash final endpoint positions (for "dragged" UV pins).
-                report.final_endpoint_um[ep.start_endpoint] = path.points_um[0]
-                report.final_endpoint_um[ep.goal_endpoint] = path.points_um[-1]
+                report.final_endpoint_um[ep.start_endpoint] = chamfered[0]
+                report.final_endpoint_um[ep.goal_endpoint] = chamfered[-1]
             else:
                 attempts = failed_edges.get(ep.edge_id, 0) + 1
                 failed_edges[ep.edge_id] = attempts
