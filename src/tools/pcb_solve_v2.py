@@ -487,21 +487,21 @@ def _solve_pre_a_positions(
                         (branch_offset_u_tokens or {}).get(branch.edge_id, "").strip()
                     )
                     branch_edge = artifact.edges.get(branch.edge_id)
+                    ref_w = (
+                        float(ref_edge.width)
+                        if ref_edge is not None and ref_edge.width is not None
+                        else 0.0
+                    )
+                    branch_w = (
+                        float(branch_edge.width)
+                        if branch_edge is not None and branch_edge.width is not None
+                        else 0.0
+                    )
                     if branch.signed_v_kind.value == "edge_front" and token in (
                         "align_left",
                         "align_right",
                         "align_center",
                     ):
-                        ref_w = (
-                            float(ref_edge.width)
-                            if ref_edge is not None and ref_edge.width is not None
-                            else 0.0
-                        )
-                        branch_w = (
-                            float(branch_edge.width)
-                            if branch_edge is not None and branch_edge.width is not None
-                            else 0.0
-                        )
                         lateral = 0.0
                         if token == "align_left":
                             lateral = (ref_w - branch_w) / 2.0
@@ -517,6 +517,26 @@ def _solve_pre_a_positions(
                             lateral = float(branch.offset_u)
                         anchor = _clamp(
                             (nx + lateral * nx_left, ny + lateral * ny_left)
+                        )
+                    elif branch.signed_v_kind.value in ("edge_left", "edge_right"):
+                        # Side tangency: one edge of branch touches the reference
+                        # side edge, so center offset is (Wref + Wbranch)/2.
+                        if ref_w > 0.0 and branch_w > 0.0:
+                            side_gap = (ref_w + branch_w) / 2.0
+                        else:
+                            side_gap = abs(float(branch.signed_v))
+                        side_sign = (
+                            1.0 if branch.signed_v_kind.value == "edge_left" else -1.0
+                        )
+                        anchor = _clamp(
+                            (
+                                nx
+                                + float(branch.offset_u) * ux
+                                + side_sign * side_gap * nx_left,
+                                ny
+                                + float(branch.offset_u) * uy
+                                + side_sign * side_gap * ny_left,
+                            )
                         )
                     else:
                         anchor = _clamp(
