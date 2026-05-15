@@ -13,10 +13,13 @@ import json
 import math
 import sys
 from pathlib import Path
+from typing import Any
 from xml.sax.saxutils import escape
 
 from output import render_full_layout
+from frontend.solver_ir import compile_solver_ir
 from schema.geometry_ir import GeometryIR
+from schema.solver_ir import UniversalJunctionTemplate
 from solver.v2 import OrchestratorV2Options, solve_layout_v2
 from solver.v2.orchestrator import (
     _assemble_geometry,
@@ -210,6 +213,7 @@ def _render_pre_phase_svg(
     result: OrchestratorV2Result,
     path: Path,
     *,
+    templates: dict[str, UniversalJunctionTemplate] | None = None,
     banner: str = "",
     px_per_mm: float = 6.0,
     margin_mm: float = 5.0,
@@ -223,7 +227,12 @@ def _render_pre_phase_svg(
     artifact = result.artifact
     board_w = float(artifact.board.get("width", 40.0))
     board_h = float(artifact.board.get("height", 100.0))
-    positions = _solve_pre_a_positions(result, board_w=board_w, board_h=board_h)
+    positions = _solve_pre_a_positions(
+        result,
+        board_w=board_w,
+        board_h=board_h,
+        junction_templates=templates,
+    )
     virtual_endpoints = {
         endpoint
         for endpoint in positions
@@ -312,6 +321,16 @@ def _render_pre_phase_svg(
     return positions, virtual_endpoints
 
 
+def _load_junction_templates(
+    *, layout_path: Path
+) -> dict[str, UniversalJunctionTemplate]:
+    try:
+        ir = compile_solver_ir(layout_path)
+    except Exception:
+        return {}
+    return dict(ir.junction_templates)
+
+
 def _prea_endpoint_kind(artifact, endpoint_id: str) -> str:  # type: ignore[no-untyped-def]
     if endpoint_id in artifact.fixed_terminals:
         return "fixed_pin"
@@ -325,7 +344,11 @@ def _prea_endpoint_kind(artifact, endpoint_id: str) -> str:  # type: ignore[no-u
 
 
 def _solve_pre_a_positions(
-    result: OrchestratorV2Result, *, board_w: float, board_h: float
+    result: OrchestratorV2Result,
+    *,
+    board_w: float,
+    board_h: float,
+    junction_templates: dict[str, UniversalJunctionTemplate] | None = None,
 ) -> dict[str, tuple[float, float]]:
     """Relax endpoint positions to satisfy target-length proportions before routing."""
     artifact = result.artifact
@@ -355,6 +378,26 @@ def _solve_pre_a_positions(
     def _clamp(p: tuple[float, float]) -> tuple[float, float]:
         return (min(max(p[0], 0.0), board_w), min(max(p[1], 0.0), board_h))
 
+    constrained_endpoints: set[str] = set()
+    templates = junction_templates or {}
+    if templates:
+        # Apply junction branch geometric rules before any length relaxation.
+        for _ in range(3):
+            for node_id, template in templates.items():
+                node_xy = positions.get(node_id)
+                if node_xy is None:
+                    continue
+                nx, ny = node_xy
+                constrained_endpoints.add(node_id)
+                for branch in template.branches:
+                    target = branch.target_endpoint
+                    constrained_endpoints.add(target)
+                    if target in fixed:
+                        continue
+                    positions[target] = _clamp(
+                        (nx + float(branch.dx), ny + float(branch.dy))
+                    )
+
     for _ in range(180):
         for edge in artifact.edges.values():
             if edge.edge_type != "microstrip" or len(edge.connections) != 2:
@@ -377,14 +420,42 @@ def _solve_pre_a_positions(
             move_b = (ux * delta, uy * delta)
             if a_id in fixed and b_id in fixed:
                 continue
+            if a_id in constrained_endpoints and b_id in constrained_endpoints:
+                continue
             if a_id in fixed:
                 positions[b_id] = _clamp((bx + 2 * move_b[0], by + 2 * move_b[1]))
             elif b_id in fixed:
+                positions[a_id] = _clamp((ax + 2 * move_a[0], ay + 2 * move_a[1]))
+            elif a_id in constrained_endpoints:
+                positions[b_id] = _clamp((bx + 2 * move_b[0], by + 2 * move_b[1]))
+            elif b_id in constrained_endpoints:
                 positions[a_id] = _clamp((ax + 2 * move_a[0], ay + 2 * move_a[1]))
             else:
                 positions[a_id] = _clamp((ax + move_a[0], ay + move_a[1]))
                 positions[b_id] = _clamp((bx + move_b[0], by + move_b[1]))
     return positions
+
+
+def _prea_constraint_provenance(
+    result: OrchestratorV2Result,
+    templates: dict[str, UniversalJunctionTemplate],
+) -> list[dict[str, Any]]:
+    strict_edges = {
+        branch.edge_id
+        for template in templates.values()
+        for branch in template.branches
+    }
+    out: list[dict[str, Any]] = []
+    for edge in sorted(result.artifact.edges.values(), key=lambda e: e.name):
+        mode = "strict_junction_rule" if edge.name in strict_edges else "relaxed"
+        out.append(
+            {
+                "edge_id": edge.name,
+                "mode": mode,
+                "connections": list(edge.connections),
+            }
+        )
+    return out
 
 
 def _persist_phase_artefacts(
@@ -404,9 +475,11 @@ def _persist_phase_artefacts(
 
     # Pre-Phase-A: raw YAML topology connectivity snapshot.
     pre_a_svg = out_dir / f"{project}.preA.svg"
+    templates = _load_junction_templates(layout_path=layout_path)
     pre_positions, virtual_endpoints = _render_pre_phase_svg(
         result,
         pre_a_svg,
+        templates=templates,
         banner=_phase_banner(
             "Pre-A",
             "YAML-defined physical connectivity (no routing / no RLC placement)",
@@ -438,6 +511,9 @@ def _persist_phase_artefacts(
                     for edge in result.artifact.edges.values()
                 ],
                 "virtual_endpoints": sorted(virtual_endpoints),
+                "yaml_geometric_constraints_applied": _prea_constraint_provenance(
+                    result, templates
+                ),
             },
             indent=2,
             default=str,

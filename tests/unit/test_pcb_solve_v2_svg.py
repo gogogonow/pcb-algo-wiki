@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 from tools import pcb_solve_v2
 from tools.pcb_solve_v2 import _pin_label_overlay
@@ -49,3 +50,28 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     assert "w=3.6mm" in svg
     assert "L=80.0mm" in svg
     assert 'class="prea-virtual-endpoint"' in svg
+
+    pre_a_json = scratch_dir / "PA_Module_Simplified.preA.json"
+    payload = json.loads(pre_a_json.read_text(encoding="utf-8"))
+    assert "yaml_geometric_constraints_applied" in payload
+    assert any(
+        item.get("edge_id") == "IC1_pin1_seg2"
+        and item.get("mode") == "strict_junction_rule"
+        for item in payload["yaml_geometric_constraints_applied"]
+    )
+
+    by_edge = {edge["edge_id"]: edge for edge in payload["edges"]}
+    pin1_seg2 = by_edge["IC1_pin1_seg2"]["endpoint_positions_mm"][
+        "IC1_pin1_seg2_end_split_pad"
+    ]
+    pin1_seg3 = by_edge["IC1_pin1_seg3"]["endpoint_positions_mm"][
+        "IC1_pin1_seg3_end_split_pad"
+    ]
+    pin2_seg2 = by_edge["IC1_pin2_seg2"]["endpoint_positions_mm"][
+        "IC1_pin2_seg2_end_split_pad"
+    ]
+    pin2_seg3 = by_edge["IC1_pin2_seg3"]["endpoint_positions_mm"][
+        "IC1_pin2_seg3_end_split_pad"
+    ]
+    assert abs(pin1_seg2["y"] - pin1_seg3["y"]) > 2.0
+    assert abs(pin2_seg2["y"] - pin2_seg3["y"]) > 1.5
