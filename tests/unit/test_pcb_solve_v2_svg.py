@@ -52,6 +52,8 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     assert "w=3.6mm" in svg
     assert "L=80.0mm" in svg
     assert 'class="prea-virtual-endpoint"' in svg
+    assert 'class="prea-rlc-bbox"' in svg
+    assert "<title>C1.PIN_1</title>" in svg
     assert "stroke-linecap:butt" in svg
     assert "stroke-linecap:round" not in svg
 
@@ -117,7 +119,8 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     # => same direction as seg1, launch from seg1 front edge, left-edge aligned.
     seg4_render = by_edge["IC1_pin1_seg4"]["render_endpoint_positions_mm"]
     seg4_start = seg4_render["IC1_pin1_seg1_universal_node"]
-    seg4_end = seg4_render["C1.PIN_1"]
+    seg4_end_key = next(k for k in seg4_render if k != "IC1_pin1_seg1_universal_node")
+    seg4_end = seg4_render[seg4_end_key]
     # left-edge alignment: center shifts by (w_ref - w_seg4)/2 = (3.6-1.6)/2 = 1.0mm
     assert seg4_start["x"] - pin1_node["x"] == pytest.approx(1.0, abs=0.15)
     # front-edge connection: no backward/forward offset from node center.

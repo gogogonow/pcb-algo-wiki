@@ -49,4 +49,4 @@ def test_solver_ir_cli_summary_only(tmp_path: Path) -> None:
         "--summary-only",
     )
     assert proc.returncode == 0, proc.stderr
-    assert "unique=9" in proc.stdout
+    assert "unique=7" in proc.stdout

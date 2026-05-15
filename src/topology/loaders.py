@@ -116,9 +116,40 @@ def _validate_edge_endpoint(
             f"edge {edge_id!r} references unresolved endpoint {endpoint_id!r}"
         )
 
+    if "," in endpoint_id:
+        members = [part.strip() for part in endpoint_id.split(",") if part.strip()]
+        if not members:
+            raise ValueError(
+                f"edge {edge_id!r} references unresolved endpoint {endpoint_id!r}"
+            )
+        for member in members:
+            _validate_edge_endpoint(graph, edge_id, member)
+        if not any(node.id == endpoint_id for node in graph.nodes):
+            graph.nodes.append(
+                TopologyNode(
+                    id=endpoint_id,
+                    kind="composite_endpoint",
+                    label=endpoint_id,
+                )
+            )
+        return endpoint_id
+
     try:
         graph.resolve_endpoint(endpoint_id)
     except KeyError as exc:
+        if "." in endpoint_id:
+            raise ValueError(
+                f"edge {edge_id!r} references unresolved endpoint {endpoint_id!r}"
+            ) from exc
+        if endpoint_id.endswith("_split_pad"):
+            graph.nodes.append(
+                TopologyNode(
+                    id=endpoint_id,
+                    kind="t_junction",
+                    label=endpoint_id,
+                )
+            )
+            return endpoint_id
         raise ValueError(
             f"edge {edge_id!r} references unresolved endpoint {endpoint_id!r}"
         ) from exc

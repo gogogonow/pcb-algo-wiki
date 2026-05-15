@@ -78,9 +78,11 @@ def test_real_case_renders_distinct_component_pin_anchors_for_multi_pin_passives
     root = ET.fromstring(topology.render_topology_svg(graph))
 
     c1_pin_1_anchor = _edge_endpoint_coordinates(
-        root, graph, "IC1_pin1_seg4", "C1.PIN_1"
+        root, graph, "IC1_pin1_seg4_to_C1R1", "C1.PIN_1,R1.PIN_1"
     )
-    c1_pin_2_anchor = _edge_endpoint_coordinates(root, graph, "C1_to_R1", "C1.PIN_2")
+    c1_pin_2_anchor = _edge_endpoint_coordinates(
+        root, graph, "C1R1_to_combiner", "C1.PIN_2,R1.PIN_2"
+    )
 
     assert c1_pin_1_anchor != c1_pin_2_anchor
 

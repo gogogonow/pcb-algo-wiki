@@ -136,6 +136,48 @@ def plan_node_positions(
                 _clamp(pos[1], 1.0, board_height_mm - 1.0),
             )
 
+    # 6. Resolve implicit endpoints referenced by edges but absent from
+    #    fixed-pads/nodes (e.g. *_split_pad) and composite aliases
+    #    ("A.PIN_1,B.PIN_1").
+    endpoint_edges: dict[str, list[TriagedEdge]] = {}
+    for edge in artifact.edges.values():
+        for endpoint in edge.connections:
+            endpoint_edges.setdefault(endpoint, []).append(edge)
+
+    unresolved = [ep for ep in endpoint_edges if ep not in plan.endpoint_xy]
+    for endpoint in unresolved:
+        parts = [part.strip() for part in endpoint.split(",") if part.strip()]
+        known = [plan.endpoint_xy[part] for part in parts if part in plan.endpoint_xy]
+        if known:
+            cx = sum(x for x, _ in known) / len(known)
+            cy = sum(y for _, y in known) / len(known)
+            plan.endpoint_xy[endpoint] = (cx, cy)
+        else:
+            plan.endpoint_xy[endpoint] = board_center
+
+    for _ in range(2):
+        for endpoint in unresolved:
+            parts = [part.strip() for part in endpoint.split(",") if part.strip()]
+            if len(parts) > 1:
+                known = [
+                    plan.endpoint_xy[part] for part in parts if part in plan.endpoint_xy
+                ]
+                if known:
+                    cx = sum(x for x, _ in known) / len(known)
+                    cy = sum(y for _, y in known) / len(known)
+                    plan.endpoint_xy[endpoint] = (cx, cy)
+                    continue
+            pos = _seed_node_position(
+                endpoint, endpoint_edges, plan.endpoint_xy, board_center
+            )
+            pos = _project_to_length_constraints(
+                endpoint, pos, endpoint_edges, plan.endpoint_xy
+            )
+            plan.endpoint_xy[endpoint] = (
+                _clamp(pos[0], 1.0, board_width_mm - 1.0),
+                _clamp(pos[1], 1.0, board_height_mm - 1.0),
+            )
+
     return plan
 
 

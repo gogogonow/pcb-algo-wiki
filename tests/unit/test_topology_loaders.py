@@ -12,7 +12,7 @@ def test_real_case_extracts_expected_entity_counts() -> None:
 
     assert len(graph.fixed_components) == 6
     assert len(graph.parametric_uv_components) == 9
-    assert len(graph.nodes) == 8
+    assert len(graph.nodes) == 11
     assert len(graph.terminals) == 10
     assert len(graph.edges) == 22
 
@@ -38,6 +38,7 @@ def test_real_case_preserves_t_junction_classification() -> None:
     assert {node.id for node in graph.nodes if node.kind == "t_junction"} == {
         "IC1_pin1_seg2_end_split_pad",
         "IC1_pin1_seg3_end_split_pad",
+        "IC1_pin1_seg4_end_split_pad",
         "IC1_pin2_seg2_end_split_pad",
         "IC1_pin2_seg3_end_split_pad",
     }

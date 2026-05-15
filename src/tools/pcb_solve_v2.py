@@ -221,6 +221,7 @@ def _render_pre_phase_svg(
     *,
     templates: dict[str, UniversalJunctionTemplate] | None = None,
     branch_offset_u_tokens: dict[str, str] | None = None,
+    layout: V33Layout | None = None,
     banner: str = "",
     px_per_mm: float = 6.0,
     margin_mm: float = 5.0,
@@ -232,7 +233,7 @@ def _render_pre_phase_svg(
     """Render physical Pre-A view in board coordinates.
 
     Shows board outline + fixed points + microstrip connectivity with width/length labels.
-    RLC devices are hidden; endpoints connected to RLC pins are rendered as virtual markers.
+    UV/RLC devices are rendered from footprint pads + component bboxes when layout is available.
     Returns endpoint positions (mm) and the virtual endpoint id set for JSON sidecar output.
     """
     artifact = result.artifact
@@ -268,6 +269,8 @@ def _render_pre_phase_svg(
         ".prea-fixed-point{fill:#1d4ed8;stroke:#1e3a8a;stroke-width:1;}",
         ".prea-node{fill:#22c55e;stroke:#166534;stroke-width:1;}",
         ".prea-virtual-endpoint{fill:#f59e0b;stroke:#92400e;stroke-width:1;}",
+        ".prea-rlc-pad{fill:#cbd5e1;stroke:#475569;stroke-width:0.7;opacity:0.9;}",
+        ".prea-rlc-bbox{fill:none;stroke:#0f766e;stroke-width:0.8;stroke-dasharray:2 2;opacity:0.9;}",
         ".prea-edge{fill:none;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.95;}",
         ".prea-label{fill:#0f172a;font-family:Arial,sans-serif;font-size:9px;}",
         "</style>",
@@ -302,6 +305,93 @@ def _render_pre_phase_svg(
             f'<text class="prea-label" x="{_x(mx)+4:.2f}" y="{_y(my)-4:.2f}">'
             f"{escape(edge_id)} | {escape(width_text)} | {escape(length_text)}</text>"
         )
+
+    if layout is not None:
+        for comp_id, uv in artifact.uv_components.items():
+            component = layout.components.get(comp_id)
+            if component is None or component.footprint_ref is None:
+                continue
+            footprint = layout.footprints.get(component.footprint_ref)
+            if footprint is None or not footprint.pins:
+                continue
+            local_xy = {
+                pad.pin: (float(pad.local_x), float(pad.local_y)) for pad in uv.pads
+            }
+            anchor_pin = (
+                uv.uv_meta.anchor_pin
+                if uv.uv_meta is not None
+                else next(iter(footprint.pins))
+            )
+            anchor_ep = f"{comp_id}.{anchor_pin}"
+            anchor_world = positions.get(anchor_ep)
+            if anchor_world is None or anchor_pin not in local_xy:
+                continue
+            rotation = 0.0
+            for pin_name in footprint.pins:
+                if pin_name == anchor_pin:
+                    continue
+                other_ep = f"{comp_id}.{pin_name}"
+                other_world = positions.get(other_ep)
+                if other_world is None or pin_name not in local_xy:
+                    continue
+                lx0, ly0 = local_xy[anchor_pin]
+                lx1, ly1 = local_xy[pin_name]
+                ldx = lx1 - lx0
+                ldy = ly1 - ly0
+                wdx = other_world[0] - anchor_world[0]
+                wdy = other_world[1] - anchor_world[1]
+                if math.hypot(ldx, ldy) < 1e-6 or math.hypot(wdx, wdy) < 1e-6:
+                    continue
+                rotation = math.degrees(math.atan2(wdy, wdx) - math.atan2(ldy, ldx))
+                break
+            ct = math.cos(math.radians(rotation))
+            st = math.sin(math.radians(rotation))
+            lax, lay = local_xy[anchor_pin]
+            cx = anchor_world[0] - (ct * lax - st * lay)
+            cy = anchor_world[1] - (st * lax + ct * lay)
+            if (
+                footprint.dimensions is not None
+                and footprint.dimensions.length is not None
+                and footprint.dimensions.width is not None
+            ):
+                hl = float(footprint.dimensions.length) / 2.0
+                hw = float(footprint.dimensions.width) / 2.0
+                corners = [(-hl, -hw), (hl, -hw), (hl, hw), (-hl, hw)]
+                pts: list[str] = []
+                for lx, ly in corners:
+                    px = cx + ct * lx - st * ly
+                    py = cy + st * lx + ct * ly
+                    pts.append(f"{_x(px):.2f},{_y(py):.2f}")
+                lines.append(
+                    f'<path class="prea-rlc-bbox" d="M {" L ".join(pts)} Z"><title>{escape(comp_id)}</title></path>'
+                )
+            for pin_name, pin in footprint.pins.items():
+                geom_pad = pin.pad_geometry
+                if (
+                    geom_pad is None
+                    or geom_pad.length is None
+                    or geom_pad.width is None
+                    or (geom_pad.shape or "rect").lower() != "rect"
+                    or pin_name not in local_xy
+                ):
+                    continue
+                plx, ply = local_xy[pin_name]
+                pcx = cx + ct * plx - st * ply
+                pcy = cy + st * plx + ct * ply
+                orient = rotation + float(pin.local_orientation or 0.0)
+                cp = math.cos(math.radians(orient))
+                sp = math.sin(math.radians(orient))
+                hl = float(geom_pad.length) / 2.0
+                hw = float(geom_pad.width) / 2.0
+                corners = [(-hl, -hw), (hl, -hw), (hl, hw), (-hl, hw)]
+                pad_pts: list[str] = []
+                for lx, ly in corners:
+                    px = pcx + cp * lx - sp * ly
+                    py = pcy + sp * lx + cp * ly
+                    pad_pts.append(f"{_x(px):.2f},{_y(py):.2f}")
+                lines.append(
+                    f'<polygon class="prea-rlc-pad" points="{" ".join(pad_pts)}"><title>{escape(comp_id)}.{escape(pin_name)}</title></polygon>'
+                )
 
     # Draw fixed points / node points / virtual endpoints.
     for endpoint, (px, py) in sorted(positions.items()):
@@ -611,6 +701,14 @@ def _solve_pre_a_positions(
             else:
                 positions[a_id] = _clamp((ax + move_a[0], ay + move_a[1]))
                 positions[b_id] = _clamp((bx + move_b[0], by + move_b[1]))
+    # Expand composite endpoints like "C1.PIN_1,R1.PIN_1" so each member pin
+    # has a concrete coordinate for preA footprint rendering.
+    for endpoint, xy in list(positions.items()):
+        if "," not in endpoint:
+            continue
+        for token in (part.strip() for part in endpoint.split(",")):
+            if token and token not in positions:
+                positions[token] = xy
     return positions, edge_endpoint_overrides
 
 
@@ -661,9 +759,10 @@ def _persist_phase_artefacts(
         pre_a_svg,
         templates=templates,
         branch_offset_u_tokens=branch_offset_u_tokens,
+        layout=layout,
         banner=_phase_banner(
             "Pre-A",
-            "YAML-defined physical connectivity (no routing / no RLC placement)",
+            "YAML-defined physical connectivity + UV footprints (no routing)",
             "#7c3aed",
         ),
     )

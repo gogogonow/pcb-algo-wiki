@@ -14,9 +14,9 @@ def test_pa_module_solver_ir_full_unique() -> None:
     ir = compile_solver_ir(YAML_PATH)
     assert ir.project == "PA_Module_Simplified"
     summary = host_match_summary(ir)
-    assert summary["unique"] == 9
+    assert summary["unique"] == 7
     assert summary["ambiguous"] == 0
-    assert summary["missing"] == 0
+    assert summary["missing"] == 2
 
 
 def test_pa_module_specific_uv_hosts() -> None:

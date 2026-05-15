@@ -66,15 +66,16 @@ def _place_uv(
     anchor_endpoint = f"{uv_name}.{anchor_pin}"
 
     # 1. Look up final routed position for the anchor pin.
-    anchor_um = skeleton.final_endpoint_um.get(anchor_endpoint)
+    anchor_um = _lookup_endpoint_um(skeleton.final_endpoint_um, anchor_endpoint)
     other_um: tuple[int, int] | None = None
     other_pin: str | None = None
     for pad in uv.pads:
         if pad.pin == anchor_pin:
             continue
         ep = f"{uv_name}.{pad.pin}"
-        if ep in skeleton.final_endpoint_um:
-            other_um = skeleton.final_endpoint_um[ep]
+        ep_um = _lookup_endpoint_um(skeleton.final_endpoint_um, ep)
+        if ep_um is not None:
+            other_um = ep_um
             other_pin = pad.pin
             break
 
@@ -153,6 +154,21 @@ def _quantize_rotation(rotation: float) -> float:
 def _diff(a: float, b: float) -> float:
     d = (a - b + 180.0) % 360.0 - 180.0
     return d
+
+
+def _lookup_endpoint_um(
+    endpoint_map: dict[str, tuple[int, int]], endpoint: str
+) -> tuple[int, int] | None:
+    exact = endpoint_map.get(endpoint)
+    if exact is not None:
+        return exact
+    for key, value in endpoint_map.items():
+        if "," not in key:
+            continue
+        parts = [part.strip() for part in key.split(",") if part.strip()]
+        if endpoint in parts:
+            return value
+    return None
 
 
 __all__ = ["UvAdhesionReport", "adhere_uv_components"]
