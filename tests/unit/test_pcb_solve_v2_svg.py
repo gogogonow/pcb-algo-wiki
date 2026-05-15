@@ -81,6 +81,30 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     assert "<title>C5.PIN_2</title>" in svg
     assert "<title>C6.PIN_1</title>" in svg
     assert "<title>C6.PIN_2</title>" in svg
+    for comp in ("C3", "C5", "C6"):
+        pin1_match = re.search(
+            rf'<polygon class="prea-rlc-pad" points="([^"]+)"><title>{comp}\.PIN_1</title></polygon>',
+            svg,
+        )
+        pin2_match = re.search(
+            rf'<polygon class="prea-rlc-pad" points="([^"]+)"><title>{comp}\.PIN_2</title></polygon>',
+            svg,
+        )
+        assert pin1_match is not None and pin2_match is not None
+        p1 = [
+            tuple(map(float, point.split(","))) for point in pin1_match.group(1).split()
+        ]
+        p2 = [
+            tuple(map(float, point.split(","))) for point in pin2_match.group(1).split()
+        ]
+        p1_center = (sum(x for x, _ in p1) / 4.0, sum(y for _, y in p1) / 4.0)
+        p2_center = (sum(x for x, _ in p2) / 4.0, sum(y for _, y in p2) / 4.0)
+        # Follow the same left/front/right rule family as R3/C4: avoid diagonal
+        # pin-to-pin placement for shunt capacitors.
+        assert (
+            min(abs(p2_center[0] - p1_center[0]), abs(p2_center[1] - p1_center[1]))
+            < 0.35
+        )
 
     pre_a_json = scratch_dir / "PA_Module_Simplified.preA.json"
     payload = json.loads(pre_a_json.read_text(encoding="utf-8"))

@@ -284,6 +284,9 @@ def _render_pre_phase_svg(
     ]
 
     endpoint_vectors: dict[str, list[tuple[float, float, float]]] = {}
+    constrained_draw_segments: list[
+        tuple[str, tuple[float, float], tuple[float, float]]
+    ] = []
 
     def _add_endpoint_vector(
         endpoint_id: str, vx: float, vy: float, weight: float
@@ -393,6 +396,9 @@ def _render_pre_phase_svg(
         my = (main_sy + main_ey) / 2.0
         short_edge_id = _prea_short_name(edge_id)
         if edge.target_length is not None:
+            constrained_draw_segments.append(
+                (edge_id, (main_sx, main_sy), (main_ex, main_ey))
+            )
             lines.append(
                 f'<text class="prea-label" x="{_x(mx)+4:.2f}" y="{_y(my)-4:.2f}">'
                 f"{escape(short_edge_id)}</text>"
@@ -405,6 +411,30 @@ def _render_pre_phase_svg(
             tuple[float, float, float, float],
             list[tuple[str, tuple[float, float], tuple[float, float]]],
         ] = {}
+        endpoint_edge_ids: dict[str, set[str]] = {}
+        for edge_name, edge in artifact.edges.items():
+            if edge.edge_type != "microstrip" or len(edge.connections) != 2:
+                continue
+            for endpoint in edge.connections:
+                for token in _expand_endpoint_tokens(endpoint):
+                    endpoint_edge_ids.setdefault(token, set()).add(edge_name)
+
+        def _point_to_segment_distance(
+            px: float, py: float, a: tuple[float, float], b: tuple[float, float]
+        ) -> float:
+            ax, ay = a
+            bx, by = b
+            vx = bx - ax
+            vy = by - ay
+            seg2 = vx * vx + vy * vy
+            if seg2 <= 1e-12:
+                return math.hypot(px - ax, py - ay)
+            t = ((px - ax) * vx + (py - ay) * vy) / seg2
+            t = max(0.0, min(1.0, t))
+            cx = ax + t * vx
+            cy = ay + t * vy
+            return math.hypot(px - cx, py - cy)
+
         for comp_id, uv in artifact.uv_components.items():
             component = layout.components.get(comp_id)
             if component is None or component.footprint_ref is None:
@@ -472,6 +502,115 @@ def _render_pre_phase_svg(
                 pin_name: (xy[0] + shift_x, xy[1] + shift_y)
                 for pin_name, xy in pin_world.items()
             }
+            if len(footprint.pins) == 2:
+                pin_names = list(footprint.pins.keys())
+                ep_a = f"{comp_id}.{pin_names[0]}"
+                ep_b = f"{comp_id}.{pin_names[1]}"
+                cnt_a = len(endpoint_edge_ids.get(ep_a, set()))
+                cnt_b = len(endpoint_edge_ids.get(ep_b, set()))
+                if (cnt_a > 0 and cnt_b == 0) or (cnt_b > 0 and cnt_a == 0):
+                    known_pin, missing_pin = (
+                        (pin_names[0], pin_names[1])
+                        if cnt_a > 0
+                        else (pin_names[1], pin_names[0])
+                    )
+                    known_ep = f"{comp_id}.{known_pin}"
+                    known_xy = pin_world_draw.get(known_pin)
+                    if known_xy is not None:
+                        p_known = footprint.pins.get(known_pin)
+                        p_missing = footprint.pins.get(missing_pin)
+                        if (
+                            p_known is not None
+                            and p_missing is not None
+                            and p_known.local_x is not None
+                            and p_known.local_y is not None
+                            and p_missing.local_x is not None
+                            and p_missing.local_y is not None
+                        ):
+                            pitch = math.hypot(
+                                float(p_missing.local_x) - float(p_known.local_x),
+                                float(p_missing.local_y) - float(p_known.local_y),
+                            )
+                            ref_u: tuple[float, float] | None = None
+                            for edge_name in endpoint_edge_ids.get(known_ep, set()):
+                                edge_obj = artifact.edges.get(edge_name)
+                                if (
+                                    edge_obj is None
+                                    or edge_obj.edge_type != "microstrip"
+                                    or len(edge_obj.connections) != 2
+                                ):
+                                    continue
+                                a_id, b_id = edge_obj.connections
+                                a_tokens = _expand_endpoint_tokens(a_id)
+                                b_tokens = _expand_endpoint_tokens(b_id)
+                                if known_ep in a_tokens:
+                                    trace_endpoint = b_id
+                                elif known_ep in b_tokens:
+                                    trace_endpoint = a_id
+                                else:
+                                    continue
+                                if (
+                                    _prea_endpoint_kind(artifact, trace_endpoint)
+                                    == "virtual_rlc_pin"
+                                ):
+                                    continue
+                                for edge2 in artifact.edges.values():
+                                    if (
+                                        edge2.edge_type != "microstrip"
+                                        or len(edge2.connections) != 2
+                                        or edge2.target_length is None
+                                        or float(edge2.target_length) <= 0.0
+                                    ):
+                                        continue
+                                    c_id, d_id = edge2.connections
+                                    if c_id == trace_endpoint:
+                                        other2 = d_id
+                                    elif d_id == trace_endpoint:
+                                        other2 = c_id
+                                    else:
+                                        continue
+                                    if other2 not in positions:
+                                        continue
+                                    ox, oy = positions[other2]
+                                    tx, ty = positions[trace_endpoint]
+                                    vx = tx - ox
+                                    vy = ty - oy
+                                    norm = math.hypot(vx, vy)
+                                    if norm > 1e-6:
+                                        ref_u = (vx / norm, vy / norm)
+                                        break
+                                if ref_u is not None:
+                                    break
+                            if ref_u is None:
+                                ref_u = (1.0, 0.0)
+                            elif abs(ref_u[0]) >= abs(ref_u[1]):
+                                ref_u = (1.0 if ref_u[0] >= 0.0 else -1.0, 0.0)
+                            else:
+                                ref_u = (0.0, 1.0 if ref_u[1] >= 0.0 else -1.0)
+                            ux, uy = ref_u
+                            candidates = [(-uy, ux), (ux, uy), (uy, -ux)]
+
+                            def _score(vec: tuple[float, float]) -> tuple[float, float]:
+                                tx = known_xy[0] + vec[0] * pitch
+                                ty = known_xy[1] + vec[1] * pitch
+                                vals: list[float] = []
+                                known_edges = endpoint_edge_ids.get(known_ep, set())
+                                for edge_name, s_xy, e_xy in constrained_draw_segments:
+                                    if edge_name in known_edges:
+                                        continue
+                                    vals.append(
+                                        _point_to_segment_distance(tx, ty, s_xy, e_xy)
+                                    )
+                                return (
+                                    min(vals) if vals else 1e6,
+                                    abs(vec[0]) + abs(vec[1]),
+                                )
+
+                            best = max(candidates, key=_score)
+                            pin_world_draw[missing_pin] = (
+                                known_xy[0] + best[0] * pitch,
+                                known_xy[1] + best[1] * pitch,
+                            )
             rotation = 0.0
             pin_items = sorted(pin_world_draw.items())
             if len(pin_items) >= 2:
@@ -1165,6 +1304,10 @@ def _solve_pre_a_positions(
                     break
         if ref_u is None:
             return down_u
+        if abs(ref_u[0]) >= abs(ref_u[1]):
+            ref_u = (1.0 if ref_u[0] >= 0.0 else -1.0, 0.0)
+        else:
+            ref_u = (0.0, 1.0 if ref_u[1] >= 0.0 else -1.0)
         ux, uy = ref_u
         candidates = [(-uy, ux), (ux, uy), (uy, -ux)]  # left, front, right
         return max(candidates, key=lambda c: c[0] * down_u[0] + c[1] * down_u[1])
@@ -1434,6 +1577,143 @@ def _solve_pre_a_positions(
         moved = _clamp((ax + ux * pitch, ay + uy * pitch))
         positions[other_key] = moved
         positions[other_ep] = moved
+
+    endpoint_edge_ids: dict[str, set[str]] = {}
+    for edge_name, edge in artifact.edges.items():
+        if edge.edge_type != "microstrip" or len(edge.connections) != 2:
+            continue
+        for endpoint in edge.connections:
+            for token in _expand_endpoint_tokens(endpoint):
+                endpoint_edge_ids.setdefault(token, set()).add(edge_name)
+
+    def _point_to_segment_distance(
+        px: float, py: float, a: tuple[float, float], b: tuple[float, float]
+    ) -> float:
+        ax, ay = a
+        bx, by = b
+        vx = bx - ax
+        vy = by - ay
+        seg2 = vx * vx + vy * vy
+        if seg2 <= 1e-12:
+            return math.hypot(px - ax, py - ay)
+        t = ((px - ax) * vx + (py - ay) * vy) / seg2
+        t = max(0.0, min(1.0, t))
+        cx = ax + t * vx
+        cy = ay + t * vy
+        return math.hypot(px - cx, py - cy)
+
+    def _one_hop_constrained_u(known_ep: str) -> tuple[float, float] | None:
+        for edge in artifact.edges.values():
+            if edge.edge_type != "microstrip" or len(edge.connections) != 2:
+                continue
+            if edge.target_length is not None:
+                continue
+            a_id, b_id = edge.connections
+            a_tokens = _expand_endpoint_tokens(a_id)
+            b_tokens = _expand_endpoint_tokens(b_id)
+            if known_ep in a_tokens:
+                mid_id = b_id
+            elif known_ep in b_tokens:
+                mid_id = a_id
+            else:
+                continue
+            if _prea_endpoint_kind(artifact, mid_id) == "virtual_rlc_pin":
+                continue
+            if mid_id not in positions:
+                continue
+            mx, my = positions[mid_id]
+            for edge2 in artifact.edges.values():
+                if (
+                    edge2.edge_type != "microstrip"
+                    or len(edge2.connections) != 2
+                    or edge2.target_length is None
+                    or float(edge2.target_length) <= 0.0
+                ):
+                    continue
+                c_id, d_id = edge2.connections
+                if c_id == mid_id:
+                    other2 = d_id
+                elif d_id == mid_id:
+                    other2 = c_id
+                else:
+                    continue
+                if other2 not in positions:
+                    continue
+                ox, oy = positions[other2]
+                vx = mx - ox
+                vy = my - oy
+                norm = math.hypot(vx, vy)
+                if norm <= 1e-6:
+                    continue
+                return (vx / norm, vy / norm)
+        return None
+
+    # For 2-pin UV components where only one pin has explicit edge connectivity
+    # (e.g. C3/C5/C6 shunt caps), enforce the same left/front/right candidate
+    # family used elsewhere and pick a non-overlapping axis-aligned direction.
+    constrained_segments: list[tuple[str, tuple[float, float], tuple[float, float]]] = (
+        []
+    )
+    for edge_name, edge in artifact.edges.items():
+        if (
+            edge.edge_type != "microstrip"
+            or len(edge.connections) != 2
+            or edge.target_length is None
+            or float(edge.target_length) <= 0.0
+        ):
+            continue
+        s_id, e_id = edge.connections
+        if s_id not in positions or e_id not in positions:
+            continue
+        constrained_segments.append((edge_name, positions[s_id], positions[e_id]))
+
+    for comp_id, uv in artifact.uv_components.items():
+        if len(uv.pads) != 2:
+            continue
+        pin_to_local = {
+            pad.pin: (float(pad.local_x), float(pad.local_y)) for pad in uv.pads
+        }
+        pin_names = list(pin_to_local.keys())
+        if len(pin_names) != 2:
+            continue
+        ep_a = f"{comp_id}.{pin_names[0]}"
+        ep_b = f"{comp_id}.{pin_names[1]}"
+        cnt_a = len(endpoint_edge_ids.get(ep_a, set()))
+        cnt_b = len(endpoint_edge_ids.get(ep_b, set()))
+        if not ((cnt_a > 0 and cnt_b == 0) or (cnt_b > 0 and cnt_a == 0)):
+            continue
+        known_ep, missing_ep = (ep_a, ep_b) if cnt_a > 0 else (ep_b, ep_a)
+        if known_ep not in positions or missing_ep not in positions:
+            continue
+        known_pin, missing_pin = known_ep.split(".", 1)[1], missing_ep.split(".", 1)[1]
+        pitch = math.hypot(
+            pin_to_local[missing_pin][0] - pin_to_local[known_pin][0],
+            pin_to_local[missing_pin][1] - pin_to_local[known_pin][1],
+        )
+        if pitch <= 1e-6:
+            continue
+        ref_u = _one_hop_constrained_u(known_ep)
+        if ref_u is None:
+            ref_u = _connected_direction(known_ep, known_ep)
+        ux, uy = ref_u
+        candidates = [(-uy, ux), (ux, uy), (uy, -ux)]  # left, front, right
+        kx, ky = positions[known_ep]
+
+        def _candidate_score(vec: tuple[float, float]) -> tuple[float, float]:
+            tx = kx + vec[0] * pitch
+            ty = ky + vec[1] * pitch
+            clearances = []
+            for edge_name, a_xy, b_xy in constrained_segments:
+                if edge_name in endpoint_edge_ids.get(known_ep, set()):
+                    continue
+                clearances.append(_point_to_segment_distance(tx, ty, a_xy, b_xy))
+            clearance = min(clearances) if clearances else 1e6
+            return (clearance, abs(vec[0]) + abs(vec[1]))
+
+        best_vec = max(candidates, key=_candidate_score)
+        positions[missing_ep] = _clamp(
+            (kx + best_vec[0] * pitch, ky + best_vec[1] * pitch)
+        )
 
     # Expand composite endpoints like "C1.PIN_1,R1.PIN_1" so each member pin
     # has a concrete coordinate for preA footprint rendering.
