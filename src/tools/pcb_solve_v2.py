@@ -1169,6 +1169,76 @@ def _solve_pre_a_positions(
         candidates = [(-uy, ux), (ux, uy), (uy, -ux)]  # left, front, right
         return max(candidates, key=lambda c: c[0] * down_u[0] + c[1] * down_u[1])
 
+    def _connected_direction(known_ep: str, known_key: str) -> tuple[float, float]:
+        kx, ky = positions[known_key]
+        fallback: tuple[float, float] | None = None
+        for edge in artifact.edges.values():
+            if edge.edge_type != "microstrip" or len(edge.connections) != 2:
+                continue
+            a_id, b_id = edge.connections
+            a_tokens = _expand_endpoint_tokens(a_id)
+            b_tokens = _expand_endpoint_tokens(b_id)
+            if known_ep in a_tokens or known_key == a_id:
+                other_id = b_id
+            elif known_ep in b_tokens or known_key == b_id:
+                other_id = a_id
+            else:
+                continue
+            if other_id not in positions:
+                continue
+            ox, oy = positions[other_id]
+            vx = kx - ox
+            vy = ky - oy
+            norm = math.hypot(vx, vy)
+            if norm <= 1e-6:
+                continue
+            cand = (vx / norm, vy / norm)
+            if edge.target_length is not None and float(edge.target_length) > 0.0:
+                return cand
+            if fallback is None:
+                fallback = cand
+        return fallback if fallback is not None else (1.0, 0.0)
+
+    # Seed missing endpoint coordinates for 2-pin UV parts so both pins are
+    # always renderable (e.g. C3/C5/C6 GND side), then normal pitch-lock logic
+    # can further refine them.
+    for comp_id, uv in artifact.uv_components.items():
+        if len(uv.pads) != 2:
+            continue
+        pin_to_local = {
+            pad.pin: (float(pad.local_x), float(pad.local_y)) for pad in uv.pads
+        }
+        pin_names = list(pin_to_local.keys())
+        anchor_pin = (
+            uv.uv_meta.anchor_pin
+            if uv.uv_meta is not None and uv.uv_meta.anchor_pin in pin_to_local
+            else pin_names[0]
+        )
+        other_pin = next((pin for pin in pin_names if pin != anchor_pin), None)
+        if other_pin is None:
+            continue
+        anchor_ep = f"{comp_id}.{anchor_pin}"
+        other_ep = f"{comp_id}.{other_pin}"
+        anchor_key = _endpoint_key_for(anchor_ep)
+        other_key = _endpoint_key_for(other_ep)
+        if (anchor_key is None) == (other_key is None):
+            continue
+        pitch = math.hypot(
+            pin_to_local[other_pin][0] - pin_to_local[anchor_pin][0],
+            pin_to_local[other_pin][1] - pin_to_local[anchor_pin][1],
+        )
+        if pitch <= 1e-6:
+            continue
+        if anchor_key is not None:
+            known_ep, known_key, missing_ep = anchor_ep, anchor_key, other_ep
+        else:
+            known_ep, known_key, missing_ep = other_ep, other_key or "", anchor_ep
+            if not known_key:
+                continue
+        ux, uy = _connected_direction(known_ep, known_key)
+        kx, ky = positions[known_key]
+        positions[missing_ep] = _clamp((kx + ux * pitch, ky + uy * pitch))
+
     for comp_id, uv in artifact.uv_components.items():
         if len(uv.pads) != 2:
             continue

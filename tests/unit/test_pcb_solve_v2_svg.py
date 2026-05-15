@@ -75,6 +75,12 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     )
     assert c1_pad is not None and r1_pad is not None
     assert c1_pad.group(1) != r1_pad.group(1)
+    assert "<title>C3.PIN_1</title>" in svg
+    assert "<title>C3.PIN_2</title>" in svg
+    assert "<title>C5.PIN_1</title>" in svg
+    assert "<title>C5.PIN_2</title>" in svg
+    assert "<title>C6.PIN_1</title>" in svg
+    assert "<title>C6.PIN_2</title>" in svg
 
     pre_a_json = scratch_dir / "PA_Module_Simplified.preA.json"
     payload = json.loads(pre_a_json.read_text(encoding="utf-8"))
