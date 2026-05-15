@@ -14,8 +14,14 @@ import sys
 from pathlib import Path
 
 from output import render_full_layout
+from schema.geometry_ir import GeometryIR
 from solver.v2 import OrchestratorV2Options, solve_layout_v2
-from solver.v2.orchestrator import OrchestratorV2Result, phase_summary
+from solver.v2.orchestrator import (
+    _assemble_geometry,
+    OrchestratorV2Result,
+    phase_summary,
+)
+from solver.v2.uv_adhesion import UvAdhesionReport
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -69,6 +75,33 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Skip per-edge progress printing.",
     )
     return p
+
+
+def _build_phase_a_geom(result: OrchestratorV2Result) -> GeometryIR:
+    """Geometry snapshot after Phase A: skeleton routes only, no UV placements."""
+    return _assemble_geometry(
+        artifact=result.artifact,
+        plan=result.phase_a.plan,
+        skeleton=result.phase_a.skeleton,
+        adhesion=UvAdhesionReport(),  # empty — no UV yet
+        wall_seconds=result.phase_a.wall_seconds,
+    )
+
+
+def _build_phase_b_geom(result: OrchestratorV2Result) -> GeometryIR:
+    """Geometry snapshot after Phase B: skeleton routes + UV placements."""
+    return _assemble_geometry(
+        artifact=result.artifact,
+        plan=result.phase_a.plan,
+        skeleton=result.phase_a.skeleton,
+        adhesion=result.phase_b.adhesion,
+        wall_seconds=result.phase_a.wall_seconds + result.phase_b.wall_seconds,
+    )
+
+
+def _render_svg(geom: GeometryIR, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(render_full_layout(geom))
 
 
 def _persist_phase_artefacts(
@@ -135,6 +168,20 @@ def _persist_phase_artefacts(
         )
     )
     artefacts["phaseB"] = phase_b_path
+
+    # Per-phase SVG snapshots
+    phase_a_svg = out_dir / f"{project}.phaseA.svg"
+    _render_svg(_build_phase_a_geom(result), phase_a_svg)
+    artefacts["phaseA_svg"] = phase_a_svg
+
+    phase_b_svg = out_dir / f"{project}.phaseB.svg"
+    _render_svg(_build_phase_b_geom(result), phase_b_svg)
+    artefacts["phaseB_svg"] = phase_b_svg
+
+    # Phase C SVG = final geometry (flex routes already in result.geometry)
+    phase_c_svg = out_dir / f"{project}.phaseC.svg"
+    _render_svg(result.geometry, phase_c_svg)
+    artefacts["phaseC_svg"] = phase_c_svg
 
     return artefacts
 
