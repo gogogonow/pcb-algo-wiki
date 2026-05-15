@@ -324,7 +324,7 @@ def _render_pre_phase_svg(
                     if (
                         pad is not None
                         and pad.orientation is not None
-                        and candidate.split(".", 1)[0].startswith("IC")
+                        and float(pad.orientation) != 0.0
                     ):
                         pin_oriented_anchor = candidate
                         break
@@ -1113,41 +1113,34 @@ def _solve_pre_a_positions(
             positions[b_id] = positions[a_id]
             constrained_endpoints.add(b_id)
 
-    for _ in range(180):
-        for edge in artifact.edges.values():
-            if edge.edge_type != "microstrip" or len(edge.connections) != 2:
+    _changed = True
+    while _changed:
+        _changed = False
+        for _edge in artifact.edges.values():
+            if _edge.edge_type != "microstrip" or len(_edge.connections) != 2:
                 continue
-            a_id, b_id = edge.connections
-            ax, ay = positions[a_id]
-            bx, by = positions[b_id]
-            dx = bx - ax
-            dy = by - ay
-            dist = math.hypot(dx, dy)
-            if dist < 1e-6:
-                dx, dy, dist = 1e-3, 0.0, 1e-3
-            desired = (
-                float(edge.target_length) if edge.target_length is not None else dist
-            )
-            delta = (desired - dist) / 2.0
-            ux = dx / dist
-            uy = dy / dist
-            move_a = (-ux * delta, -uy * delta)
-            move_b = (ux * delta, uy * delta)
-            if a_id in fixed and b_id in fixed:
+            if _edge.target_length is None:
                 continue
-            if a_id in constrained_endpoints and b_id in constrained_endpoints:
-                continue
-            if a_id in fixed:
-                positions[b_id] = _clamp((bx + 2 * move_b[0], by + 2 * move_b[1]))
-            elif b_id in fixed:
-                positions[a_id] = _clamp((ax + 2 * move_a[0], ay + 2 * move_a[1]))
-            elif a_id in constrained_endpoints:
-                positions[b_id] = _clamp((bx + 2 * move_b[0], by + 2 * move_b[1]))
-            elif b_id in constrained_endpoints:
-                positions[a_id] = _clamp((ax + 2 * move_a[0], ay + 2 * move_a[1]))
-            else:
-                positions[a_id] = _clamp((ax + move_a[0], ay + move_a[1]))
-                positions[b_id] = _clamp((bx + move_b[0], by + move_b[1]))
+            _a_id, _b_id = _edge.connections
+            _desired = float(_edge.target_length)
+            for _src_id, _dst_id in ((_a_id, _b_id), (_b_id, _a_id)):
+                if _dst_id in constrained_endpoints or _dst_id in fixed:
+                    continue
+                if _src_id not in constrained_endpoints and _src_id not in fixed:
+                    continue
+                _sx, _sy = positions[_src_id]
+                _dx_v = positions[_dst_id][0] - _sx
+                _dy_v = positions[_dst_id][1] - _sy
+                _norm = math.hypot(_dx_v, _dy_v)
+                if _norm < 1e-6:
+                    _dx_v, _dy_v, _norm = 0.0, -1.0, 1.0
+                _ux_v = _dx_v / _norm
+                _uy_v = _dy_v / _norm
+                _new_pos = _clamp((_sx + _ux_v * _desired, _sy + _uy_v * _desired))
+                if positions.get(_dst_id) != _new_pos:
+                    positions[_dst_id] = _new_pos
+                    constrained_endpoints.add(_dst_id)
+                    _changed = True
     # Re-apply connectivity locks after relaxation so virtual endpoints remain
     # snapped to their associated trace endpoints even if that trace endpoint
     # moved during constrained-length relaxation.
@@ -1309,6 +1302,36 @@ def _solve_pre_a_positions(
         else:
             ref_u = (0.0, 1.0 if ref_u[1] >= 0.0 else -1.0)
         ux, uy = ref_u
+        # If the RLC sits in series between two constrained microstrips on both
+        # anchor and other pins, prefer inline placement (straight through).
+        _anchor_has_locked = any(
+            e.edge_type == "microstrip"
+            and e.target_length is not None
+            and float(e.target_length) > 0.0
+            and len(e.connections) == 2
+            and (
+                anchor_ep in _expand_endpoint_tokens(e.connections[0])
+                or anchor_key == e.connections[0]
+                or anchor_ep in _expand_endpoint_tokens(e.connections[1])
+                or anchor_key == e.connections[1]
+            )
+            for e in artifact.edges.values()
+        )
+        _other_has_locked = any(
+            e.edge_type == "microstrip"
+            and e.target_length is not None
+            and float(e.target_length) > 0.0
+            and len(e.connections) == 2
+            and (
+                other_ep in _expand_endpoint_tokens(e.connections[0])
+                or other_key == e.connections[0]
+                or other_ep in _expand_endpoint_tokens(e.connections[1])
+                or other_key == e.connections[1]
+            )
+            for e in artifact.edges.values()
+        )
+        if _anchor_has_locked and _other_has_locked:
+            return (ux, uy)
         candidates = [(-uy, ux), (ux, uy), (uy, -ux)]  # left, front, right
         return max(candidates, key=lambda c: c[0] * down_u[0] + c[1] * down_u[1])
 
