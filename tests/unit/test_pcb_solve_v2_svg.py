@@ -75,3 +75,16 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     ]
     assert abs(pin1_seg2["y"] - pin1_seg3["y"]) > 2.0
     assert abs(pin2_seg2["y"] - pin2_seg3["y"]) > 1.5
+
+    # IC1 PIN_1 / PIN_2 local_orientation are -90 in YAML, so first segments
+    # should launch downward (decreasing y in board coordinates).
+    pin1 = by_edge["IC1_pin1_seg1"]["endpoint_positions_mm"]["IC1.PIN_1"]
+    pin1_node = by_edge["IC1_pin1_seg1"]["endpoint_positions_mm"][
+        "IC1_pin1_seg1_universal_node"
+    ]
+    pin2 = by_edge["IC1_pin2_seg1"]["endpoint_positions_mm"]["IC1.PIN_2"]
+    pin2_node = by_edge["IC1_pin2_seg1"]["endpoint_positions_mm"][
+        "IC1_pin2_seg1_universal_node"
+    ]
+    assert pin1_node["y"] < pin1["y"]
+    assert pin2_node["y"] < pin2["y"]

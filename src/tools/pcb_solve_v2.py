@@ -379,6 +379,40 @@ def _solve_pre_a_positions(
         return (min(max(p[0], 0.0), board_w), min(max(p[1], 0.0), board_h))
 
     constrained_endpoints: set[str] = set()
+    # Enforce fixed-pin launch direction first: the first segment from a fixed
+    # pad should follow that pad's local orientation.
+    launch_targets: dict[str, list[tuple[float, float]]] = {}
+    for edge in artifact.edges.values():
+        if edge.edge_type != "microstrip" or len(edge.connections) != 2:
+            continue
+        a_id, b_id = edge.connections
+        for src_id, dst_id in ((a_id, b_id), (b_id, a_id)):
+            if src_id not in fixed or dst_id in fixed:
+                continue
+            src_pad = artifact.fixed_terminals.get(src_id)
+            if src_pad is None or src_pad.orientation is None:
+                continue
+            sx, sy = positions[src_id]
+            dx = positions[dst_id][0] - sx
+            dy = positions[dst_id][1] - sy
+            seed_len = math.hypot(dx, dy)
+            seg_len = (
+                float(edge.target_length)
+                if edge.target_length is not None
+                else max(seed_len, 1.0)
+            )
+            theta = math.radians(float(src_pad.orientation))
+            tx = sx + math.cos(theta) * seg_len
+            ty = sy + math.sin(theta) * seg_len
+            launch_targets.setdefault(dst_id, []).append(_clamp((tx, ty)))
+    for endpoint, candidates in launch_targets.items():
+        if endpoint in fixed or not candidates:
+            continue
+        avg_x = sum(x for x, _ in candidates) / len(candidates)
+        avg_y = sum(y for _, y in candidates) / len(candidates)
+        positions[endpoint] = _clamp((avg_x, avg_y))
+        constrained_endpoints.add(endpoint)
+
     templates = junction_templates or {}
     if templates:
         # Apply junction branch geometric rules before any length relaxation.
