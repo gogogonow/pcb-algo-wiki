@@ -802,6 +802,102 @@ def _solve_pre_a_positions(
             positions[a_id] = positions[b_id]
         elif b_kind == "virtual_rlc_pin" and a_kind != "virtual_rlc_pin":
             positions[b_id] = positions[a_id]
+
+    # Enforce footprint pin pitch for 2-pin UV devices by moving the virtual
+    # endpoint (and then its adjacent free-edge trace endpoint) instead of
+    # stretching the device across long distances.
+    locked_virtual: set[str] = set()
+
+    def _endpoint_key_for(pin_endpoint: str) -> str | None:
+        if pin_endpoint in positions:
+            return pin_endpoint
+        for key in positions:
+            if "," not in key:
+                continue
+            members = [part.strip() for part in key.split(",") if part.strip()]
+            if pin_endpoint in members:
+                return key
+        return None
+
+    for comp_id, uv in artifact.uv_components.items():
+        if len(uv.pads) != 2:
+            continue
+        pin_to_local = {
+            pad.pin: (float(pad.local_x), float(pad.local_y)) for pad in uv.pads
+        }
+        pin_names = list(pin_to_local.keys())
+        anchor_pin = (
+            uv.uv_meta.anchor_pin
+            if uv.uv_meta is not None and uv.uv_meta.anchor_pin in pin_to_local
+            else pin_names[0]
+        )
+        other_pin = next((pin for pin in pin_names if pin != anchor_pin), None)
+        if other_pin is None:
+            continue
+        anchor_ep = f"{comp_id}.{anchor_pin}"
+        other_ep = f"{comp_id}.{other_pin}"
+        anchor_key = _endpoint_key_for(anchor_ep)
+        other_key = _endpoint_key_for(other_ep)
+        if anchor_key is None or other_key is None:
+            continue
+        ax, ay = positions[anchor_key]
+        bx, by = positions[other_key]
+        pitch = math.hypot(
+            pin_to_local[other_pin][0] - pin_to_local[anchor_pin][0],
+            pin_to_local[other_pin][1] - pin_to_local[anchor_pin][1],
+        )
+        if pitch <= 1e-6:
+            continue
+        dx = bx - ax
+        dy = by - ay
+        norm = math.hypot(dx, dy)
+        if norm <= 1e-6:
+            ux, uy = 1.0, 0.0
+        else:
+            ux, uy = dx / norm, dy / norm
+        moved = _clamp((ax + ux * pitch, ay + uy * pitch))
+        positions[other_key] = moved
+        positions[other_ep] = moved
+        positions[anchor_ep] = (ax, ay)
+        locked_virtual.update((anchor_ep, other_ep, anchor_key, other_key))
+
+    for endpoint in list(positions.keys()):
+        if "," not in endpoint:
+            continue
+        members = [part.strip() for part in endpoint.split(",") if part.strip()]
+        coords = [positions[m] for m in members if m in positions]
+        if not coords:
+            continue
+        positions[endpoint] = (
+            sum(x for x, _ in coords) / len(coords),
+            sum(y for _, y in coords) / len(coords),
+        )
+        if members and all(member in locked_virtual for member in members):
+            locked_virtual.add(endpoint)
+
+    for edge in artifact.edges.values():
+        if (
+            edge.edge_type != "microstrip"
+            or len(edge.connections) != 2
+            or edge.target_length is not None
+        ):
+            continue
+        a_id, b_id = edge.connections
+        a_kind = _prea_endpoint_kind(artifact, a_id)
+        b_kind = _prea_endpoint_kind(artifact, b_id)
+        if (
+            a_kind == "virtual_rlc_pin"
+            and a_id in locked_virtual
+            and b_kind != "virtual_rlc_pin"
+        ):
+            positions[b_id] = positions[a_id]
+        elif (
+            b_kind == "virtual_rlc_pin"
+            and b_id in locked_virtual
+            and a_kind != "virtual_rlc_pin"
+        ):
+            positions[a_id] = positions[b_id]
+
     # Expand composite endpoints like "C1.PIN_1,R1.PIN_1" so each member pin
     # has a concrete coordinate for preA footprint rendering.
     for endpoint, xy in list(positions.items()):

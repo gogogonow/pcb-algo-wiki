@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import math
 
 import pytest
 
@@ -142,6 +143,16 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     seg5_start = c1r1_to_combiner["IC1_pin1_seg5_start_combiner"]
     assert c1r1_pin2["x"] == pytest.approx(seg5_start["x"], abs=1e-6)
     assert c1r1_pin2["y"] == pytest.approx(seg5_start["y"], abs=1e-6)
+    c1r1_from_seg4 = by_edge["IC1_pin1_seg4_to_C1R1"]["render_endpoint_positions_mm"][
+        "C1.PIN_1,R1.PIN_1"
+    ]
+    # C1/R1 are two-pin passives; pin pitch should follow package scale, and
+    # the downstream trace endpoint should move to keep compact connectivity.
+    c1r1_span = math.hypot(
+        c1r1_pin2["x"] - c1r1_from_seg4["x"],
+        c1r1_pin2["y"] - c1r1_from_seg4["y"],
+    )
+    assert c1r1_span < 3.0
     assert "p1_seg2-&gt;R2" in svg
     assert 'data-endpoint="C1.PIN_1"' not in svg
     assert 'data-endpoint="C1.PIN_2"' not in svg
