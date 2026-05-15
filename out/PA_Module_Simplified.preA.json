@@ -176,18 +176,18 @@
           "kind": "node"
         },
         "C1.PIN_1": {
-          "x": 14.98,
+          "x": 15.98,
           "y": 34.58,
           "kind": "virtual_rlc_pin"
         }
       },
       "render_endpoint_positions_mm": {
         "IC1_pin1_seg1_universal_node": {
-          "x": 14.98,
+          "x": 15.98,
           "y": 39.25
         },
         "C1.PIN_1": {
-          "x": 14.98,
+          "x": 15.98,
           "y": 34.58
         }
       }

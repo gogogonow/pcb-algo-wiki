@@ -105,6 +105,19 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     assert seg2_end["x"] > seg2_start["x"]
     assert seg2_end["y"] == pytest.approx(seg2_start["y"], abs=0.2)
 
+    # IC1 PIN_1 seg4: angle=0 + edge_front + align_left
+    # => same direction as seg1, launch from seg1 front edge, left-edge aligned.
+    seg4_render = by_edge["IC1_pin1_seg4"]["render_endpoint_positions_mm"]
+    seg4_start = seg4_render["IC1_pin1_seg1_universal_node"]
+    seg4_end = seg4_render["C1.PIN_1"]
+    # left-edge alignment: center shifts by (w_ref - w_seg4)/2 = (3.6-1.6)/2 = 1.0mm
+    assert seg4_start["x"] - pin1_node["x"] == pytest.approx(1.0, abs=0.15)
+    # front-edge connection: no backward/forward offset from node center.
+    assert seg4_start["y"] - pin1_node["y"] == pytest.approx(0.0, abs=0.15)
+    # angle=0: seg4 runs same direction as seg1 (downward).
+    assert seg4_end["x"] == pytest.approx(seg4_start["x"], abs=0.2)
+    assert seg4_end["y"] < seg4_start["y"]
+
     phase_a_svg = scratch_dir / "PA_Module_Simplified.phaseA.svg"
     phase_a_text = phase_a_svg.read_text(encoding="utf-8")
     assert 'stroke-linecap="butt"' in phase_a_text

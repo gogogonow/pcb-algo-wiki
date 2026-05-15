@@ -20,6 +20,7 @@ from output import render_full_layout
 from frontend.solver_ir import compile_solver_ir
 from schema.geometry_ir import GeometryIR
 from schema.solver_ir import UniversalJunctionTemplate
+from schema.v33 import load_v33_layout
 from solver.v2 import OrchestratorV2Options, solve_layout_v2
 from solver.v2.orchestrator import (
     _assemble_geometry,
@@ -214,6 +215,7 @@ def _render_pre_phase_svg(
     path: Path,
     *,
     templates: dict[str, UniversalJunctionTemplate] | None = None,
+    branch_offset_u_tokens: dict[str, str] | None = None,
     banner: str = "",
     px_per_mm: float = 6.0,
     margin_mm: float = 5.0,
@@ -236,6 +238,7 @@ def _render_pre_phase_svg(
         board_w=board_w,
         board_h=board_h,
         junction_templates=templates,
+        branch_offset_u_tokens=branch_offset_u_tokens,
     )
     virtual_endpoints = {
         endpoint
@@ -336,6 +339,26 @@ def _load_junction_templates(
     return dict(ir.junction_templates)
 
 
+def _load_branch_offset_u_tokens(*, layout_path: Path) -> dict[str, str]:
+    """Return symbolic branch origin.offset_u tokens keyed by branch edge id."""
+    try:
+        layout = load_v33_layout(layout_path)
+    except Exception:
+        return {}
+    out: dict[str, str] = {}
+    for node in layout.nodes.values():
+        rules = node.connection_rules
+        if node.type != "universal_junction" or rules is None or not rules.branches:
+            continue
+        for branch in rules.branches:
+            if branch.edge is None or branch.origin is None:
+                continue
+            raw = branch.origin.offset_u
+            if isinstance(raw, str):
+                out[branch.edge] = raw.strip().lower()
+    return out
+
+
 def _prea_endpoint_kind(artifact, endpoint_id: str) -> str:  # type: ignore[no-untyped-def]
     if endpoint_id in artifact.fixed_terminals:
         return "fixed_pin"
@@ -354,6 +377,7 @@ def _solve_pre_a_positions(
     board_w: float,
     board_h: float,
     junction_templates: dict[str, UniversalJunctionTemplate] | None = None,
+    branch_offset_u_tokens: dict[str, str] | None = None,
 ) -> tuple[dict[str, tuple[float, float]], dict[str, dict[str, tuple[float, float]]]]:
     """Relax endpoint positions to satisfy target-length proportions before routing."""
     artifact = result.artifact
@@ -459,17 +483,52 @@ def _solve_pre_a_positions(
                     theta = math.radians(float(branch.angle_deg))
                     bdx = ux * math.cos(theta) - uy * math.sin(theta)
                     bdy = ux * math.sin(theta) + uy * math.cos(theta)
-                    anchor = _clamp(
-                        (
-                            nx
-                            + float(branch.offset_u) * ux
-                            + float(branch.signed_v) * nx_left,
-                            ny
-                            + float(branch.offset_u) * uy
-                            + float(branch.signed_v) * ny_left,
-                        )
+                    token = (
+                        (branch_offset_u_tokens or {}).get(branch.edge_id, "").strip()
                     )
                     branch_edge = artifact.edges.get(branch.edge_id)
+                    if branch.signed_v_kind.value == "edge_front" and token in (
+                        "align_left",
+                        "align_right",
+                        "align_center",
+                    ):
+                        ref_w = (
+                            float(ref_edge.width)
+                            if ref_edge is not None and ref_edge.width is not None
+                            else 0.0
+                        )
+                        branch_w = (
+                            float(branch_edge.width)
+                            if branch_edge is not None and branch_edge.width is not None
+                            else 0.0
+                        )
+                        lateral = 0.0
+                        if token == "align_left":
+                            lateral = (ref_w - branch_w) / 2.0
+                        elif token == "align_right":
+                            lateral = -(ref_w - branch_w) / 2.0
+                        anchor = _clamp(
+                            (nx + lateral * nx_left, ny + lateral * ny_left)
+                        )
+                    elif branch.signed_v_kind.value == "edge_front" and token:
+                        try:
+                            lateral = float(token)
+                        except ValueError:
+                            lateral = float(branch.offset_u)
+                        anchor = _clamp(
+                            (nx + lateral * nx_left, ny + lateral * ny_left)
+                        )
+                    else:
+                        anchor = _clamp(
+                            (
+                                nx
+                                + float(branch.offset_u) * ux
+                                + float(branch.signed_v) * nx_left,
+                                ny
+                                + float(branch.offset_u) * uy
+                                + float(branch.signed_v) * ny_left,
+                            )
+                        )
                     branch_len = 1.0
                     if (
                         branch_edge is not None
@@ -568,10 +627,12 @@ def _persist_phase_artefacts(
     # Pre-Phase-A: raw YAML topology connectivity snapshot.
     pre_a_svg = out_dir / f"{project}.preA.svg"
     templates = _load_junction_templates(layout_path=layout_path)
+    branch_offset_u_tokens = _load_branch_offset_u_tokens(layout_path=layout_path)
     pre_positions, virtual_endpoints, pre_edge_overrides = _render_pre_phase_svg(
         result,
         pre_a_svg,
         templates=templates,
+        branch_offset_u_tokens=branch_offset_u_tokens,
         banner=_phase_banner(
             "Pre-A",
             "YAML-defined physical connectivity (no routing / no RLC placement)",
