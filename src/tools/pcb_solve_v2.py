@@ -893,21 +893,28 @@ def _prea_short_name(name: str) -> str:
     return out
 
 
-def _solve_pre_a_positions(
-    result: OrchestratorV2Result,
-    *,
+def _clamp_board(
+    p: tuple[float, float], board_w: float, board_h: float
+) -> tuple[float, float]:
+    """Clamp point p to [0, board_w] × [0, board_h]."""
+    return (min(max(p[0], 0.0), board_w), min(max(p[1], 0.0), board_h))
+
+
+def _seed_fixed_positions(
+    artifact: Any,
+    plan_xy: dict[str, tuple[float, float]],
+    endpoints: set[str],
     board_w: float,
     board_h: float,
-    junction_templates: dict[str, UniversalJunctionTemplate] | None = None,
-    branch_offset_u_tokens: dict[str, str] | None = None,
-) -> tuple[dict[str, tuple[float, float]], dict[str, dict[str, tuple[float, float]]]]:
-    """Relax endpoint positions to satisfy target-length proportions before routing."""
-    artifact = result.artifact
-    plan_xy = dict(result.phase_a.plan.endpoint_xy)
-    endpoints: set[str] = set()
-    for edge in artifact.edges.values():
-        endpoints.update(edge.connections)
+) -> tuple[
+    dict[str, tuple[float, float]],
+    set[str],
+    set[str],
+]:
+    """Seed position dict from fixed terminals (abs_x/abs_y) and plan_xy.
 
+    Returns (positions, fixed, constrained_endpoints).
+    """
     positions: dict[str, tuple[float, float]] = {}
     fixed: set[str] = set()
     for endpoint in endpoints:
@@ -926,12 +933,7 @@ def _solve_pre_a_positions(
         else:
             positions[endpoint] = (board_w / 2.0, board_h / 2.0)
 
-    def _clamp(p: tuple[float, float]) -> tuple[float, float]:
-        return (min(max(p[0], 0.0), board_w), min(max(p[1], 0.0), board_h))
-
     constrained_endpoints: set[str] = set()
-    # Enforce fixed-pin launch direction first: the first segment from a fixed
-    # pad should follow that pad's local orientation.
     launch_targets: dict[str, list[tuple[float, float]]] = {}
     for edge in artifact.edges.values():
         if edge.edge_type != "microstrip" or len(edge.connections) != 2:
@@ -955,147 +957,192 @@ def _solve_pre_a_positions(
             theta = math.radians(float(src_pad.orientation))
             tx = sx + math.cos(theta) * seg_len
             ty = sy + math.sin(theta) * seg_len
-            launch_targets.setdefault(dst_id, []).append(_clamp((tx, ty)))
+            launch_targets.setdefault(dst_id, []).append(
+                _clamp_board((tx, ty), board_w, board_h)
+            )
     for endpoint, candidates in launch_targets.items():
         if endpoint in fixed or not candidates:
             continue
         avg_x = sum(x for x, _ in candidates) / len(candidates)
         avg_y = sum(y for _, y in candidates) / len(candidates)
-        positions[endpoint] = _clamp((avg_x, avg_y))
+        positions[endpoint] = _clamp_board((avg_x, avg_y), board_w, board_h)
         constrained_endpoints.add(endpoint)
 
-    templates = junction_templates or {}
-    edge_endpoint_overrides: dict[str, dict[str, tuple[float, float]]] = {}
-    if templates:
-        # Apply junction branch geometric rules before any length relaxation.
-        for _ in range(3):
-            for node_id, template in templates.items():
-                node_xy = positions.get(node_id)
-                if node_xy is None:
-                    continue
-                nx, ny = node_xy
-                constrained_endpoints.add(node_id)
-                ref_edge = artifact.edges.get(template.reference_edge)
-                ref_u: tuple[float, float] | None = None
-                if ref_edge is not None and len(ref_edge.connections) == 2:
-                    other_candidates = [
-                        endpoint
-                        for endpoint in ref_edge.connections
-                        if endpoint != node_id and endpoint in positions
-                    ]
-                    if other_candidates:
-                        ox, oy = positions[other_candidates[0]]
-                        vx = nx - ox
-                        vy = ny - oy
-                        norm = math.hypot(vx, vy)
-                        if norm > 1e-6:
-                            ref_u = (vx / norm, vy / norm)
-                for branch in template.branches:
-                    target = branch.target_endpoint
-                    constrained_endpoints.add(target)
-                    if target in fixed:
-                        continue
-                    if ref_u is None:
-                        positions[target] = _clamp(
-                            (nx + float(branch.dx), ny + float(branch.dy))
-                        )
-                        continue
-                    ux, uy = ref_u
-                    nx_left, ny_left = -uy, ux
-                    theta = math.radians(float(branch.angle_deg))
-                    bdx = ux * math.cos(theta) - uy * math.sin(theta)
-                    bdy = ux * math.sin(theta) + uy * math.cos(theta)
-                    token = (
-                        (branch_offset_u_tokens or {}).get(branch.edge_id, "").strip()
-                    )
-                    branch_edge = artifact.edges.get(branch.edge_id)
-                    ref_w = (
-                        float(ref_edge.width)
-                        if ref_edge is not None and ref_edge.width is not None
-                        else 0.0
-                    )
-                    branch_w = (
-                        float(branch_edge.width)
-                        if branch_edge is not None and branch_edge.width is not None
-                        else 0.0
-                    )
-                    if branch.signed_v_kind.value == "edge_front" and token in (
-                        "align_left",
-                        "align_right",
-                        "align_center",
-                    ):
-                        lateral = 0.0
-                        if token == "align_left":
-                            lateral = (ref_w - branch_w) / 2.0
-                        elif token == "align_right":
-                            lateral = -(ref_w - branch_w) / 2.0
-                        anchor = _clamp(
-                            (nx + lateral * nx_left, ny + lateral * ny_left)
-                        )
-                    elif branch.signed_v_kind.value == "edge_front" and token:
-                        try:
-                            lateral = float(token)
-                        except ValueError:
-                            lateral = float(branch.offset_u)
-                        anchor = _clamp(
-                            (nx + lateral * nx_left, ny + lateral * ny_left)
-                        )
-                    elif branch.signed_v_kind.value in ("edge_left", "edge_right"):
-                        # Side tangency: one edge of branch touches the reference
-                        # side edge. In butt-cap rendering, branch start x/y is
-                        # the branch side edge location, so lateral center offset
-                        # must be Wref/2 (independent of branch width).
-                        if ref_w > 0.0:
-                            side_gap = ref_w / 2.0
-                        else:
-                            side_gap = abs(float(branch.signed_v))
-                        side_sign = (
-                            1.0 if branch.signed_v_kind.value == "edge_left" else -1.0
-                        )
-                        anchor = _clamp(
-                            (
-                                nx
-                                + float(branch.offset_u) * ux
-                                + side_sign * side_gap * nx_left,
-                                ny
-                                + float(branch.offset_u) * uy
-                                + side_sign * side_gap * ny_left,
-                            )
-                        )
-                    else:
-                        anchor = _clamp(
-                            (
-                                nx
-                                + float(branch.offset_u) * ux
-                                + float(branch.signed_v) * nx_left,
-                                ny
-                                + float(branch.offset_u) * uy
-                                + float(branch.signed_v) * ny_left,
-                            )
-                        )
-                    branch_len = 1.0
-                    if (
-                        branch_edge is not None
-                        and branch_edge.target_length is not None
-                    ):
-                        branch_len = max(float(branch_edge.target_length), 0.1)
-                    target_xy = _clamp(
-                        (
-                            anchor[0] + branch_len * bdx,
-                            anchor[1] + branch_len * bdy,
-                        )
-                    )
-                    positions[target] = target_xy
-                    edge_endpoint_overrides.setdefault(branch.edge_id, {})[
-                        node_id
-                    ] = anchor
-                    edge_endpoint_overrides.setdefault(branch.edge_id, {})[
-                        target
-                    ] = target_xy
+    return positions, fixed, constrained_endpoints
 
-    # PreA connectivity-first pass: unconstrained links from a trace node to a
-    # virtual RLC pin are snapped onto the trace endpoint so "is it connected"
-    # can be judged before distance optimization.
+
+def _apply_junction_templates(
+    artifact: Any,
+    positions: dict[str, tuple[float, float]],
+    fixed: set[str],
+    constrained_endpoints: set[str],
+    board_w: float,
+    board_h: float,
+    templates: dict[str, UniversalJunctionTemplate],
+    branch_offset_u_tokens: dict[str, str] | None,
+) -> tuple[set[str], dict[str, dict[str, tuple[float, float]]]]:
+    """Apply YAML junction branch geometric rules to place node endpoints.
+
+    Returns (constrained_endpoints, edge_endpoint_overrides).
+    Mutates positions in-place.
+    """
+    edge_endpoint_overrides: dict[str, dict[str, tuple[float, float]]] = {}
+    if not templates:
+        return constrained_endpoints, edge_endpoint_overrides
+
+    for _ in range(3):
+        for node_id, template in templates.items():
+            node_xy = positions.get(node_id)
+            if node_xy is None:
+                continue
+            nx, ny = node_xy
+            constrained_endpoints.add(node_id)
+            ref_edge = artifact.edges.get(template.reference_edge)
+            ref_u: tuple[float, float] | None = None
+            if ref_edge is not None and len(ref_edge.connections) == 2:
+                other_candidates = [
+                    endpoint
+                    for endpoint in ref_edge.connections
+                    if endpoint != node_id and endpoint in positions
+                ]
+                if other_candidates:
+                    ox, oy = positions[other_candidates[0]]
+                    vx = nx - ox
+                    vy = ny - oy
+                    norm = math.hypot(vx, vy)
+                    if norm > 1e-6:
+                        ref_u = (vx / norm, vy / norm)
+            for branch in template.branches:
+                target = branch.target_endpoint
+                constrained_endpoints.add(target)
+                if target in fixed:
+                    continue
+                if ref_u is None:
+                    positions[target] = _clamp_board(
+                        (nx + float(branch.dx), ny + float(branch.dy)),
+                        board_w,
+                        board_h,
+                    )
+                    continue
+                ux, uy = ref_u
+                nx_left, ny_left = -uy, ux
+                theta = math.radians(float(branch.angle_deg))
+                bdx = ux * math.cos(theta) - uy * math.sin(theta)
+                bdy = ux * math.sin(theta) + uy * math.cos(theta)
+                token = (
+                    (branch_offset_u_tokens or {}).get(branch.edge_id, "").strip()
+                )
+                branch_edge = artifact.edges.get(branch.edge_id)
+                ref_w = (
+                    float(ref_edge.width)
+                    if ref_edge is not None and ref_edge.width is not None
+                    else 0.0
+                )
+                branch_w = (
+                    float(branch_edge.width)
+                    if branch_edge is not None and branch_edge.width is not None
+                    else 0.0
+                )
+                if branch.signed_v_kind.value == "edge_front" and token in (
+                    "align_left",
+                    "align_right",
+                    "align_center",
+                ):
+                    lateral = 0.0
+                    if token == "align_left":
+                        lateral = (ref_w - branch_w) / 2.0
+                    elif token == "align_right":
+                        lateral = -(ref_w - branch_w) / 2.0
+                    anchor = _clamp_board(
+                        (nx + lateral * nx_left, ny + lateral * ny_left),
+                        board_w,
+                        board_h,
+                    )
+                elif branch.signed_v_kind.value == "edge_front" and token:
+                    try:
+                        lateral = float(token)
+                    except ValueError:
+                        lateral = float(branch.offset_u)
+                    anchor = _clamp_board(
+                        (nx + lateral * nx_left, ny + lateral * ny_left),
+                        board_w,
+                        board_h,
+                    )
+                elif branch.signed_v_kind.value in ("edge_left", "edge_right"):
+                    # Side tangency: one edge of branch touches the reference
+                    # side edge. In butt-cap rendering, branch start x/y is
+                    # the branch side edge location, so lateral center offset
+                    # must be Wref/2 (independent of branch width).
+                    if ref_w > 0.0:
+                        side_gap = ref_w / 2.0
+                    else:
+                        side_gap = abs(float(branch.signed_v))
+                    side_sign = (
+                        1.0 if branch.signed_v_kind.value == "edge_left" else -1.0
+                    )
+                    anchor = _clamp_board(
+                        (
+                            nx
+                            + float(branch.offset_u) * ux
+                            + side_sign * side_gap * nx_left,
+                            ny
+                            + float(branch.offset_u) * uy
+                            + side_sign * side_gap * ny_left,
+                        ),
+                        board_w,
+                        board_h,
+                    )
+                else:
+                    anchor = _clamp_board(
+                        (
+                            nx
+                            + float(branch.offset_u) * ux
+                            + float(branch.signed_v) * nx_left,
+                            ny
+                            + float(branch.offset_u) * uy
+                            + float(branch.signed_v) * ny_left,
+                        ),
+                        board_w,
+                        board_h,
+                    )
+                branch_len = 1.0
+                if (
+                    branch_edge is not None
+                    and branch_edge.target_length is not None
+                ):
+                    branch_len = max(float(branch_edge.target_length), 0.1)
+                target_xy = _clamp_board(
+                    (
+                        anchor[0] + branch_len * bdx,
+                        anchor[1] + branch_len * bdy,
+                    ),
+                    board_w,
+                    board_h,
+                )
+                positions[target] = target_xy
+                edge_endpoint_overrides.setdefault(branch.edge_id, {})[
+                    node_id
+                ] = anchor
+                edge_endpoint_overrides.setdefault(branch.edge_id, {})[
+                    target
+                ] = target_xy
+
+    return constrained_endpoints, edge_endpoint_overrides
+
+
+def _propagate_constrained_edges(
+    artifact: Any,
+    positions: dict[str, tuple[float, float]],
+    constrained_endpoints: set[str],
+    fixed: set[str],
+    board_w: float,
+    board_h: float,
+) -> set[str]:
+    """Connectivity-first snap + iterative length-constrained propagation.
+
+    Returns updated constrained_endpoints (positions mutated in-place).
+    """
+    # Step 1: snap virtual RLC pins to their connected trace endpoints
     for edge in artifact.edges.values():
         if (
             edge.edge_type != "microstrip"
@@ -1113,6 +1160,7 @@ def _solve_pre_a_positions(
             positions[b_id] = positions[a_id]
             constrained_endpoints.add(b_id)
 
+    # Step 2: propagate constrained-length edges until convergence
     _changed = True
     while _changed:
         _changed = False
@@ -1136,14 +1184,17 @@ def _solve_pre_a_positions(
                     _dx_v, _dy_v, _norm = 0.0, -1.0, 1.0
                 _ux_v = _dx_v / _norm
                 _uy_v = _dy_v / _norm
-                _new_pos = _clamp((_sx + _ux_v * _desired, _sy + _uy_v * _desired))
+                _new_pos = _clamp_board(
+                    (_sx + _ux_v * _desired, _sy + _uy_v * _desired),
+                    board_w,
+                    board_h,
+                )
                 if positions.get(_dst_id) != _new_pos:
                     positions[_dst_id] = _new_pos
                     constrained_endpoints.add(_dst_id)
                     _changed = True
-    # Re-apply connectivity locks after relaxation so virtual endpoints remain
-    # snapped to their associated trace endpoints even if that trace endpoint
-    # moved during constrained-length relaxation.
+
+    # Step 3: re-apply connectivity locks so virtual endpoints remain snapped
     for edge in artifact.edges.values():
         if (
             edge.edge_type != "microstrip"
@@ -1158,6 +1209,44 @@ def _solve_pre_a_positions(
             positions[a_id] = positions[b_id]
         elif b_kind == "virtual_rlc_pin" and a_kind != "virtual_rlc_pin":
             positions[b_id] = positions[a_id]
+
+    return constrained_endpoints
+
+
+def _solve_pre_a_positions(
+    result: OrchestratorV2Result,
+    *,
+    board_w: float,
+    board_h: float,
+    junction_templates: dict[str, UniversalJunctionTemplate] | None = None,
+    branch_offset_u_tokens: dict[str, str] | None = None,
+) -> tuple[dict[str, tuple[float, float]], dict[str, dict[str, tuple[float, float]]]]:
+    """Relax endpoint positions to satisfy target-length proportions before routing."""
+    artifact = result.artifact
+    plan_xy = dict(result.phase_a.plan.endpoint_xy)
+    endpoints: set[str] = set()
+    for edge in artifact.edges.values():
+        endpoints.update(edge.connections)
+
+    positions, fixed, constrained_endpoints = _seed_fixed_positions(
+        artifact, plan_xy, endpoints, board_w, board_h
+    )
+
+    templates = junction_templates or {}
+    constrained_endpoints, edge_endpoint_overrides = _apply_junction_templates(
+        artifact,
+        positions,
+        fixed,
+        constrained_endpoints,
+        board_w,
+        board_h,
+        templates,
+        branch_offset_u_tokens,
+    )
+
+    constrained_endpoints = _propagate_constrained_edges(
+        artifact, positions, constrained_endpoints, fixed, board_w, board_h
+    )
 
     # Enforce footprint pin pitch for 2-pin UV devices by moving the virtual
     # endpoint (and then its adjacent free-edge trace endpoint) instead of
@@ -1403,7 +1492,9 @@ def _solve_pre_a_positions(
                 continue
         ux, uy = _connected_direction(known_ep, known_key)
         kx, ky = positions[known_key]
-        positions[missing_ep] = _clamp((kx + ux * pitch, ky + uy * pitch))
+        positions[missing_ep] = _clamp_board(
+            (kx + ux * pitch, ky + uy * pitch), board_w, board_h
+        )
 
     for comp_id, uv in artifact.uv_components.items():
         if len(uv.pads) != 2:
@@ -1437,7 +1528,7 @@ def _solve_pre_a_positions(
         ux, uy = _pitch_direction(
             anchor_ep, anchor_key, other_ep, other_key, (ax, ay), (bx, by)
         )
-        moved = _clamp((ax + ux * pitch, ay + uy * pitch))
+        moved = _clamp_board((ax + ux * pitch, ay + uy * pitch), board_w, board_h)
         positions[other_key] = moved
         positions[other_ep] = moved
         positions[anchor_ep] = (ax, ay)
@@ -1559,7 +1650,9 @@ def _solve_pre_a_positions(
             else:
                 ux, uy = dx / norm, dy / norm
             target_len = float(edge.target_length)
-            moved = _clamp((sx + ux * target_len, sy + uy * target_len))
+            moved = _clamp_board(
+                (sx + ux * target_len, sy + uy * target_len), board_w, board_h
+            )
             positions[dst_id] = moved
             for token in _expand_endpoint_tokens(dst_id):
                 positions[token] = moved
@@ -1597,7 +1690,7 @@ def _solve_pre_a_positions(
         ux, uy = _pitch_direction(
             anchor_ep, anchor_key, other_ep, other_key, (ax, ay), (bx, by)
         )
-        moved = _clamp((ax + ux * pitch, ay + uy * pitch))
+        moved = _clamp_board((ax + ux * pitch, ay + uy * pitch), board_w, board_h)
         positions[other_key] = moved
         positions[other_ep] = moved
 
@@ -1734,8 +1827,8 @@ def _solve_pre_a_positions(
             return (clearance, abs(vec[0]) + abs(vec[1]))
 
         best_vec = max(candidates, key=_candidate_score)
-        positions[missing_ep] = _clamp(
-            (kx + best_vec[0] * pitch, ky + best_vec[1] * pitch)
+        positions[missing_ep] = _clamp_board(
+            (kx + best_vec[0] * pitch, ky + best_vec[1] * pitch), board_w, board_h
         )
 
     # Expand composite endpoints like "C1.PIN_1,R1.PIN_1" so each member pin
