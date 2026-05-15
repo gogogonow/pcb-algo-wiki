@@ -276,6 +276,9 @@ def _render_pre_phase_svg(
         ".prea-edge{fill:none;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.95;}",
         ".prea-label{fill:#0f172a;font-family:Arial,sans-serif;font-size:8px;}",
         ".prea-net-label{fill:#7c2d12;font-family:Arial,sans-serif;font-size:7px;font-weight:bold;}",
+        ".prea-gnd-pin{fill:#f59e0b;stroke:#92400e;stroke-width:0.8;}",
+        ".prea-fixed-bbox{fill:none;stroke:#1f2937;stroke-width:0.9;stroke-dasharray:2 1;opacity:0.9;}",
+        ".prea-fixed-pad{fill:#dbeafe;stroke:#1e40af;stroke-width:0.8;opacity:0.95;}",
         "</style>",
         f'<rect class="prea-board" x="{_x(0):.2f}" y="{_y(board_h):.2f}" width="{board_w * px_per_mm:.2f}" height="{board_h * px_per_mm:.2f}"/>',
     ]
@@ -397,6 +400,54 @@ def _render_pre_phase_svg(
 
     pad_centers: dict[str, tuple[float, float]] = {}
     if layout is not None:
+        uv_display_shift: dict[str, tuple[float, float]] = {}
+        overlap_groups: dict[
+            tuple[float, float, float, float],
+            list[tuple[str, tuple[float, float], tuple[float, float]]],
+        ] = {}
+        for comp_id, uv in artifact.uv_components.items():
+            component = layout.components.get(comp_id)
+            if component is None or component.footprint_ref is None:
+                continue
+            footprint = layout.footprints.get(component.footprint_ref)
+            if footprint is None or len(footprint.pins) != 2:
+                continue
+            pin_world_exact: list[tuple[float, float]] = []
+            for pin_name in footprint.pins:
+                endpoint = f"{comp_id}.{pin_name}"
+                xy = positions.get(endpoint)
+                if xy is None:
+                    pin_world_exact = []
+                    break
+                pin_world_exact.append(xy)
+            if len(pin_world_exact) != 2:
+                continue
+            (ax, ay), (bx, by) = pin_world_exact
+            if (ax, ay) > (bx, by):
+                ax, ay, bx, by = bx, by, ax, ay
+            key = (round(ax, 3), round(ay, 3), round(bx, 3), round(by, 3))
+            overlap_groups.setdefault(key, []).append(
+                (comp_id, pin_world_exact[0], pin_world_exact[1])
+            )
+        for grouped in overlap_groups.values():
+            if len(grouped) <= 1:
+                continue
+            grouped.sort(key=lambda item: item[0])
+            _, a_xy, b_xy = grouped[0]
+            dx = b_xy[0] - a_xy[0]
+            dy = b_xy[1] - a_xy[1]
+            norm = math.hypot(dx, dy)
+            if norm <= 1e-6:
+                nx, ny = 0.0, 1.0
+            else:
+                nx, ny = -dy / norm, dx / norm
+            spacing = 0.55
+            center_idx = (len(grouped) - 1) / 2.0
+            for idx, (comp_id, _, _) in enumerate(grouped):
+                delta = (idx - center_idx) * spacing
+                uv_display_shift[comp_id] = (nx * delta, ny * delta)
+
+        rendered_uv_components: set[str] = set()
         for comp_id, uv in artifact.uv_components.items():
             component = layout.components.get(comp_id)
             if component is None or component.footprint_ref is None:
@@ -416,8 +467,13 @@ def _render_pre_phase_svg(
                     pin_world[pin_name] = positions[endpoint]
             if not pin_world:
                 continue
+            shift_x, shift_y = uv_display_shift.get(comp_id, (0.0, 0.0))
+            pin_world_draw = {
+                pin_name: (xy[0] + shift_x, xy[1] + shift_y)
+                for pin_name, xy in pin_world.items()
+            }
             rotation = 0.0
-            pin_items = sorted(pin_world.items())
+            pin_items = sorted(pin_world_draw.items())
             if len(pin_items) >= 2:
                 (_, a_xy), (_, b_xy) = pin_items[0], pin_items[1]
                 dx = b_xy[0] - a_xy[0]
@@ -444,7 +500,7 @@ def _render_pre_phase_svg(
                         if (
                             geom_pad is not None
                             and geom_pad.length is not None
-                            and pin_name in pin_world
+                            and pin_name in pin_world_draw
                         ):
                             pad_extra = max(pad_extra, float(geom_pad.length) / 2.0)
                     min_u = min(proj_u) - pad_extra
@@ -479,9 +535,9 @@ def _render_pre_phase_svg(
                 if gnd_pins:
                     gnd_anchor = next(
                         (
-                            pin_world[pin_name]
+                            pin_world_draw[pin_name]
                             for pin_name in gnd_pins
-                            if pin_name in pin_world
+                            if pin_name in pin_world_draw
                         ),
                         None,
                     )
@@ -493,6 +549,14 @@ def _render_pre_phase_svg(
                     lines.append(
                         f'<text class="prea-net-label" x="{_x(gx)+4:.2f}" y="{_y(gy)+8:.2f}">GND</text>'
                     )
+                    for idx, pin_name in enumerate(gnd_pins):
+                        pin_xy = pin_world_draw.get(pin_name)
+                        if pin_xy is None:
+                            pin_xy = (gx + idx * 0.15, gy - idx * 0.15)
+                        px, py = pin_xy
+                        lines.append(
+                            f'<rect class="prea-gnd-pin" x="{_x(px)-2.2:.2f}" y="{_y(py)-2.2:.2f}" width="4.4" height="4.4"/>'
+                        )
             for pin_name, pin in footprint.pins.items():
                 geom_pad = pin.pad_geometry
                 if (
@@ -500,11 +564,13 @@ def _render_pre_phase_svg(
                     or geom_pad.length is None
                     or geom_pad.width is None
                     or (geom_pad.shape or "rect").lower() != "rect"
-                    or pin_name not in pin_world
+                    or pin_name not in pin_world_draw
                 ):
                     continue
-                pcx, pcy = pin_world[pin_name]
-                pad_centers[f"{comp_id}.{pin_name}"] = (pcx, pcy)
+                endpoint = f"{comp_id}.{pin_name}"
+                if endpoint in pin_world:
+                    pad_centers[endpoint] = pin_world[pin_name]
+                pcx, pcy = pin_world_draw[pin_name]
                 orient = rotation + float(pin.local_orientation or 0.0)
                 cp = math.cos(math.radians(orient))
                 sp = math.sin(math.radians(orient))
@@ -518,6 +584,71 @@ def _render_pre_phase_svg(
                     pad_pts.append(f"{_x(px):.2f},{_y(py):.2f}")
                 lines.append(
                     f'<polygon class="prea-rlc-pad" points="{" ".join(pad_pts)}"><title>{escape(comp_id)}.{escape(pin_name)}</title></polygon>'
+                )
+            rendered_uv_components.add(comp_id)
+
+        # Render fixed components (e.g. IC1) with package outline and pads.
+        for comp_id, component in layout.components.items():
+            if comp_id in rendered_uv_components or component.footprint_ref is None:
+                continue
+            placement = component.placement
+            if placement is None or placement.x is None or placement.y is None:
+                continue
+            footprint = layout.footprints.get(component.footprint_ref)
+            if footprint is None:
+                continue
+            ox, oy = float(placement.x), float(placement.y)
+            rotation = float(placement.rotation or 0.0)
+            ct = math.cos(math.radians(rotation))
+            st = math.sin(math.radians(rotation))
+
+            if (
+                footprint.dimensions is not None
+                and footprint.dimensions.length is not None
+                and footprint.dimensions.width is not None
+            ):
+                hl = float(footprint.dimensions.length) / 2.0
+                hw = float(footprint.dimensions.width) / 2.0
+                local_corners = [(-hl, -hw), (hl, -hw), (hl, hw), (-hl, hw)]
+                bbox_pts: list[str] = []
+                for lx, ly in local_corners:
+                    px = ox + ct * lx - st * ly
+                    py = oy + st * lx + ct * ly
+                    bbox_pts.append(f"{_x(px):.2f},{_y(py):.2f}")
+                lines.append(
+                    f'<path class="prea-fixed-bbox" d="M {" L ".join(bbox_pts)} Z"><title>{escape(comp_id)}</title></path>'
+                )
+
+            for pin_name, pin in footprint.pins.items():
+                if pin.local_x is None or pin.local_y is None:
+                    continue
+                plx = float(pin.local_x)
+                ply = float(pin.local_y)
+                pcx = ox + ct * plx - st * ply
+                pcy = oy + st * plx + ct * ply
+                geom_pad = pin.pad_geometry
+                if (
+                    geom_pad is None
+                    or geom_pad.length is None
+                    or geom_pad.width is None
+                    or (geom_pad.shape or "rect").lower() != "rect"
+                ):
+                    lines.append(
+                        f'<rect class="prea-fixed-pad" x="{_x(pcx)-2.0:.2f}" y="{_y(pcy)-2.0:.2f}" width="4.0" height="4.0"><title>{escape(comp_id)}.{escape(pin_name)}</title></rect>'
+                    )
+                    continue
+                orient = rotation + float(pin.local_orientation or 0.0)
+                cp = math.cos(math.radians(orient))
+                sp = math.sin(math.radians(orient))
+                hl = float(geom_pad.length) / 2.0
+                hw = float(geom_pad.width) / 2.0
+                fixed_pad_pts: list[str] = []
+                for lx, ly in [(-hl, -hw), (hl, -hw), (hl, hw), (-hl, hw)]:
+                    px = pcx + cp * lx - sp * ly
+                    py = pcy + sp * lx + cp * ly
+                    fixed_pad_pts.append(f"{_x(px):.2f},{_y(py):.2f}")
+                lines.append(
+                    f'<polygon class="prea-fixed-pad" points="{" ".join(fixed_pad_pts)}"><title>{escape(comp_id)}.{escape(pin_name)}</title></polygon>'
                 )
 
     for endpoint, (pad_x, pad_y) in sorted(pad_centers.items()):

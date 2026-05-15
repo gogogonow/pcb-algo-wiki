@@ -61,6 +61,20 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
         ".prea-label{fill:#0f172a;font-family:Arial,sans-serif;font-size:8px;}" in svg
     )
     assert ">GND<" in svg
+    assert 'class="prea-gnd-pin"' in svg
+    assert 'class="prea-fixed-bbox"' in svg
+    assert "<title>IC1</title>" in svg
+    assert 'class="prea-fixed-pad"' in svg
+    c1_pad = re.search(
+        r'<polygon class="prea-rlc-pad" points="([^"]+)"><title>C1\.PIN_1</title></polygon>',
+        svg,
+    )
+    r1_pad = re.search(
+        r'<polygon class="prea-rlc-pad" points="([^"]+)"><title>R1\.PIN_1</title></polygon>',
+        svg,
+    )
+    assert c1_pad is not None and r1_pad is not None
+    assert c1_pad.group(1) != r1_pad.group(1)
 
     pre_a_json = scratch_dir / "PA_Module_Simplified.preA.json"
     payload = json.loads(pre_a_json.read_text(encoding="utf-8"))
