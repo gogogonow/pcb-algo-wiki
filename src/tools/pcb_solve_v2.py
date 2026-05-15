@@ -889,6 +889,52 @@ def _solve_pre_a_positions(
                 return key
         return None
 
+    def _pitch_direction(
+        anchor_ep: str,
+        anchor_key: str,
+        anchor_xy: tuple[float, float],
+        other_xy: tuple[float, float],
+    ) -> tuple[float, float]:
+        ax, ay = anchor_xy
+        bx, by = other_xy
+        dvx = bx - ax
+        dvy = by - ay
+        dnorm = math.hypot(dvx, dvy)
+        if dnorm <= 1e-6:
+            dvx, dvy, dnorm = 1.0, 0.0, 1.0
+        down_u = (dvx / dnorm, dvy / dnorm)
+
+        ref_u: tuple[float, float] | None = None
+        for edge in artifact.edges.values():
+            if edge.edge_type != "microstrip" or len(edge.connections) != 2:
+                continue
+            if edge.target_length is None or float(edge.target_length) <= 0.0:
+                continue
+            a_id, b_id = edge.connections
+            a_tokens = _expand_endpoint_tokens(a_id)
+            b_tokens = _expand_endpoint_tokens(b_id)
+            if anchor_ep in a_tokens or anchor_key == a_id:
+                other_id = b_id
+            elif anchor_ep in b_tokens or anchor_key == b_id:
+                other_id = a_id
+            else:
+                continue
+            if other_id not in positions:
+                continue
+            ox, oy = positions[other_id]
+            ivx = ax - ox
+            ivy = ay - oy
+            inorm = math.hypot(ivx, ivy)
+            if inorm <= 1e-6:
+                continue
+            ref_u = (ivx / inorm, ivy / inorm)
+            break
+        if ref_u is None:
+            return down_u
+        ux, uy = ref_u
+        candidates = [(-uy, ux), (ux, uy), (uy, -ux)]  # left, front, right
+        return max(candidates, key=lambda c: c[0] * down_u[0] + c[1] * down_u[1])
+
     for comp_id, uv in artifact.uv_components.items():
         if len(uv.pads) != 2:
             continue
@@ -918,13 +964,7 @@ def _solve_pre_a_positions(
         )
         if pitch <= 1e-6:
             continue
-        dx = bx - ax
-        dy = by - ay
-        norm = math.hypot(dx, dy)
-        if norm <= 1e-6:
-            ux, uy = 1.0, 0.0
-        else:
-            ux, uy = dx / norm, dy / norm
+        ux, uy = _pitch_direction(anchor_ep, anchor_key, (ax, ay), (bx, by))
         moved = _clamp((ax + ux * pitch, ay + uy * pitch))
         positions[other_key] = moved
         positions[other_ep] = moved
@@ -1031,13 +1071,7 @@ def _solve_pre_a_positions(
         )
         if pitch <= 1e-6:
             continue
-        dx = bx - ax
-        dy = by - ay
-        norm = math.hypot(dx, dy)
-        if norm <= 1e-6:
-            ux, uy = 1.0, 0.0
-        else:
-            ux, uy = dx / norm, dy / norm
+        ux, uy = _pitch_direction(anchor_ep, anchor_key, (ax, ay), (bx, by))
         moved = _clamp((ax + ux * pitch, ay + uy * pitch))
         positions[other_key] = moved
         positions[other_ep] = moved
