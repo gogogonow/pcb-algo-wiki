@@ -311,7 +311,36 @@ def _render_pre_phase_svg(
             start_kind = _prea_endpoint_kind(artifact, start_id)
             end_kind = _prea_endpoint_kind(artifact, end_id)
             if abs(seg_len - desired) > 0.25:
-                if start_kind == "fixed_pin" and end_kind != "fixed_pin":
+                pin_oriented_anchor: str | None = None
+                for candidate in (start_id, end_id):
+                    pad = artifact.fixed_terminals.get(candidate)
+                    if (
+                        pad is not None
+                        and pad.orientation is not None
+                        and candidate.split(".", 1)[0].startswith("IC")
+                    ):
+                        pin_oriented_anchor = candidate
+                        break
+
+                if pin_oriented_anchor is not None:
+                    ax, ay = positions[pin_oriented_anchor]
+                    anchor_pad = artifact.fixed_terminals[pin_oriented_anchor]
+                    orientation = (
+                        float(anchor_pad.orientation)
+                        if anchor_pad.orientation is not None
+                        else 0.0
+                    )
+                    theta = math.radians(orientation)
+                    px = ax + math.cos(theta) * desired
+                    py = ay + math.sin(theta) * desired
+                    if pin_oriented_anchor == start_id:
+                        bx, by = ex, ey
+                        main_sx, main_sy, main_ex, main_ey = ax, ay, px, py
+                    else:
+                        bx, by = sx, sy
+                        main_sx, main_sy, main_ex, main_ey = px, py, ax, ay
+                    bridge = (px, py, bx, by)
+                elif start_kind == "fixed_pin" and end_kind != "fixed_pin":
                     ax, ay = ex, ey
                     bx, by = sx, sy
                     anchor_is_start = False
@@ -323,15 +352,16 @@ def _render_pre_phase_svg(
                     ax, ay = sx, sy
                     bx, by = ex, ey
                     anchor_is_start = True
-                ux = (bx - ax) / seg_len
-                uy = (by - ay) / seg_len
-                px = ax + ux * desired
-                py = ay + uy * desired
-                if anchor_is_start:
-                    main_sx, main_sy, main_ex, main_ey = ax, ay, px, py
-                else:
-                    main_sx, main_sy, main_ex, main_ey = px, py, ax, ay
-                bridge = (px, py, bx, by)
+                if pin_oriented_anchor is None:
+                    ux = (bx - ax) / seg_len
+                    uy = (by - ay) / seg_len
+                    px = ax + ux * desired
+                    py = ay + uy * desired
+                    if anchor_is_start:
+                        main_sx, main_sy, main_ex, main_ey = ax, ay, px, py
+                    else:
+                        main_sx, main_sy, main_ex, main_ey = px, py, ax, ay
+                    bridge = (px, py, bx, by)
         stroke_width = max(float(edge.width or 0.2) * px_per_mm, 1.2)
         length_text = (
             f"L={float(edge.target_length):.1f}mm"

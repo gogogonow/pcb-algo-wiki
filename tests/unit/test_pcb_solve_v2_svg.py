@@ -1,6 +1,7 @@
 from pathlib import Path
 import json
 import math
+import re
 
 import pytest
 
@@ -163,6 +164,12 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     assert 'class="prea-edge-bridge"' in svg
     assert 'class="prea-edge-bridge" data-edge-id="RF_INPUT_to_IC1"' in svg
     assert 'class="prea-edge-bridge" data-edge-id="PWR_VDD_bus"' in svg
+    rf_input_match = re.search(
+        r'data-edge-id="RF_INPUT_to_IC1"[^>]*x1="([0-9.]+)"[^>]*x2="([0-9.]+)"', svg
+    )
+    assert rf_input_match is not None
+    rf_x1, rf_x2 = (float(v) for v in rf_input_match.groups())
+    assert abs(rf_x1 - rf_x2) < 0.6
     assert 'data-endpoint="C1.PIN_1"' not in svg
     assert 'data-endpoint="C1.PIN_2"' not in svg
     assert 'data-endpoint="R1.PIN_1"' not in svg
