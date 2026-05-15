@@ -58,9 +58,9 @@ def test_phase_a_routes_use_only_45deg_directions() -> None:
             if dx == 0 and dy == 0:
                 continue
             # Allowed: dx==0, dy==0, or |dx|==|dy| (axis-aligned or 45°).
-            assert dx == 0 or dy == 0 or abs(dx) == abs(dy), (
-                f"{edge_id} segment {(ax, ay)}->{(bx, by)} not on 45° lattice"
-            )
+            assert (
+                dx == 0 or dy == 0 or abs(dx) == abs(dy)
+            ), f"{edge_id} segment {(ax, ay)}->{(bx, by)} not on 45° lattice"
 
 
 @pytest.mark.skipif(not YAML_PATH.exists(), reason="PA yaml missing")
@@ -90,3 +90,42 @@ def test_phase_a_no_orthogonal_corners() -> None:
                 f"{edge_id} has un-chamfered 90° corner near "
                 f"index {i} = ({bx / 1000.0:.3f}, {by / 1000.0:.3f}) mm"
             )
+
+
+@pytest.mark.skipif(not YAML_PATH.exists(), reason="PA yaml missing")
+def test_phase_a_no_segment_intersections() -> None:
+    """No two successful routes from different edges may have crossing
+    segments. Shared-endpoint touches at junction nodes are allowed.
+
+    NOTE: Currently the meander post-pass and the chamfer post-pass operate
+    on each polyline independently and may introduce inter-route crossings
+    that the channel-grid did not foresee. WI-A5 work tracks this gap; this
+    test is expected to fail until the post-pass crossing-aware re-route
+    lands. Marked ``xfail(strict=False)`` so progress is visible without
+    blocking CI.
+    """
+
+    result = solve_layout_v2(str(YAML_PATH))
+    segs: list[tuple[str, tuple[float, float], tuple[float, float]]] = []
+    for edge_id, route in result.phase_a.skeleton.routes.items():
+        if not route.success or len(route.polyline_um) < 2:
+            continue
+        for a, b in zip(route.polyline_um, route.polyline_um[1:]):
+            segs.append((edge_id, a, b))
+
+    crossings: list[tuple[str, str]] = []
+    for i in range(len(segs)):
+        eid_a, a1, a2 = segs[i]
+        for j in range(i + 1, len(segs)):
+            eid_b, b1, b2 = segs[j]
+            if eid_a == eid_b:
+                continue
+            if _segments_intersect(a1, a2, b1, b2):
+                crossings.append((eid_a, eid_b))
+
+    if crossings:
+        pytest.xfail(
+            "Known unresolved Phase-A inter-route crossings (WI-A5 pending): "
+            + ", ".join(f"{a}×{b}" for a, b in crossings[:3])
+        )
+    assert not crossings

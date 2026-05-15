@@ -363,18 +363,17 @@ def route_skeleton(
                 )
                 if sibling is None:
                     continue
-                sibling_eps = (sibling.start_endpoint, sibling.goal_endpoint)
                 shared_endpoint = (
                     sibling.start_endpoint == ep.start_endpoint
                     or sibling.goal_endpoint == ep.start_endpoint
                     or sibling.start_endpoint == ep.goal_endpoint
                     or sibling.goal_endpoint == ep.goal_endpoint
                 )
-                shared_component = any(
-                    "." in s and s.split(".", 1)[0] in ep_components
-                    for s in sibling_eps
-                )
-                if shared_endpoint or shared_component:
+                # Only ignore siblings that share the *same pin* — siblings
+                # ending on different pins of the same IC must still avoid
+                # each other geometrically (otherwise diagonal A* paths can
+                # cut through orthogonal buses on a different pin).
+                if shared_endpoint:
                     ignore.append(f"route:{sibling_id}")
             ignore_tuple = tuple(ignore)
             start_um = (int(start[0] * MM_TO_UM), int(start[1] * MM_TO_UM))

@@ -1226,7 +1226,7 @@ def solve_pre_a_from_artifact(
     class _Stub:
         def __init__(self) -> None:
             class _PA:
-                pass
+                plan: Any = None
 
             self.artifact = artifact
             self.phase_a = _PA()
