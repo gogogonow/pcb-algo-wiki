@@ -78,4 +78,4 @@ def test_pa_module_obstacles_include_board_and_fixed_components() -> None:
 def test_pa_module_tp3_is_on_top_border() -> None:
     artifact = compile_layout(REAL_CASE_PATH)
     tp3 = artifact.fixed_terminals["TP3.PIN_1"]
-    assert tp3.abs_y == 100.0
+    assert tp3.abs_y == 85.0

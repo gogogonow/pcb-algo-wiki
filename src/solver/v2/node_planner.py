@@ -178,6 +178,22 @@ def plan_node_positions(
                 _clamp(pos[1], 1.0, board_height_mm - 1.0),
             )
 
+    # 7. Final relaxation: now that split-pads / composite endpoints are
+    #    resolved, re-project junction nodes so they respect target_length to
+    #    every neighbour (not only fixed pads).
+    for _ in range(3):
+        for node_name in artifact.nodes:
+            pos = _seed_node_position(
+                node_name, edge_endpoints, plan.endpoint_xy, board_center
+            )
+            pos = _project_to_length_constraints(
+                node_name, pos, edge_endpoints, plan.endpoint_xy
+            )
+            plan.endpoint_xy[node_name] = (
+                _clamp(pos[0], 1.0, board_width_mm - 1.0),
+                _clamp(pos[1], 1.0, board_height_mm - 1.0),
+            )
+
     return plan
 
 

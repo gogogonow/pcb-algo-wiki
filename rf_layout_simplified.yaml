@@ -19,7 +19,7 @@ global_constraints:
       x: 0.0
       y: 0.0
     width: 40.0    #默认板框宽度
-    height: 100.0    #默认板框高度
+    height: 85.0    #默认板框高度
   keepout_zones: []
 footprints:
   "PKG_IC_4PIN":    #封装名
@@ -146,7 +146,7 @@ components:
     footprint_ref: "PKG_IC_4PIN"    #器件封装
     placement:    #器件位置
       x: 12.1    #x坐标有值表示位置固定，坐标原点为板框左下角位置
-      y: 50.0    #y坐标有值表示位置固定，坐标原点为板框左下角位置
+      y: 35.0    #y坐标有值表示位置固定，坐标原点为板框左下角位置
       rotation: 0    #器件是否旋转，0表示不旋转，90表示向上旋转，-90表示向下旋转，-180表示选装180度
       is_floating: false    #false表示器件位置固定，后续布局布线不支持调整
     pin_nets:    #器件管脚
@@ -278,7 +278,7 @@ components:
     footprint_ref: "PKG_TEST_POINT"
     placement:
       x: 15.0
-      y: 80.0
+      y: 65.0
       rotation: 0
       is_floating: false
     pin_nets:
@@ -288,7 +288,7 @@ components:
     footprint_ref: "PKG_TEST_POINT"
     placement:
       x: 25.0
-      y: 100.0
+      y: 85.0
       rotation: 0
       is_floating: false
     pin_nets:
