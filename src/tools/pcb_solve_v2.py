@@ -310,25 +310,28 @@ def _render_pre_phase_svg(
             seg_len = math.hypot(ex - sx, ey - sy)
             start_kind = _prea_endpoint_kind(artifact, start_id)
             end_kind = _prea_endpoint_kind(artifact, end_id)
-            if seg_len > desired + 1e-6 and (
-                (start_kind == "virtual_rlc_pin" and end_kind == "fixed_pin")
-                or (end_kind == "virtual_rlc_pin" and start_kind == "fixed_pin")
-            ):
-                if start_kind == "virtual_rlc_pin":
-                    vx, vy = sx, sy
-                    fx, fy = ex, ey
+            if abs(seg_len - desired) > 0.25:
+                if start_kind == "fixed_pin" and end_kind != "fixed_pin":
+                    ax, ay = ex, ey
+                    bx, by = sx, sy
+                    anchor_is_start = False
+                elif end_kind == "fixed_pin" and start_kind != "fixed_pin":
+                    ax, ay = sx, sy
+                    bx, by = ex, ey
+                    anchor_is_start = True
                 else:
-                    vx, vy = ex, ey
-                    fx, fy = sx, sy
-                ux = (fx - vx) / seg_len
-                uy = (fy - vy) / seg_len
-                px = vx + ux * desired
-                py = vy + uy * desired
-                if start_kind == "virtual_rlc_pin":
-                    main_sx, main_sy, main_ex, main_ey = vx, vy, px, py
+                    ax, ay = sx, sy
+                    bx, by = ex, ey
+                    anchor_is_start = True
+                ux = (bx - ax) / seg_len
+                uy = (by - ay) / seg_len
+                px = ax + ux * desired
+                py = ay + uy * desired
+                if anchor_is_start:
+                    main_sx, main_sy, main_ex, main_ey = ax, ay, px, py
                 else:
-                    main_sx, main_sy, main_ex, main_ey = px, py, vx, vy
-                bridge = (px, py, fx, fy)
+                    main_sx, main_sy, main_ex, main_ey = px, py, ax, ay
+                bridge = (px, py, bx, by)
         stroke_width = max(float(edge.width or 0.2) * px_per_mm, 1.2)
         length_text = (
             f"L={float(edge.target_length):.1f}mm"

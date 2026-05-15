@@ -161,6 +161,8 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     assert ">p1_seg2<" in svg
     assert "p1_seg2-&gt;R2" not in svg
     assert 'class="prea-edge-bridge"' in svg
+    assert 'class="prea-edge-bridge" data-edge-id="RF_INPUT_to_IC1"' in svg
+    assert 'class="prea-edge-bridge" data-edge-id="PWR_VDD_bus"' in svg
     assert 'data-endpoint="C1.PIN_1"' not in svg
     assert 'data-endpoint="C1.PIN_2"' not in svg
     assert 'data-endpoint="R1.PIN_1"' not in svg
