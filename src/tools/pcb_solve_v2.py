@@ -157,6 +157,41 @@ def _uv_highlight_overlay(
     return "".join(parts)
 
 
+def _pin_label_text(pin: str) -> str:
+    if pin.startswith("P") and pin[1:].isdigit():
+        return f"PIN_{pin[1:]}"
+    if pin.startswith("PIN_"):
+        return pin
+    return pin
+
+
+def _pin_label_overlay(
+    geom: GeometryIR, px_per_mm: float = 6.0, margin_mm: float = 5.0
+) -> str:
+    """SVG overlay to show per-pad pin numbers from GeometryIR placements."""
+    board_h = float(geom.board.height) + 2 * margin_mm
+
+    def _x(mm: float) -> float:
+        return (mm + margin_mm) * px_per_mm
+
+    def _y(mm: float) -> float:
+        return (board_h - (mm + margin_mm)) * px_per_mm
+
+    parts: list[str] = []
+    for placement in geom.placements.values():
+        for pad in placement.pads:
+            px = float(pad.point.x)
+            py = float(pad.point.y)
+            label = escape(_pin_label_text(str(pad.pin)))
+            parts.append(
+                f'<text x="{_x(px):.2f}" y="{_y(py) - 2.0:.2f}" '
+                'font-family="sans-serif" font-size="6" text-anchor="middle" '
+                'font-weight="bold" fill="#111827" stroke="#ffffff" stroke-width="0.8" paint-order="stroke">'
+                f"{label}</text>"
+            )
+    return "".join(parts)
+
+
 def _render_svg(
     geom: GeometryIR, path: Path, *, banner: str = "", overlay: str = ""
 ) -> None:
@@ -244,14 +279,16 @@ def _persist_phase_artefacts(
     flex_failed = len(result.phase_c.failed_flex_edges)
 
     phase_a_svg = out_dir / f"{project}.phaseA.svg"
+    phase_a_geom = _build_phase_a_geom(result)
     _render_svg(
-        _build_phase_a_geom(result),
+        phase_a_geom,
         phase_a_svg,
         banner=_phase_banner(
             "Phase A",
             f"Skeleton routing — {routed_ok}/{routed_total} microstrips routed | UV not yet placed",
             "#b45309",
         ),
+        overlay=_pin_label_overlay(phase_a_geom),
     )
     artefacts["phaseA_svg"] = phase_a_svg
 
