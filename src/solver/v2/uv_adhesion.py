@@ -119,15 +119,10 @@ def _place_uv(
 
 
 def _local_pin_offset(uv: ComponentExpansion, pin: str) -> tuple[float, float]:
-    # ExpandedPad does not currently store local_x/local_y; we infer it from
-    # the (abs - placement) seed if abs is available, but for UV deferred pads
-    # abs is None. Fall back to (0,0) for anchor and a small offset for others.
-    # In PA all UV footprints have ≤2 pins (caps/resistors): assume the second
-    # pin is +1.4mm along x in local frame.
-    if uv.uv_meta and pin == uv.uv_meta.anchor_pin:
-        return (0.0, 0.0)
-    # Heuristic: 2-pin SMD components — second pin sits ~1.4mm along +x.
-    return (1.4, 0.0)
+    for pad in uv.pads:
+        if pad.pin == pin:
+            return (float(pad.local_x), float(pad.local_y))
+    return (0.0, 0.0)
 
 
 def _derive_rotation(

@@ -20,7 +20,7 @@ from output import render_full_layout
 from frontend.solver_ir import compile_solver_ir
 from schema.geometry_ir import GeometryIR
 from schema.solver_ir import UniversalJunctionTemplate
-from schema.v33 import load_v33_layout
+from schema.v33 import V33Layout, load_v33_layout
 from solver.v2 import OrchestratorV2Options, solve_layout_v2
 from solver.v2.orchestrator import (
     _assemble_geometry,
@@ -198,11 +198,16 @@ def _pin_label_overlay(
 
 
 def _render_svg(
-    geom: GeometryIR, path: Path, *, banner: str = "", overlay: str = ""
+    geom: GeometryIR,
+    path: Path,
+    *,
+    banner: str = "",
+    overlay: str = "",
+    layout: V33Layout | None = None,
 ) -> None:
     """Write a rendered SVG to *path*, injecting an optional phase banner and overlay."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    svg = render_full_layout(geom)
+    svg = render_full_layout(geom, layout=layout)
     if overlay:
         svg = svg.replace("</svg>", overlay + "</svg>")
     if banner:
@@ -636,6 +641,7 @@ def _persist_phase_artefacts(
     out_dir: Path,
     *,
     layout_path: Path,
+    layout: V33Layout | None = None,
 ) -> dict[str, Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     project = result.geometry.project
@@ -778,6 +784,7 @@ def _persist_phase_artefacts(
             "#b45309",
         ),
         overlay=_pin_label_overlay(phase_a_geom),
+        layout=layout,
     )
     artefacts["phaseA_svg"] = phase_a_svg
 
@@ -792,6 +799,7 @@ def _persist_phase_artefacts(
             "#15803d",
         ),
         overlay=_uv_highlight_overlay(geom_b, uv_names),
+        layout=layout,
     )
     artefacts["phaseB_svg"] = phase_b_svg
 
@@ -805,15 +813,18 @@ def _persist_phase_artefacts(
             f"Flex routing — {flex_ok} routed / {flex_failed} failed",
             "#1d4ed8",
         ),
+        layout=layout,
     )
     artefacts["phaseC_svg"] = phase_c_svg
 
     return artefacts
 
 
-def _emit_svg(result: OrchestratorV2Result, svg_path: Path) -> None:
+def _emit_svg(
+    result: OrchestratorV2Result, svg_path: Path, *, layout: V33Layout | None = None
+) -> None:
     svg_path.parent.mkdir(parents=True, exist_ok=True)
-    svg_text = render_full_layout(result.geometry)
+    svg_text = render_full_layout(result.geometry, layout=layout)
     svg_path.write_text(svg_text)
 
 
@@ -829,12 +840,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     result = solve_layout_v2(args.layout, options=options)
 
+    layout = load_v33_layout(args.layout)
     artefacts = _persist_phase_artefacts(
-        result, args.out_dir, layout_path=Path(args.layout)
+        result, args.out_dir, layout_path=Path(args.layout), layout=layout
     )
 
     svg_path = args.svg_out or (args.out_dir / f"{result.geometry.project}.final.svg")
-    _emit_svg(result, svg_path)
+    _emit_svg(result, svg_path, layout=layout)
     artefacts["final_svg"] = svg_path
 
     if args.report_out:

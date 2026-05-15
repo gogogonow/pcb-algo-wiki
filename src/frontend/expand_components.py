@@ -86,6 +86,8 @@ def _expand_fixed(
                 abs_y=abs_y,
                 orientation=rotation + local_orientation,
                 kind="fixed",
+                local_x=local_x,
+                local_y=local_y,
             )
         )
         xs.append(abs_x)
@@ -118,7 +120,9 @@ def _expand_uv(
     placement = component.placement
     pads: list[ExpandedPad] = []
     pin_items = footprint.pins.items() if footprint is not None else ()
-    for pin_name, _pin in pin_items:
+    for pin_name, pin in pin_items:
+        local_x = float(pin.local_x or 0.0)
+        local_y = float(pin.local_y or 0.0)
         pads.append(
             ExpandedPad(
                 component=name,
@@ -127,6 +131,8 @@ def _expand_uv(
                 abs_y=None,
                 orientation=None,
                 kind="uv_deferred",
+                local_x=local_x,
+                local_y=local_y,
             )
         )
     uv_meta = UvMeta(

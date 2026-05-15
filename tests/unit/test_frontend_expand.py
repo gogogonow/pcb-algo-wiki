@@ -84,6 +84,9 @@ def test_uv_component_registers_meta_with_deferred_pads() -> None:
     for pad in exp.pads:
         assert pad.kind == "uv_deferred"
         assert pad.abs_x is None and pad.abs_y is None
+    pads = {pad.pin: pad for pad in exp.pads}
+    assert pads["PIN_1"].local_x == pytest.approx(-0.5)
+    assert pads["PIN_2"].local_x == pytest.approx(0.5)
 
 
 def test_unknown_placement_returns_empty_pads() -> None:

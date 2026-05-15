@@ -14,6 +14,7 @@ from schema.v33 import (
     Component,
     ComponentPlacement,
     Footprint,
+    FootprintDimensions,
     FootprintPin,
     GlobalConstraints,
     Metadata,
@@ -67,7 +68,7 @@ def _layout_with_pads(component_count: int = 2, pin_count: int = 4):
             local_orientation=0.0,
             pad_geometry=PadGeometry(shape="rect", length=1.0, width=0.5),
         )
-    fp = Footprint(pins=pins)
+    fp = Footprint(pins=pins, dimensions=FootprintDimensions(width=1.5, length=4.0))
     components = {}
     placements = []
     for c in range(component_count):
@@ -210,3 +211,11 @@ def test_render_pads_skips_pin_without_geometry() -> None:
     )
     svg = render_full_layout(_geom_with_placements(placement), layout=layout)
     assert svg.count("<polygon ") == 1
+
+
+def test_render_component_bbox_outlines_from_footprint_dimensions() -> None:
+    layout, placements = _layout_with_pads(component_count=2, pin_count=1)
+    geom = _geom_with_placements(*placements)
+    svg = render_full_layout(geom, layout=layout, show_pads=True)
+    assert svg.count('class="component-bbox"') == 2
+    assert "bboxes=2" in svg

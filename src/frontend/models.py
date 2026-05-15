@@ -51,6 +51,8 @@ class ExpandedPad:
     abs_y: float | None
     orientation: float | None
     kind: PadKind
+    local_x: float = 0.0
+    local_y: float = 0.0
 
 
 @dataclass(frozen=True)

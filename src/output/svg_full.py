@@ -132,6 +132,52 @@ def _render_pads(
     return parts, polygon_count
 
 
+def _render_component_bboxes(
+    layout: V33Layout,
+    geom: GeometryIR,
+    *,
+    x_fn,  # type: ignore[no-untyped-def]
+    y_fn,  # type: ignore[no-untyped-def]
+) -> tuple[list[str], int]:
+    """Render placed component footprint outlines (bbox) from footprint dimensions."""
+    parts: list[str] = []
+    count = 0
+    components = layout.components
+    footprints = layout.footprints
+    for comp_id, gp in geom.placements.items():
+        comp = components.get(comp_id)
+        if comp is None or comp.footprint_ref is None:
+            continue
+        fp = footprints.get(comp.footprint_ref)
+        if fp is None or fp.dimensions is None:
+            continue
+        width = fp.dimensions.width
+        length = fp.dimensions.length
+        if width is None or length is None:
+            continue
+        rot = float(gp.rotation_deg)
+        cx = float(gp.anchor.x)
+        cy = float(gp.anchor.y)
+        corners = _pad_polygon_world(
+            cx=cx,
+            cy=cy,
+            rot_deg=rot,
+            local_x=0.0,
+            local_y=0.0,
+            local_orient_deg=0.0,
+            pad_len=float(length),
+            pad_w=float(width),
+        )
+        pts = [f"{x_fn(px):.2f},{y_fn(py):.2f}" for px, py in corners]
+        path_d = "M " + " L ".join(pts) + " Z"
+        parts.append(
+            f'<path d="{path_d}" class="component-bbox" fill="none" '
+            'stroke="#0f766e" stroke-width="0.8" stroke-dasharray="2 2" opacity="0.85"/>'
+        )
+        count += 1
+    return parts, count
+
+
 def render_full_layout(
     geom: GeometryIR,
     *,
@@ -157,8 +203,13 @@ def render_full_layout(
 
     pad_parts: list[str] = []
     pad_polygon_count = 0
+    bbox_parts: list[str] = []
+    bbox_count = 0
     if layout is not None and show_pads:
         pad_parts, pad_polygon_count = _render_pads(layout, geom, x_fn=_x, y_fn=_y)
+        bbox_parts, bbox_count = _render_component_bboxes(
+            layout, geom, x_fn=_x, y_fn=_y
+        )
 
     if drc is not None and drc.violations:
         for v in drc.violations:
@@ -200,6 +251,8 @@ def render_full_layout(
             footer_parts.append(f"LVS mismatch={len(lvs.mismatches)}")
     if pad_parts:
         footer_parts.append(f"pads={pad_polygon_count}")
+    if bbox_parts:
+        footer_parts.append(f"bboxes={bbox_count}")
 
     if pad_parts or overlays or footer_parts:
         # Inject pads BEFORE routes/overlays/footer so routes draw on top.
@@ -208,7 +261,7 @@ def render_full_layout(
         # by keying on the comment marker — but geom_svg has no marker, so we
         # insert pads at the start (after first <rect> background) and overlays
         # near </svg>.
-        injection_top = "".join(pad_parts)
+        injection_top = "".join(bbox_parts + pad_parts)
         injection_bottom = "".join(overlays)
         if footer_parts:
             footer_text = " | ".join(footer_parts)

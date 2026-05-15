@@ -130,3 +130,8 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     phase_a_text = phase_a_svg.read_text(encoding="utf-8")
     assert 'stroke-linecap="butt"' in phase_a_text
     assert 'stroke-linecap="round"' not in phase_a_text
+
+    phase_b_svg = scratch_dir / "PA_Module_Simplified.phaseB.svg"
+    phase_b_text = phase_b_svg.read_text(encoding="utf-8")
+    assert 'class="component-bbox"' in phase_b_text
+    assert "<title>C1.PIN_1</title>" in phase_b_text
