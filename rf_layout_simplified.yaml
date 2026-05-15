@@ -663,12 +663,3 @@ edges:
       target_length: 25.5
     geometry:
       bend_style: mitered_45
-  logical_bus_GND:
-    type: multipoint_net
-    net: "GND"
-    routing_class: unrouted_bus
-    connections: [ "R2.2", "C5.2", "C3.2", "C6.1"]
-    constraint:
-      width: null
-      target_length: null
-    note: Requires physical topology split
