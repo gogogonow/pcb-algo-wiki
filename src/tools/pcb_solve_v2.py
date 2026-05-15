@@ -333,75 +333,69 @@ def _render_pre_phase_svg(
             footprint = layout.footprints.get(component.footprint_ref)
             if footprint is None or not footprint.pins:
                 continue
-            local_xy = {
-                pad.pin: (float(pad.local_x), float(pad.local_y)) for pad in uv.pads
-            }
-            anchor_pin = (
-                uv.uv_meta.anchor_pin
-                if uv.uv_meta is not None
-                else next(iter(footprint.pins))
-            )
-            anchor_ep = f"{comp_id}.{anchor_pin}"
-            anchor_world = positions.get(anchor_ep)
-            if anchor_world is None or anchor_pin not in local_xy:
+            pin_world: dict[str, tuple[float, float]] = {}
+            for pin_name in footprint.pins:
+                endpoint = f"{comp_id}.{pin_name}"
+                if endpoint in positions:
+                    pin_world[pin_name] = positions[endpoint]
+            if not pin_world:
                 continue
             rotation = 0.0
-            for pin_name in footprint.pins:
-                if pin_name == anchor_pin:
-                    continue
-                other_ep = f"{comp_id}.{pin_name}"
-                other_world = positions.get(other_ep)
-                if other_world is None or pin_name not in local_xy:
-                    continue
-                lx0, ly0 = local_xy[anchor_pin]
-                lx1, ly1 = local_xy[pin_name]
-                ldx = lx1 - lx0
-                ldy = ly1 - ly0
-                wdx = other_world[0] - anchor_world[0]
-                wdy = other_world[1] - anchor_world[1]
-                if math.hypot(ldx, ldy) < 1e-6 or math.hypot(wdx, wdy) < 1e-6:
-                    continue
-                rotation = math.degrees(math.atan2(wdy, wdx) - math.atan2(ldy, ldx))
-                break
-            vector_candidates: list[tuple[float, float, float]] = []
-            for pad in uv.pads:
-                pin_ep = f"{comp_id}.{pad.pin}"
-                vector_candidates.extend(endpoint_vectors.get(pin_ep, ()))
-                pin_xy = positions.get(pin_ep)
-                if pin_xy is None:
-                    continue
-                for other_ep, other_xy in positions.items():
-                    if _prea_endpoint_kind(artifact, other_ep) == "virtual_rlc_pin":
-                        continue
-                    if (
-                        math.hypot(other_xy[0] - pin_xy[0], other_xy[1] - pin_xy[1])
-                        > 1e-6
-                    ):
-                        continue
-                    vector_candidates.extend(endpoint_vectors.get(other_ep, ()))
-            if vector_candidates:
-                vx, vy, _ = max(
-                    vector_candidates,
-                    key=lambda item: (item[2], abs(item[0]) + abs(item[1])),
-                )
-                rotation = math.degrees(math.atan2(vy, vx))
+            pin_items = sorted(pin_world.items())
+            if len(pin_items) >= 2:
+                (_, a_xy), (_, b_xy) = pin_items[0], pin_items[1]
+                dx = b_xy[0] - a_xy[0]
+                dy = b_xy[1] - a_xy[1]
+                if math.hypot(dx, dy) > 1e-6:
+                    rotation = math.degrees(math.atan2(dy, dx))
             ct = math.cos(math.radians(rotation))
             st = math.sin(math.radians(rotation))
-            lax, lay = local_xy[anchor_pin]
-            cx = anchor_world[0] - (ct * lax - st * lay)
-            cy = anchor_world[1] - (st * lax + ct * lay)
             if (
                 footprint.dimensions is not None
                 and footprint.dimensions.length is not None
                 and footprint.dimensions.width is not None
             ):
-                hl = float(footprint.dimensions.length) / 2.0
+                half_w = float(footprint.dimensions.width) / 2.0
                 hw = float(footprint.dimensions.width) / 2.0
-                corners = [(-hl, -hw), (hl, -hw), (hl, hw), (-hl, hw)]
+                if len(pin_items) >= 2:
+                    u = (ct, st)
+                    n = (-st, ct)
+                    proj_u = [xy[0] * u[0] + xy[1] * u[1] for _, xy in pin_items]
+                    proj_n = [xy[0] * n[0] + xy[1] * n[1] for _, xy in pin_items]
+                    pad_extra = 0.0
+                    for pin_name, pin in footprint.pins.items():
+                        geom_pad = pin.pad_geometry
+                        if (
+                            geom_pad is not None
+                            and geom_pad.length is not None
+                            and pin_name in pin_world
+                        ):
+                            pad_extra = max(pad_extra, float(geom_pad.length) / 2.0)
+                    min_u = min(proj_u) - pad_extra
+                    max_u = max(proj_u) + pad_extra
+                    mid_n = sum(proj_n) / len(proj_n)
+                    corners_un = [
+                        (min_u, mid_n - half_w),
+                        (max_u, mid_n - half_w),
+                        (max_u, mid_n + half_w),
+                        (min_u, mid_n + half_w),
+                    ]
+                    corners: list[tuple[float, float]] = []
+                    for pu, pn in corners_un:
+                        px = pu * u[0] + pn * n[0]
+                        py = pu * u[1] + pn * n[1]
+                        corners.append((px, py))
+                else:
+                    _, center_xy = pin_items[0]
+                    hl = float(footprint.dimensions.length) / 2.0
+                    corners = [
+                        (center_xy[0] - hl, center_xy[1] - hw),
+                        (center_xy[0] + hl, center_xy[1] - hw),
+                        (center_xy[0] + hl, center_xy[1] + hw),
+                        (center_xy[0] - hl, center_xy[1] + hw),
+                    ]
                 pts: list[str] = []
-                for lx, ly in corners:
-                    px = cx + ct * lx - st * ly
-                    py = cy + st * lx + ct * ly
+                for px, py in corners:
                     pts.append(f"{_x(px):.2f},{_y(py):.2f}")
                 lines.append(
                     f'<path class="prea-rlc-bbox" d="M {" L ".join(pts)} Z"><title>{escape(comp_id)}</title></path>'
@@ -413,12 +407,10 @@ def _render_pre_phase_svg(
                     or geom_pad.length is None
                     or geom_pad.width is None
                     or (geom_pad.shape or "rect").lower() != "rect"
-                    or pin_name not in local_xy
+                    or pin_name not in pin_world
                 ):
                     continue
-                plx, ply = local_xy[pin_name]
-                pcx = cx + ct * plx - st * ply
-                pcy = cy + st * plx + ct * ply
+                pcx, pcy = pin_world[pin_name]
                 pad_centers[f"{comp_id}.{pin_name}"] = (pcx, pcy)
                 orient = rotation + float(pin.local_orientation or 0.0)
                 cp = math.cos(math.radians(orient))

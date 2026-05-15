@@ -143,8 +143,10 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     assert c1r1_pin2["x"] == pytest.approx(seg5_start["x"], abs=1e-6)
     assert c1r1_pin2["y"] == pytest.approx(seg5_start["y"], abs=1e-6)
     assert "p1_seg2-&gt;R2" in svg
-    assert 'class="prea-assist-link"' in svg
-    assert 'data-endpoint="R2.PIN_2"' in svg
+    assert 'data-endpoint="C1.PIN_1"' not in svg
+    assert 'data-endpoint="C1.PIN_2"' not in svg
+    assert 'data-endpoint="R1.PIN_1"' not in svg
+    assert 'data-endpoint="R1.PIN_2"' not in svg
     assert by_edge["IC1_pin1_seg2_to_R2"]["edge_short"] == "p1_seg2->R2"
 
     phase_a_svg = scratch_dir / "PA_Module_Simplified.phaseA.svg"
