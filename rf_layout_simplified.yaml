@@ -331,7 +331,7 @@ components:
   TP5:
     footprint_ref: "PKG_TEST_POINT"
     placement:
-      x: 35.0
+      x: 28.0
       y: 0
       rotation: 0
       is_floating: false
