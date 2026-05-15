@@ -312,7 +312,7 @@ components:
     footprint_ref: "PKG_TEST_POINT"
     placement:
       x: 25.0
-      y: 0
+      y: 100.0
       rotation: 0
       is_floating: false
     pin_nets:
