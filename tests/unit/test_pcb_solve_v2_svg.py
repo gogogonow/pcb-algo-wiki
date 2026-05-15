@@ -50,8 +50,7 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     svg = pre_a_svg.read_text(encoding="utf-8")
     assert 'class="prea-edge"' in svg
     assert "RF_INPUT_to_IC1" in svg
-    assert "w=3.6mm" in svg
-    assert "L=80.0mm" in svg
+    assert "<title>IC1_pin1_seg1 | w=3.6mm | L=5.8mm</title>" in svg
     assert 'class="prea-virtual-endpoint"' in svg
     assert 'class="prea-rlc-bbox"' in svg
     assert "<title>C1.PIN_1</title>" in svg
@@ -153,7 +152,8 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
         c1r1_pin2["y"] - c1r1_from_seg4["y"],
     )
     assert c1r1_span < 3.0
-    assert "p1_seg2-&gt;R2" in svg
+    assert ">p1_seg2<" in svg
+    assert "p1_seg2-&gt;R2" not in svg
     assert 'data-endpoint="C1.PIN_1"' not in svg
     assert 'data-endpoint="C1.PIN_2"' not in svg
     assert 'data-endpoint="R1.PIN_1"' not in svg

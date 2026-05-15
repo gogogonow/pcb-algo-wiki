@@ -302,27 +302,29 @@ def _render_pre_phase_svg(
         sx, sy = overrides.get(start_id, positions[start_id])
         ex, ey = overrides.get(end_id, positions[end_id])
         stroke_width = max(float(edge.width or 0.2) * px_per_mm, 1.2)
-        lines.append(
-            f'<line class="prea-edge" data-edge-id="{escape(edge_id)}" '
-            f'x1="{_x(sx):.2f}" y1="{_y(sy):.2f}" x2="{_x(ex):.2f}" y2="{_y(ey):.2f}" '
-            f'stroke="#334155" stroke-width="{stroke_width:.2f}"/>'
-        )
-        weight = float(edge.target_length) if edge.target_length is not None else 0.0
-        _add_endpoint_vector(start_id, ex - sx, ey - sy, weight)
-        _add_endpoint_vector(end_id, sx - ex, sy - ey, weight)
-        mx = (sx + ex) / 2.0
-        my = (sy + ey) / 2.0
         length_text = (
             f"L={float(edge.target_length):.1f}mm"
             if edge.target_length is not None
             else "L=n/a"
         )
         width_text = f"w={float(edge.width or 0.0):.1f}mm"
-        short_edge_id = _prea_short_name(edge_id)
         lines.append(
-            f'<text class="prea-label" x="{_x(mx)+4:.2f}" y="{_y(my)-4:.2f}">'
-            f"{escape(short_edge_id)} | {escape(width_text)} | {escape(length_text)}</text>"
+            f'<line class="prea-edge" data-edge-id="{escape(edge_id)}" '
+            f'x1="{_x(sx):.2f}" y1="{_y(sy):.2f}" x2="{_x(ex):.2f}" y2="{_y(ey):.2f}" '
+            f'stroke="#334155" stroke-width="{stroke_width:.2f}"><title>'
+            f"{escape(edge_id)} | {escape(width_text)} | {escape(length_text)}</title></line>"
         )
+        weight = float(edge.target_length) if edge.target_length is not None else 0.0
+        _add_endpoint_vector(start_id, ex - sx, ey - sy, weight)
+        _add_endpoint_vector(end_id, sx - ex, sy - ey, weight)
+        mx = (sx + ex) / 2.0
+        my = (sy + ey) / 2.0
+        short_edge_id = _prea_short_name(edge_id)
+        if edge.target_length is not None:
+            lines.append(
+                f'<text class="prea-label" x="{_x(mx)+4:.2f}" y="{_y(my)-4:.2f}">'
+                f"{escape(short_edge_id)}</text>"
+            )
 
     pad_centers: dict[str, tuple[float, float]] = {}
     if layout is not None:
