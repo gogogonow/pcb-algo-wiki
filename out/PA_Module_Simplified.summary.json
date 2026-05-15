@@ -5,25 +5,25 @@
     "routed": 21,
     "total": 22,
     "rip_up_rounds": 2,
-    "wall_s": 0.7314312860253267,
-    "max_len_err_pct": 179.95499999999998,
+    "wall_s": 1.7097540740214754,
+    "max_len_err_pct": 171.95499999999998,
     "failed": [
       {
         "edge_id": "C1R1_to_combiner",
-        "reason": "no path"
+        "reason": "max_expansions exhausted"
       }
     ]
   },
   "phase_b": {
     "uv_placed": 9,
     "uv_total": 9,
-    "wall_s": 0.0001899370108731091,
+    "wall_s": 0.00020048799342475832,
     "failed": []
   },
   "phase_c": {
     "flex_routed": 0,
     "flex_failed": [],
-    "wall_s": 0.061347350012511015
+    "wall_s": 0.06582855098531581
   },
-  "wall_total_s": 0.7929685730487108
+  "wall_total_s": 1.775783113000216
 }

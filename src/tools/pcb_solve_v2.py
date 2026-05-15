@@ -930,6 +930,56 @@ def _solve_pre_a_positions(
             ref_u = (ivx / inorm, ivy / inorm)
             break
         if ref_u is None:
+            # If anchor endpoint is on a free edge (e.g. C1.PIN_1 on
+            # seg4_to_C1R1), use the adjacent non-virtual node and inherit the
+            # constrained segment direction at that node.
+            for edge in artifact.edges.values():
+                if edge.edge_type != "microstrip" or len(edge.connections) != 2:
+                    continue
+                if edge.target_length is not None:
+                    continue
+                a_id, b_id = edge.connections
+                a_tokens = _expand_endpoint_tokens(a_id)
+                b_tokens = _expand_endpoint_tokens(b_id)
+                if anchor_ep in a_tokens or anchor_key == a_id:
+                    mid_id = b_id
+                elif anchor_ep in b_tokens or anchor_key == b_id:
+                    mid_id = a_id
+                else:
+                    continue
+                if _prea_endpoint_kind(artifact, mid_id) == "virtual_rlc_pin":
+                    continue
+                if mid_id not in positions:
+                    continue
+                mx, my = positions[mid_id]
+                for edge2 in artifact.edges.values():
+                    if (
+                        edge2.edge_type != "microstrip"
+                        or len(edge2.connections) != 2
+                        or edge2.target_length is None
+                        or float(edge2.target_length) <= 0.0
+                    ):
+                        continue
+                    c_id, d_id = edge2.connections
+                    if c_id == mid_id:
+                        other2 = d_id
+                    elif d_id == mid_id:
+                        other2 = c_id
+                    else:
+                        continue
+                    if other2 not in positions:
+                        continue
+                    ox, oy = positions[other2]
+                    ivx = mx - ox
+                    ivy = my - oy
+                    inorm = math.hypot(ivx, ivy)
+                    if inorm <= 1e-6:
+                        continue
+                    ref_u = (ivx / inorm, ivy / inorm)
+                    break
+                if ref_u is not None:
+                    break
+        if ref_u is None:
             return down_u
         ux, uy = ref_u
         candidates = [(-uy, ux), (ux, uy), (uy, -ux)]  # left, front, right

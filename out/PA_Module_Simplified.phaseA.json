@@ -296,33 +296,21 @@
       "edge_id": "IC1_pin2_seg6",
       "polyline_um": [
         [
-          23600,
-          49200
+          24400,
+          50000
         ],
         [
-          23600,
-          50600
-        ],
-        [
-          26000,
-          53000
-        ],
-        [
-          26800,
-          53000
+          24400,
+          10600
         ],
         [
           35000,
-          61200
-        ],
-        [
-          35000,
-          100000
+          0
         ]
       ],
-      "length_mm": 55.991,
+      "length_mm": 54.391,
       "target_mm": 20.0,
-      "length_err_pct": 179.95499999999998,
+      "length_err_pct": 171.95499999999998,
       "success": true,
       "rip_up_round": 0,
       "failure_reason": null
@@ -539,9 +527,9 @@
       "length_err_pct": null,
       "success": false,
       "rip_up_round": 2,
-      "failure_reason": "no path"
+      "failure_reason": "max_expansions exhausted"
     }
   ],
   "rip_up_rounds": 2,
-  "wall_seconds": 0.7314312860253267
+  "wall_seconds": 1.7097540740214754
 }

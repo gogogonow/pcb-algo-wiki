@@ -23,7 +23,7 @@
     <line class="topology-edge" data-edge-id="IC1_pin2_seg3_to_C6" data-kind="microstrip" x1="450.0" y1="768.0" x2="740.0" y2="296.0" />
     <line class="topology-edge" data-edge-id="IC1_pin2_seg4" data-kind="microstrip" x1="450.0" y1="624.0" x2="140.0" y2="452.0" />
     <line class="topology-edge" data-edge-id="IC1_pin2_seg5" data-kind="microstrip" x1="450.0" y1="840.0" x2="680.0" y2="218.0" />
-    <line class="topology-edge" data-edge-id="IC1_pin2_seg6" data-kind="microstrip" x1="740.0" y1="218.0" x2="562.0" y2="580.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin2_seg6" data-kind="microstrip" x1="740.0" y1="218.0" x2="562.0" y2="80.0" />
     <line class="topology-edge" data-edge-id="PWR_VDD_bus" data-kind="microstrip" x1="282.0" y1="480.0" x2="324.4" y2="358.0" />
     <line class="topology-edge" data-edge-id="R2_to_TP1" data-kind="microstrip" x1="680.0" y1="374.0" x2="142.0" y2="80.0" />
     <line class="topology-edge" data-edge-id="R3_to_combiner" data-kind="microstrip" x1="200.0" y1="452.0" x2="450.0" y2="840.0" />
@@ -51,8 +51,8 @@
       <text class="topology-label" x="590.0" y="114.0" text-anchor="middle">TP4</text>
     </g>
     <g class="topology-component topology-fixed-component" data-component-id="TP5">
-      <rect class="topology-fixed-component-shape" x="562.0" y="562.0" width="56" height="36" rx="6" />
-      <text class="topology-label" x="590.0" y="614.0" text-anchor="middle">TP5</text>
+      <rect class="topology-fixed-component-shape" x="562.0" y="62.0" width="56" height="36" rx="6" />
+      <text class="topology-label" x="590.0" y="114.0" text-anchor="middle">TP5</text>
     </g>
   </g>
   <g id="topology-uv-components" class="topology-uv-components">
@@ -177,8 +177,8 @@
       <text class="topology-label" x="578.0" y="84.0" text-anchor="start">TP4.PIN_1</text>
     </g>
     <g class="topology-terminal" data-terminal-id="TP5.PIN_1">
-      <polygon class="topology-terminal-shape" points="562.0,569.0 573.0,580.0 562.0,591.0 551.0,580.0" />
-      <text class="topology-label" x="578.0" y="584.0" text-anchor="start">TP5.PIN_1</text>
+      <polygon class="topology-terminal-shape" points="562.0,69.0 573.0,80.0 562.0,91.0 551.0,80.0" />
+      <text class="topology-label" x="578.0" y="84.0" text-anchor="start">TP5.PIN_1</text>
     </g>
   </g>
 </svg>

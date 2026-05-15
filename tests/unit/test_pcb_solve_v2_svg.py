@@ -153,6 +153,8 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
         c1r1_pin2["y"] - c1r1_from_seg4["y"],
     )
     assert c1r1_span < 3.0
+    assert abs(c1r1_pin2["x"] - c1r1_from_seg4["x"]) > 1.0
+    assert abs(c1r1_pin2["y"] - c1r1_from_seg4["y"]) < 0.35
     seg5_render = by_edge["IC1_pin1_seg5"]["render_endpoint_positions_mm"]
     seg5_len = math.hypot(
         seg5_render["C2.PIN_1"]["x"] - seg5_render["IC1_pin1_seg5_start_combiner"]["x"],
