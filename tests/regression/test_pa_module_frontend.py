@@ -75,3 +75,9 @@ def test_pa_module_obstacles_include_board_and_fixed_components() -> None:
     assert kinds.count("board_outline") == 1
     # 6 fixed components: IC1 + TP1..TP5
     assert kinds.count("footprint_bbox") == 6
+
+
+def test_pa_module_tp3_is_on_top_border() -> None:
+    artifact = compile_layout(REAL_CASE_PATH)
+    tp3 = artifact.fixed_terminals["TP3.PIN_1"]
+    assert tp3.abs_y == 100.0

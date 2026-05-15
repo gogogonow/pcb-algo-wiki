@@ -27,7 +27,7 @@
     <line class="topology-edge" data-edge-id="R1_to_combiner" data-kind="microstrip" x1="200.0" y1="374.0" x2="450.0" y2="336.0" />
     <line class="topology-edge" data-edge-id="R2_to_TP1" data-kind="microstrip" x1="680.0" y1="374.0" x2="142.0" y2="80.0" />
     <line class="topology-edge" data-edge-id="R3_to_combiner" data-kind="microstrip" x1="200.0" y1="452.0" x2="450.0" y2="624.0" />
-    <line class="topology-edge" data-edge-id="RF_INPUT_to_IC1" data-kind="microstrip" x1="422.0" y1="80.0" x2="324.4" y2="302.0" />
+    <line class="topology-edge" data-edge-id="RF_INPUT_to_IC1" data-kind="microstrip" x1="422.0" y1="580.0" x2="324.4" y2="302.0" />
   </g>
   <g id="topology-fixed-components" class="topology-fixed-components">
     <g class="topology-component topology-fixed-component" data-component-id="IC1">
@@ -43,8 +43,8 @@
       <text class="topology-label" x="310.0" y="514.0" text-anchor="middle">TP2</text>
     </g>
     <g class="topology-component topology-fixed-component" data-component-id="TP3">
-      <rect class="topology-fixed-component-shape" x="422.0" y="62.0" width="56" height="36" rx="6" />
-      <text class="topology-label" x="450.0" y="114.0" text-anchor="middle">TP3</text>
+      <rect class="topology-fixed-component-shape" x="422.0" y="562.0" width="56" height="36" rx="6" />
+      <text class="topology-label" x="450.0" y="614.0" text-anchor="middle">TP3</text>
     </g>
     <g class="topology-component topology-fixed-component" data-component-id="TP4">
       <rect class="topology-fixed-component-shape" x="562.0" y="62.0" width="56" height="36" rx="6" />
@@ -157,8 +157,8 @@
       <text class="topology-label" x="298.0" y="484.0" text-anchor="start">TP2.PIN_1</text>
     </g>
     <g class="topology-terminal" data-terminal-id="TP3.PIN_1">
-      <polygon class="topology-terminal-shape" points="422.0,69.0 433.0,80.0 422.0,91.0 411.0,80.0" />
-      <text class="topology-label" x="438.0" y="84.0" text-anchor="start">TP3.PIN_1</text>
+      <polygon class="topology-terminal-shape" points="422.0,569.0 433.0,580.0 422.0,591.0 411.0,580.0" />
+      <text class="topology-label" x="438.0" y="584.0" text-anchor="start">TP3.PIN_1</text>
     </g>
     <g class="topology-terminal" data-terminal-id="TP4.PIN_1">
       <polygon class="topology-terminal-shape" points="562.0,69.0 573.0,80.0 562.0,91.0 551.0,80.0" />

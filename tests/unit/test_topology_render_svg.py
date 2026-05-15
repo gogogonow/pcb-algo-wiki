@@ -95,7 +95,7 @@ def test_real_case_single_pin_component_terminals_anchor_to_component_pin() -> N
     )
     assert _edge_endpoint_coordinates(root, graph, "RF_INPUT_to_IC1", "TP3.PIN_1") == (
         "422.0",
-        "80.0",
+        "580.0",
     )
     assert _edge_endpoint_coordinates(root, graph, "IC1_pin1_seg6", "TP4.PIN_1") == (
         "562.0",
