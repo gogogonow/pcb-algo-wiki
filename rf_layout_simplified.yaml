@@ -227,7 +227,7 @@ components:
       relative_rotation: null
     pin_nets:
       PIN_1: "RF_NET_2"
-      PIN_2: "RF_NET_4"
+      PIN_2: "GND"
     properties:
       Value: 3.9pF
   R3:
