@@ -1,6 +1,8 @@
 from pathlib import Path
 import json
 
+import pytest
+
 from tools import pcb_solve_v2
 from tools.pcb_solve_v2 import _pin_label_overlay
 
@@ -50,6 +52,8 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     assert "w=3.6mm" in svg
     assert "L=80.0mm" in svg
     assert 'class="prea-virtual-endpoint"' in svg
+    assert "stroke-linecap:butt" in svg
+    assert "stroke-linecap:round" not in svg
 
     pre_a_json = scratch_dir / "PA_Module_Simplified.preA.json"
     payload = json.loads(pre_a_json.read_text(encoding="utf-8"))
@@ -88,3 +92,20 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     ]
     assert pin1_node["y"] < pin1["y"]
     assert pin2_node["y"] < pin2["y"]
+
+    # IC1 PIN_1 seg2 branch should be interpreted relative to seg1 direction.
+    seg2_render = by_edge["IC1_pin1_seg2"]["render_endpoint_positions_mm"]
+    seg2_start = seg2_render["IC1_pin1_seg1_universal_node"]
+    seg2_end = seg2_render["IC1_pin1_seg2_end_split_pad"]
+    # offset_v=edge_left and offset_u=-3.94 on a downward reference edge:
+    # launch point shifts +x (left edge) and +y (back from front edge).
+    assert seg2_start["x"] - pin1_node["x"] == pytest.approx(1.09, abs=0.15)
+    assert seg2_start["y"] - pin1_node["y"] == pytest.approx(3.94, abs=0.2)
+    # angle=90 means seg2 runs to the right from its launch point.
+    assert seg2_end["x"] > seg2_start["x"]
+    assert seg2_end["y"] == pytest.approx(seg2_start["y"], abs=0.2)
+
+    phase_a_svg = scratch_dir / "PA_Module_Simplified.phaseA.svg"
+    phase_a_text = phase_a_svg.read_text(encoding="utf-8")
+    assert 'stroke-linecap="butt"' in phase_a_text
+    assert 'stroke-linecap="round"' not in phase_a_text

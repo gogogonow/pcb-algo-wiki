@@ -98,8 +98,8 @@ def render_geometry_svg(
         pts = " ".join(f"{x(float(p.x)):.2f},{y(float(p.y)):.2f}" for p in route.points)
         parts.append(
             f'<polyline points="{pts}" fill="none" stroke="{stroke}" '
-            f'stroke-width="{width_px:.2f}" stroke-linecap="round" '
-            'stroke-linejoin="round" opacity="0.78"/>'
+            f'stroke-width="{width_px:.2f}" stroke-linecap="butt" '
+            'stroke-linejoin="miter" opacity="0.78"/>'
         )
         # Hollow circle markers at route endpoints.
         for endpoint in (route.points[0], route.points[-1]):

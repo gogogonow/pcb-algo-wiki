@@ -217,7 +217,11 @@ def _render_pre_phase_svg(
     banner: str = "",
     px_per_mm: float = 6.0,
     margin_mm: float = 5.0,
-) -> tuple[dict[str, tuple[float, float]], set[str]]:
+) -> tuple[
+    dict[str, tuple[float, float]],
+    set[str],
+    dict[str, dict[str, tuple[float, float]]],
+]:
     """Render physical Pre-A view in board coordinates.
 
     Shows board outline + fixed points + microstrip connectivity with width/length labels.
@@ -227,7 +231,7 @@ def _render_pre_phase_svg(
     artifact = result.artifact
     board_w = float(artifact.board.get("width", 40.0))
     board_h = float(artifact.board.get("height", 100.0))
-    positions = _solve_pre_a_positions(
+    positions, edge_endpoint_overrides = _solve_pre_a_positions(
         result,
         board_w=board_w,
         board_h=board_h,
@@ -256,7 +260,7 @@ def _render_pre_phase_svg(
         ".prea-fixed-point{fill:#1d4ed8;stroke:#1e3a8a;stroke-width:1;}",
         ".prea-node{fill:#22c55e;stroke:#166534;stroke-width:1;}",
         ".prea-virtual-endpoint{fill:#f59e0b;stroke:#92400e;stroke-width:1;}",
-        ".prea-edge{fill:none;stroke-linecap:round;opacity:0.95;}",
+        ".prea-edge{fill:none;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.95;}",
         ".prea-label{fill:#0f172a;font-family:Arial,sans-serif;font-size:9px;}",
         "</style>",
         f'<rect class="prea-board" x="{_x(0):.2f}" y="{_y(board_h):.2f}" width="{board_w * px_per_mm:.2f}" height="{board_h * px_per_mm:.2f}"/>',
@@ -269,8 +273,9 @@ def _render_pre_phase_svg(
         start_id, end_id = edge.connections
         if start_id not in positions or end_id not in positions:
             continue
-        sx, sy = positions[start_id]
-        ex, ey = positions[end_id]
+        overrides = edge_endpoint_overrides.get(edge_id, {})
+        sx, sy = overrides.get(start_id, positions[start_id])
+        ex, ey = overrides.get(end_id, positions[end_id])
         stroke_width = max(float(edge.width or 0.2) * px_per_mm, 1.2)
         lines.append(
             f'<line class="prea-edge" data-edge-id="{escape(edge_id)}" '
@@ -318,7 +323,7 @@ def _render_pre_phase_svg(
     lines.append("</svg>")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("".join(lines), encoding="utf-8")
-    return positions, virtual_endpoints
+    return positions, virtual_endpoints, edge_endpoint_overrides
 
 
 def _load_junction_templates(
@@ -349,7 +354,7 @@ def _solve_pre_a_positions(
     board_w: float,
     board_h: float,
     junction_templates: dict[str, UniversalJunctionTemplate] | None = None,
-) -> dict[str, tuple[float, float]]:
+) -> tuple[dict[str, tuple[float, float]], dict[str, dict[str, tuple[float, float]]]]:
     """Relax endpoint positions to satisfy target-length proportions before routing."""
     artifact = result.artifact
     plan_xy = dict(result.phase_a.plan.endpoint_xy)
@@ -414,6 +419,7 @@ def _solve_pre_a_positions(
         constrained_endpoints.add(endpoint)
 
     templates = junction_templates or {}
+    edge_endpoint_overrides: dict[str, dict[str, tuple[float, float]]] = {}
     if templates:
         # Apply junction branch geometric rules before any length relaxation.
         for _ in range(3):
@@ -423,14 +429,66 @@ def _solve_pre_a_positions(
                     continue
                 nx, ny = node_xy
                 constrained_endpoints.add(node_id)
+                ref_edge = artifact.edges.get(template.reference_edge)
+                ref_u: tuple[float, float] | None = None
+                if ref_edge is not None and len(ref_edge.connections) == 2:
+                    other_candidates = [
+                        endpoint
+                        for endpoint in ref_edge.connections
+                        if endpoint != node_id and endpoint in positions
+                    ]
+                    if other_candidates:
+                        ox, oy = positions[other_candidates[0]]
+                        vx = nx - ox
+                        vy = ny - oy
+                        norm = math.hypot(vx, vy)
+                        if norm > 1e-6:
+                            ref_u = (vx / norm, vy / norm)
                 for branch in template.branches:
                     target = branch.target_endpoint
                     constrained_endpoints.add(target)
                     if target in fixed:
                         continue
-                    positions[target] = _clamp(
-                        (nx + float(branch.dx), ny + float(branch.dy))
+                    if ref_u is None:
+                        positions[target] = _clamp(
+                            (nx + float(branch.dx), ny + float(branch.dy))
+                        )
+                        continue
+                    ux, uy = ref_u
+                    nx_left, ny_left = -uy, ux
+                    theta = math.radians(float(branch.angle_deg))
+                    bdx = ux * math.cos(theta) - uy * math.sin(theta)
+                    bdy = ux * math.sin(theta) + uy * math.cos(theta)
+                    anchor = _clamp(
+                        (
+                            nx
+                            + float(branch.offset_u) * ux
+                            + float(branch.signed_v) * nx_left,
+                            ny
+                            + float(branch.offset_u) * uy
+                            + float(branch.signed_v) * ny_left,
+                        )
                     )
+                    branch_edge = artifact.edges.get(branch.edge_id)
+                    branch_len = 1.0
+                    if (
+                        branch_edge is not None
+                        and branch_edge.target_length is not None
+                    ):
+                        branch_len = max(float(branch_edge.target_length), 0.1)
+                    target_xy = _clamp(
+                        (
+                            anchor[0] + branch_len * bdx,
+                            anchor[1] + branch_len * bdy,
+                        )
+                    )
+                    positions[target] = target_xy
+                    edge_endpoint_overrides.setdefault(branch.edge_id, {})[
+                        node_id
+                    ] = anchor
+                    edge_endpoint_overrides.setdefault(branch.edge_id, {})[
+                        target
+                    ] = target_xy
 
     for _ in range(180):
         for edge in artifact.edges.values():
@@ -467,7 +525,7 @@ def _solve_pre_a_positions(
             else:
                 positions[a_id] = _clamp((ax + move_a[0], ay + move_a[1]))
                 positions[b_id] = _clamp((bx + move_b[0], by + move_b[1]))
-    return positions
+    return positions, edge_endpoint_overrides
 
 
 def _prea_constraint_provenance(
@@ -510,7 +568,7 @@ def _persist_phase_artefacts(
     # Pre-Phase-A: raw YAML topology connectivity snapshot.
     pre_a_svg = out_dir / f"{project}.preA.svg"
     templates = _load_junction_templates(layout_path=layout_path)
-    pre_positions, virtual_endpoints = _render_pre_phase_svg(
+    pre_positions, virtual_endpoints, pre_edge_overrides = _render_pre_phase_svg(
         result,
         pre_a_svg,
         templates=templates,
@@ -538,6 +596,17 @@ def _persist_phase_artefacts(
                                 "x": pre_positions.get(endpoint, (0.0, 0.0))[0],
                                 "y": pre_positions.get(endpoint, (0.0, 0.0))[1],
                                 "kind": _prea_endpoint_kind(result.artifact, endpoint),
+                            }
+                            for endpoint in edge.connections
+                        },
+                        "render_endpoint_positions_mm": {
+                            endpoint: {
+                                "x": pre_edge_overrides.get(edge.name, {}).get(
+                                    endpoint, pre_positions.get(endpoint, (0.0, 0.0))
+                                )[0],
+                                "y": pre_edge_overrides.get(edge.name, {}).get(
+                                    endpoint, pre_positions.get(endpoint, (0.0, 0.0))
+                                )[1],
                             }
                             for endpoint in edge.connections
                         },
