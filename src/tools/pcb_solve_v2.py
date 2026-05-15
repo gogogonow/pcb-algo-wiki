@@ -109,7 +109,9 @@ def _phase_banner(phase: str, description: str, color: str) -> str:
     )
 
 
-def _uv_highlight_overlay(geom: GeometryIR, uv_names: set[str], px_per_mm: float = 6.0, margin_mm: float = 5.0) -> str:
+def _uv_highlight_overlay(
+    geom: GeometryIR, uv_names: set[str], px_per_mm: float = 6.0, margin_mm: float = 5.0
+) -> str:
     """SVG overlay that redraws UV-placed components in green so they stand out."""
     board_h = float(geom.board.height) + 2 * margin_mm
 
@@ -155,7 +157,9 @@ def _uv_highlight_overlay(geom: GeometryIR, uv_names: set[str], px_per_mm: float
     return "".join(parts)
 
 
-def _render_svg(geom: GeometryIR, path: Path, *, banner: str = "", overlay: str = "") -> None:
+def _render_svg(
+    geom: GeometryIR, path: Path, *, banner: str = "", overlay: str = ""
+) -> None:
     """Write a rendered SVG to *path*, injecting an optional phase banner and overlay."""
     path.parent.mkdir(parents=True, exist_ok=True)
     svg = render_full_layout(geom)

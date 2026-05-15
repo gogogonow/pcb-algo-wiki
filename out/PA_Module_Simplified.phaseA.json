@@ -174,12 +174,32 @@
         ],
         [
           9200,
+          23640
+        ],
+        [
+          -28,
+          23640
+        ],
+        [
+          -28,
+          29040
+        ],
+        [
+          9200,
+          29040
+        ],
+        [
+          9200,
+          47160
+        ],
+        [
+          9200,
           55000
         ]
       ],
-      "length_mm": 61.545,
+      "length_mm": 80.0005742854949,
       "target_mm": 80.0,
-      "length_err_pct": -23.068749999999998,
+      "length_err_pct": 0.0007178568686327935,
       "success": true,
       "rip_up_round": 0,
       "failure_reason": null
@@ -193,12 +213,32 @@
         ],
         [
           15000,
+          75000
+        ],
+        [
+          15250,
+          75000
+        ],
+        [
+          15250,
+          69600
+        ],
+        [
+          15000,
+          69600
+        ],
+        [
+          15000,
+          60000
+        ],
+        [
+          15000,
           55000
         ]
       ],
-      "length_mm": 25.0,
+      "length_mm": 25.5,
       "target_mm": 25.5,
-      "length_err_pct": -1.9607843137254901,
+      "length_err_pct": 0.0,
       "success": true,
       "rip_up_round": 0,
       "failure_reason": null
@@ -257,6 +297,26 @@
           200
         ],
         [
+          6800,
+          200
+        ],
+        [
+          6800,
+          -3659
+        ],
+        [
+          5930,
+          -3659
+        ],
+        [
+          5930,
+          200
+        ],
+        [
+          5600,
+          200
+        ],
+        [
           5200,
           200
         ],
@@ -265,9 +325,9 @@
           0
         ]
       ],
-      "length_mm": 2.283,
+      "length_mm": 10.00084271247462,
       "target_mm": 10.0,
-      "length_err_pct": -77.17,
+      "length_err_pct": 0.008427124746201997,
       "success": true,
       "rip_up_round": 0,
       "failure_reason": null
@@ -480,15 +540,28 @@
     },
     {
       "edge_id": "C1_to_R1",
-      "polyline_um": [],
-      "length_mm": 0.0,
+      "polyline_um": [
+        [
+          23600,
+          49200
+        ],
+        [
+          22000,
+          49200
+        ],
+        [
+          19600,
+          51600
+        ]
+      ],
+      "length_mm": 4.994,
       "target_mm": null,
       "length_err_pct": null,
-      "success": false,
-      "rip_up_round": 2,
-      "failure_reason": "max_expansions exhausted"
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
     }
   ],
-  "rip_up_rounds": 2,
-  "wall_seconds": 2.489840621012263
+  "rip_up_rounds": 4,
+  "wall_seconds": 2.6844853610091377
 }

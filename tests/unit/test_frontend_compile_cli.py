@@ -1,4 +1,5 @@
 import json
+import sys
 from pathlib import Path
 import subprocess
 
@@ -29,7 +30,7 @@ def test_lint_only_skips_writing(scratch_dir: Path, capsys) -> None:
 
 def test_module_invocation_fails_for_missing_input() -> None:
     result = subprocess.run(
-        ["python3", "-m", "tools.frontend_compile", "missing.yaml"],
+        [sys.executable, "-m", "tools.frontend_compile", "missing.yaml"],
         capture_output=True,
         check=False,
         cwd=REPO_ROOT,

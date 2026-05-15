@@ -47,6 +47,9 @@ class SignedVKind(StrEnum):
     EDGE_LEFT = "edge_left"
     EDGE_RIGHT = "edge_right"
     ALIGN_CENTER = "align_center"
+    EDGE_FRONT = (
+        "edge_front"  # front-face connection: v-offset = 0 (same as align_center)
+    )
 
 
 class RotationDomain(StrictFrozenModel):

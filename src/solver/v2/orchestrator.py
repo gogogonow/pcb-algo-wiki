@@ -112,6 +112,12 @@ def solve_layout_v2(
         seed_rotation_deg=plan.uv_rotation_seed,
     )
     phase_b_wall = time.perf_counter() - t1
+    skeleton = _retry_failed_phase_a_routes(
+        artifact=artifact,
+        plan=plan,
+        skeleton=skeleton,
+        options=options,
+    )
 
     # ---- Phase C: A* on flexible_path edges (no-op when none) ------------
     t2 = time.perf_counter()
@@ -217,6 +223,60 @@ def _route_flex_edges(
         return seeded_geom, [], list(flex_edge_ids)
 
     return new_geom, list(report.routed_edges), list(report.failed_edges)
+
+
+def _retry_failed_phase_a_routes(
+    *,
+    artifact: FrontendArtifact,
+    plan: NodePlan,
+    skeleton: SkeletonReport,
+    options: OrchestratorV2Options,
+) -> SkeletonReport:
+    """Retry only failed Phase-A edges with relaxed routing parameters."""
+    failed_edges = [
+        edge_id for edge_id, route in skeleton.routes.items() if not route.success
+    ]
+    if not failed_edges:
+        return skeleton
+
+    base_grid = GridConfig(step_um=options.grid_step_um)
+    retry_grid = GridConfig(
+        step_um=base_grid.step_um * 2,
+        turn_penalty_um=base_grid.turn_penalty_um,
+        near_obstacle_penalty_um=base_grid.near_obstacle_penalty_um,
+        max_expansions=base_grid.max_expansions * 5,
+    )
+    retry_report = route_skeleton(
+        artifact,
+        plan,
+        clearance_mm=max(options.clearance_mm * 0.5, 0.01),
+        grid_config=retry_grid,
+        rip_up_rounds=options.rip_up_rounds,
+    )
+
+    merged_routes = dict(skeleton.routes)
+    merged_endpoints = dict(skeleton.final_endpoint_um)
+    improved = False
+    for edge_id in failed_edges:
+        retried = retry_report.routes.get(edge_id)
+        if retried is None or not retried.success:
+            continue
+        merged_routes[edge_id] = retried
+        edge = artifact.edges.get(edge_id)
+        if edge is not None:
+            for endpoint in edge.connections:
+                endpoint_xy = retry_report.final_endpoint_um.get(endpoint)
+                if endpoint_xy is not None:
+                    merged_endpoints[endpoint] = endpoint_xy
+        improved = True
+
+    if not improved:
+        return skeleton
+    return SkeletonReport(
+        routes=merged_routes,
+        final_endpoint_um=merged_endpoints,
+        rip_up_rounds=max(skeleton.rip_up_rounds, retry_report.rip_up_rounds),
+    )
 
 
 def _with_wall_seconds(geometry: GeometryIR, wall_seconds: float) -> GeometryIR:

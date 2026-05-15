@@ -58,15 +58,36 @@ def _signed_v_kind(raw: object) -> SignedVKind:
             ) from exc
     raise ValueError(
         "universal_junction branches must declare offset_v as a string "
-        "(edge_left | edge_right | align_center)"
+        "(edge_left | edge_right | align_center | edge_front)"
     )
 
 
 def _signed_v_value(kind: SignedVKind, width: float, clearance: float) -> float:
-    if kind is SignedVKind.ALIGN_CENTER:
+    if kind in (SignedVKind.ALIGN_CENTER, SignedVKind.EDGE_FRONT):
         return 0.0
     side = width / 2.0 + clearance
     return side if kind is SignedVKind.EDGE_LEFT else -side
+
+
+def _resolve_offset_u(raw: object) -> float:
+    """Resolve the ``offset_u`` field of a branch origin.
+
+    Accepts numeric values, ``None``, and the symbolic keywords
+    ``align_center`` / ``align_left`` / ``align_right`` which all map to
+    ``0.0`` (no longitudinal offset from the junction center).
+    """
+    if raw is None:
+        return 0.0
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if isinstance(raw, str):
+        if raw.strip().lower() in ("align_center", "align_left", "align_right"):
+            return 0.0
+        try:
+            return float(raw)
+        except ValueError:
+            return 0.0
+    return 0.0
 
 
 def _resolve_clearance(layout: V33Layout) -> float:
@@ -128,7 +149,7 @@ def _expand_branches(
             raise ValueError(f"node {node_id!r} branch[{index}] missing angle")
         if branch.origin is None:
             raise ValueError(f"node {node_id!r} branch[{index}] missing origin")
-        offset_u = float(branch.origin.offset_u or 0.0)
+        offset_u = _resolve_offset_u(branch.origin.offset_u)
         kind = _signed_v_kind(branch.origin.offset_v)
         width = _branch_edge_width(edge, layout)
         signed_v = _signed_v_value(kind, width, clearance)
