@@ -57,6 +57,10 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     assert "<title>C1.PIN_1</title>" in svg
     assert "stroke-linecap:butt" in svg
     assert "stroke-linecap:round" not in svg
+    assert (
+        ".prea-label{fill:#0f172a;font-family:Arial,sans-serif;font-size:8px;}" in svg
+    )
+    assert ">GND<" in svg
 
     pre_a_json = scratch_dir / "PA_Module_Simplified.preA.json"
     payload = json.loads(pre_a_json.read_text(encoding="utf-8"))

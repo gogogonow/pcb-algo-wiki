@@ -274,7 +274,8 @@ def _render_pre_phase_svg(
         ".prea-assist-link{stroke:#475569;stroke-width:0.7;stroke-dasharray:2 2;opacity:0.95;}",
         ".prea-edge-bridge{stroke:#64748b;stroke-width:0.9;stroke-dasharray:2 2;opacity:0.9;}",
         ".prea-edge{fill:none;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.95;}",
-        ".prea-label{fill:#0f172a;font-family:Arial,sans-serif;font-size:9px;}",
+        ".prea-label{fill:#0f172a;font-family:Arial,sans-serif;font-size:8px;}",
+        ".prea-net-label{fill:#7c2d12;font-family:Arial,sans-serif;font-size:7px;font-weight:bold;}",
         "</style>",
         f'<rect class="prea-board" x="{_x(0):.2f}" y="{_y(board_h):.2f}" width="{board_w * px_per_mm:.2f}" height="{board_h * px_per_mm:.2f}"/>',
     ]
@@ -403,6 +404,11 @@ def _render_pre_phase_svg(
             footprint = layout.footprints.get(component.footprint_ref)
             if footprint is None or not footprint.pins:
                 continue
+            gnd_pins = [
+                pin_name
+                for pin_name, net_name in component.pin_nets.items()
+                if net_name.strip().upper() == "GND"
+            ]
             pin_world: dict[str, tuple[float, float]] = {}
             for pin_name in footprint.pins:
                 endpoint = f"{comp_id}.{pin_name}"
@@ -470,6 +476,23 @@ def _render_pre_phase_svg(
                 lines.append(
                     f'<path class="prea-rlc-bbox" d="M {" L ".join(pts)} Z"><title>{escape(comp_id)}</title></path>'
                 )
+                if gnd_pins:
+                    gnd_anchor = next(
+                        (
+                            pin_world[pin_name]
+                            for pin_name in gnd_pins
+                            if pin_name in pin_world
+                        ),
+                        None,
+                    )
+                    if gnd_anchor is None:
+                        cx = sum(px for px, _ in corners) / len(corners)
+                        cy = sum(py for _, py in corners) / len(corners)
+                        gnd_anchor = (cx, cy)
+                    gx, gy = gnd_anchor
+                    lines.append(
+                        f'<text class="prea-net-label" x="{_x(gx)+4:.2f}" y="{_y(gy)+8:.2f}">GND</text>'
+                    )
             for pin_name, pin in footprint.pins.items():
                 geom_pad = pin.pad_geometry
                 if (
