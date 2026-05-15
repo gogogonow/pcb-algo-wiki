@@ -8,7 +8,19 @@
         "IC1_pin1_seg1_universal_node"
       ],
       "width": 3.6,
-      "target_length": 5.75
+      "target_length": 5.75,
+      "endpoint_positions_mm": {
+        "IC1.PIN_1": {
+          "x": 14.98,
+          "y": 45.0,
+          "kind": "fixed_pin"
+        },
+        "IC1_pin1_seg1_universal_node": {
+          "x": 20.331411436305377,
+          "y": 47.103543591033954,
+          "kind": "node"
+        }
+      }
     },
     {
       "edge_id": "IC1_pin1_seg2",
@@ -18,7 +30,19 @@
         "IC1_pin1_seg2_end_split_pad"
       ],
       "width": 1.88,
-      "target_length": 1.29
+      "target_length": 1.29,
+      "endpoint_positions_mm": {
+        "IC1_pin1_seg1_universal_node": {
+          "x": 20.331411436305377,
+          "y": 47.103543591033954,
+          "kind": "node"
+        },
+        "IC1_pin1_seg2_end_split_pad": {
+          "x": 19.256826225523625,
+          "y": 46.389844337307885,
+          "kind": "node"
+        }
+      }
     },
     {
       "edge_id": "IC1_pin1_seg2_to_R2",
@@ -28,7 +52,19 @@
         "R2.PIN_2"
       ],
       "width": null,
-      "target_length": null
+      "target_length": null,
+      "endpoint_positions_mm": {
+        "IC1_pin1_seg2_end_split_pad": {
+          "x": 19.256826225523625,
+          "y": 46.389844337307885,
+          "kind": "node"
+        },
+        "R2.PIN_2": {
+          "x": 9.4,
+          "y": 1.0,
+          "kind": "virtual_rlc_pin"
+        }
+      }
     },
     {
       "edge_id": "IC1_pin1_seg3",
@@ -38,7 +74,19 @@
         "IC1_pin1_seg3_end_split_pad"
       ],
       "width": 1.27,
-      "target_length": 1.47
+      "target_length": 1.47,
+      "endpoint_positions_mm": {
+        "IC1_pin1_seg1_universal_node": {
+          "x": 20.331411436305377,
+          "y": 47.103543591033954,
+          "kind": "node"
+        },
+        "IC1_pin1_seg3_end_split_pad": {
+          "x": 18.863968519074028,
+          "y": 47.19021125898196,
+          "kind": "node"
+        }
+      }
     },
     {
       "edge_id": "IC1_pin1_seg3_to_C5",
@@ -48,7 +96,19 @@
         "C5.PIN_1"
       ],
       "width": null,
-      "target_length": null
+      "target_length": null,
+      "endpoint_positions_mm": {
+        "IC1_pin1_seg3_end_split_pad": {
+          "x": 18.863968519074028,
+          "y": 47.19021125898196,
+          "kind": "node"
+        },
+        "C5.PIN_1": {
+          "x": 18.5,
+          "y": 47.401923788646684,
+          "kind": "virtual_rlc_pin"
+        }
+      }
     },
     {
       "edge_id": "IC1_pin1_seg4",
@@ -58,7 +118,19 @@
         "C1.PIN_1"
       ],
       "width": 1.6,
-      "target_length": 4.67
+      "target_length": 4.67,
+      "endpoint_positions_mm": {
+        "IC1_pin1_seg1_universal_node": {
+          "x": 20.331411436305377,
+          "y": 47.103543591033954,
+          "kind": "node"
+        },
+        "C1.PIN_1": {
+          "x": 23.52258386069626,
+          "y": 50.51313573054379,
+          "kind": "virtual_rlc_pin"
+        }
+      }
     },
     {
       "edge_id": "C1_to_R1",
@@ -68,7 +140,19 @@
         "R1.PIN_1"
       ],
       "width": null,
-      "target_length": null
+      "target_length": null,
+      "endpoint_positions_mm": {
+        "C1.PIN_2": {
+          "x": 24.4,
+          "y": 50.0,
+          "kind": "virtual_rlc_pin"
+        },
+        "R1.PIN_1": {
+          "x": 18.5,
+          "y": 52.598076211353316,
+          "kind": "virtual_rlc_pin"
+        }
+      }
     },
     {
       "edge_id": "R1_to_combiner",
@@ -78,7 +162,19 @@
         "IC1_pin1_seg5_start_combiner"
       ],
       "width": null,
-      "target_length": null
+      "target_length": null,
+      "endpoint_positions_mm": {
+        "R1.PIN_2": {
+          "x": 19.9,
+          "y": 52.598076211353316,
+          "kind": "virtual_rlc_pin"
+        },
+        "IC1_pin1_seg5_start_combiner": {
+          "x": 20.416235410603882,
+          "y": 52.16542494046681,
+          "kind": "node"
+        }
+      }
     },
     {
       "edge_id": "IC1_pin1_seg5",
@@ -88,7 +184,19 @@
         "C2.PIN_1"
       ],
       "width": 1.1,
-      "target_length": 4.72
+      "target_length": 4.72,
+      "endpoint_positions_mm": {
+        "IC1_pin1_seg5_start_combiner": {
+          "x": 20.416235410603882,
+          "y": 52.16542494046681,
+          "kind": "node"
+        },
+        "C2.PIN_1": {
+          "x": 24.033764589396117,
+          "y": 49.133613165209844,
+          "kind": "virtual_rlc_pin"
+        }
+      }
     },
     {
       "edge_id": "IC1_pin1_seg6",
@@ -98,7 +206,19 @@
         "TP4.PIN_1"
       ],
       "width": 1.1,
-      "target_length": 20.0
+      "target_length": 20.0,
+      "endpoint_positions_mm": {
+        "C2.PIN_2": {
+          "x": 30.852185282274288,
+          "y": 19.565163762857136,
+          "kind": "virtual_rlc_pin"
+        },
+        "TP4.PIN_1": {
+          "x": 35.0,
+          "y": 0.0,
+          "kind": "fixed_pin"
+        }
+      }
     },
     {
       "edge_id": "R2_to_TP1",
@@ -108,7 +228,19 @@
         "TP1.PIN_1"
       ],
       "width": 0.58,
-      "target_length": 10.0
+      "target_length": 10.0,
+      "endpoint_positions_mm": {
+        "R2.PIN_1": {
+          "x": 14.486832980505138,
+          "y": 3.162277660168379,
+          "kind": "virtual_rlc_pin"
+        },
+        "TP1.PIN_1": {
+          "x": 5.0,
+          "y": 0.0,
+          "kind": "fixed_pin"
+        }
+      }
     },
     {
       "edge_id": "IC1_pin2_seg1",
@@ -118,7 +250,19 @@
         "IC1_pin2_seg1_universal_node"
       ],
       "width": 3.9,
-      "target_length": 5.75
+      "target_length": 5.75,
+      "endpoint_positions_mm": {
+        "IC1.PIN_2": {
+          "x": 9.219999999999999,
+          "y": 45.0,
+          "kind": "fixed_pin"
+        },
+        "IC1_pin2_seg1_universal_node": {
+          "x": 14.162500279998538,
+          "y": 47.93839939120168,
+          "kind": "node"
+        }
+      }
     },
     {
       "edge_id": "IC1_pin2_seg2",
@@ -128,7 +272,19 @@
         "IC1_pin2_seg2_end_split_pad"
       ],
       "width": 1.88,
-      "target_length": 1.29
+      "target_length": 1.29,
+      "endpoint_positions_mm": {
+        "IC1_pin2_seg1_universal_node": {
+          "x": 14.162500279998538,
+          "y": 47.93839939120168,
+          "kind": "node"
+        },
+        "IC1_pin2_seg2_end_split_pad": {
+          "x": 15.33413466272817,
+          "y": 48.47818904764736,
+          "kind": "node"
+        }
+      }
     },
     {
       "edge_id": "IC1_pin2_seg2_to_C3",
@@ -138,7 +294,19 @@
         "C3.PIN_1"
       ],
       "width": null,
-      "target_length": null
+      "target_length": null,
+      "endpoint_positions_mm": {
+        "IC1_pin2_seg2_end_split_pad": {
+          "x": 15.33413466272817,
+          "y": 48.47818904764736,
+          "kind": "node"
+        },
+        "C3.PIN_1": {
+          "x": 23.0,
+          "y": 50.0,
+          "kind": "virtual_rlc_pin"
+        }
+      }
     },
     {
       "edge_id": "IC1_pin2_seg3",
@@ -148,7 +316,19 @@
         "IC1_pin2_seg3_end_split_pad"
       ],
       "width": 1.27,
-      "target_length": 1.47
+      "target_length": 1.47,
+      "endpoint_positions_mm": {
+        "IC1_pin2_seg1_universal_node": {
+          "x": 14.162500279998538,
+          "y": 47.93839939120168,
+          "kind": "node"
+        },
+        "IC1_pin2_seg3_end_split_pad": {
+          "x": 15.623590757764845,
+          "y": 48.09999956379015,
+          "kind": "node"
+        }
+      }
     },
     {
       "edge_id": "IC1_pin2_seg3_to_C6",
@@ -158,7 +338,19 @@
         "C6.PIN_2"
       ],
       "width": null,
-      "target_length": null
+      "target_length": null,
+      "endpoint_positions_mm": {
+        "IC1_pin2_seg3_end_split_pad": {
+          "x": 15.623590757764845,
+          "y": 48.09999956379015,
+          "kind": "node"
+        },
+        "C6.PIN_2": {
+          "x": 18.5,
+          "y": 47.401923788646684,
+          "kind": "virtual_rlc_pin"
+        }
+      }
     },
     {
       "edge_id": "IC1_pin2_seg4",
@@ -168,7 +360,19 @@
         "R3.PIN_1"
       ],
       "width": 1.6,
-      "target_length": 4.67
+      "target_length": 4.67,
+      "endpoint_positions_mm": {
+        "IC1_pin2_seg1_universal_node": {
+          "x": 14.162500279998538,
+          "y": 47.93839939120168,
+          "kind": "node"
+        },
+        "R3.PIN_1": {
+          "x": 17.383453524575206,
+          "y": 51.31987247201292,
+          "kind": "virtual_rlc_pin"
+        }
+      }
     },
     {
       "edge_id": "R3_to_combiner",
@@ -178,7 +382,19 @@
         "IC1_pin2_seg5_start_combiner"
       ],
       "width": null,
-      "target_length": null
+      "target_length": null,
+      "endpoint_positions_mm": {
+        "R3.PIN_2": {
+          "x": 19.9,
+          "y": 52.598076211353316,
+          "kind": "virtual_rlc_pin"
+        },
+        "IC1_pin2_seg5_start_combiner": {
+          "x": 20.450724565910164,
+          "y": 52.136519955321354,
+          "kind": "node"
+        }
+      }
     },
     {
       "edge_id": "IC1_pin2_seg5",
@@ -188,7 +404,19 @@
         "C4.PIN_1"
       ],
       "width": 1.1,
-      "target_length": 4.63
+      "target_length": 4.63,
+      "endpoint_positions_mm": {
+        "IC1_pin2_seg5_start_combiner": {
+          "x": 20.450724565910164,
+          "y": 52.136519955321354,
+          "kind": "node"
+        },
+        "C4.PIN_1": {
+          "x": 23.999275434089835,
+          "y": 49.162518150355304,
+          "kind": "virtual_rlc_pin"
+        }
+      }
     },
     {
       "edge_id": "IC1_pin2_seg6",
@@ -198,7 +426,19 @@
         "TP5.PIN_1"
       ],
       "width": 1.1,
-      "target_length": 20.0
+      "target_length": 20.0,
+      "endpoint_positions_mm": {
+        "C4.PIN_2": {
+          "x": 30.852185282274288,
+          "y": 80.43483623714286,
+          "kind": "virtual_rlc_pin"
+        },
+        "TP5.PIN_1": {
+          "x": 35.0,
+          "y": 100.0,
+          "kind": "fixed_pin"
+        }
+      }
     },
     {
       "edge_id": "RF_INPUT_to_IC1",
@@ -208,7 +448,19 @@
         "IC1.PIN_3"
       ],
       "width": 3.6,
-      "target_length": 80.0
+      "target_length": 80.0,
+      "endpoint_positions_mm": {
+        "TP3.PIN_1": {
+          "x": 25.0,
+          "y": 100.0,
+          "kind": "fixed_pin"
+        },
+        "IC1.PIN_3": {
+          "x": 9.219999999999999,
+          "y": 55.0,
+          "kind": "fixed_pin"
+        }
+      }
     },
     {
       "edge_id": "PWR_VDD_bus",
@@ -218,7 +470,36 @@
         "IC1.PIN_4"
       ],
       "width": 3.6,
-      "target_length": 25.5
+      "target_length": 25.5,
+      "endpoint_positions_mm": {
+        "TP2.PIN_1": {
+          "x": 15.0,
+          "y": 80.0,
+          "kind": "fixed_pin"
+        },
+        "IC1.PIN_4": {
+          "x": 14.98,
+          "y": 55.0,
+          "kind": "fixed_pin"
+        }
+      }
     }
+  ],
+  "virtual_endpoints": [
+    "C1.PIN_1",
+    "C1.PIN_2",
+    "C2.PIN_1",
+    "C2.PIN_2",
+    "C3.PIN_1",
+    "C4.PIN_1",
+    "C4.PIN_2",
+    "C5.PIN_1",
+    "C6.PIN_2",
+    "R1.PIN_1",
+    "R1.PIN_2",
+    "R2.PIN_1",
+    "R2.PIN_2",
+    "R3.PIN_1",
+    "R3.PIN_2"
   ]
 }

@@ -43,4 +43,9 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
 
     assert exit_code == 0
     assert pre_a_svg.exists()
-    assert 'class="topology-edge"' in pre_a_svg.read_text(encoding="utf-8")
+    svg = pre_a_svg.read_text(encoding="utf-8")
+    assert 'class="prea-edge"' in svg
+    assert "RF_INPUT_to_IC1" in svg
+    assert "w=3.6mm" in svg
+    assert "L=80.0mm" in svg
+    assert 'class="prea-virtual-endpoint"' in svg
