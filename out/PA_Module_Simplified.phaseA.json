@@ -1,0 +1,425 @@
+{
+  "routes": [
+    {
+      "edge_id": "IC1_pin2_seg1",
+      "polyline_um": [
+        [
+          9200,
+          30000
+        ],
+        [
+          9200,
+          24200
+        ]
+      ],
+      "length_mm": 5.8,
+      "target_mm": 5.75,
+      "length_err_pct": 0.8695652173913012,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "IC1_pin1_seg1",
+      "polyline_um": [
+        [
+          15000,
+          30000
+        ],
+        [
+          15000,
+          24200
+        ]
+      ],
+      "length_mm": 5.8,
+      "target_mm": 5.75,
+      "length_err_pct": 0.8695652173913012,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "IC1_pin1_seg4",
+      "polyline_um": [
+        [
+          16000,
+          24200
+        ],
+        [
+          16000,
+          19600
+        ]
+      ],
+      "length_mm": 4.6,
+      "target_mm": 4.67,
+      "length_err_pct": -1.498929336188443,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "IC1_pin2_seg4",
+      "polyline_um": [
+        [
+          9200,
+          24200
+        ],
+        [
+          9200,
+          19600
+        ]
+      ],
+      "length_mm": 4.6,
+      "target_mm": 4.67,
+      "length_err_pct": -1.498929336188443,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "IC1_pin1_seg2",
+      "polyline_um": [
+        [
+          16800,
+          27800
+        ],
+        [
+          18000,
+          27800
+        ]
+      ],
+      "length_mm": 1.2,
+      "target_mm": 1.29,
+      "length_err_pct": -6.976744186046517,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "IC1_pin2_seg2",
+      "polyline_um": [
+        [
+          7200,
+          27800
+        ],
+        [
+          6000,
+          27800
+        ]
+      ],
+      "length_mm": 1.2,
+      "target_mm": 1.29,
+      "length_err_pct": -6.976744186046517,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "IC1_pin1_seg5",
+      "polyline_um": [
+        [
+          17400,
+          19600
+        ],
+        [
+          20600,
+          16400
+        ],
+        [
+          20600,
+          16000
+        ]
+      ],
+      "length_mm": 4.9254833995939045,
+      "target_mm": 4.72,
+      "length_err_pct": 4.353461855803066,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "IC1_pin2_seg5",
+      "polyline_um": [
+        [
+          10600,
+          19600
+        ],
+        [
+          13800,
+          16400
+        ],
+        [
+          13800,
+          16200
+        ]
+      ],
+      "length_mm": 4.725483399593904,
+      "target_mm": 4.63,
+      "length_err_pct": 2.062276449112406,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "IC1_pin1_seg3",
+      "polyline_um": [
+        [
+          16800,
+          25800
+        ],
+        [
+          18200,
+          25800
+        ]
+      ],
+      "length_mm": 1.4,
+      "target_mm": 1.47,
+      "length_err_pct": -4.761904761904766,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "IC1_pin2_seg3",
+      "polyline_um": [
+        [
+          7200,
+          25800
+        ],
+        [
+          5800,
+          25800
+        ]
+      ],
+      "length_mm": 1.4,
+      "target_mm": 1.47,
+      "length_err_pct": -4.761904761904766,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "RF_INPUT_to_IC1",
+      "polyline_um": [
+        [
+          25000,
+          85000
+        ],
+        [
+          25000,
+          77800
+        ],
+        [
+          9200,
+          62000
+        ],
+        [
+          9200,
+          40000
+        ]
+      ],
+      "length_mm": 51.5445742854949,
+      "target_mm": 80.0,
+      "length_err_pct": -35.56928214313137,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "PWR_VDD_bus",
+      "polyline_um": [
+        [
+          16600,
+          63600
+        ],
+        [
+          16600,
+          48800
+        ],
+        [
+          15000,
+          47200
+        ],
+        [
+          15000,
+          40000
+        ]
+      ],
+      "length_mm": 24.26274169979695,
+      "target_mm": 25.5,
+      "length_err_pct": -4.851993334129603,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "IC1_pin1_seg6",
+      "polyline_um": [
+        [
+          20600,
+          14800
+        ],
+        [
+          33200,
+          2200
+        ],
+        [
+          34100,
+          2200
+        ],
+        [
+          35000,
+          1300
+        ],
+        [
+          35000,
+          0
+        ]
+      ],
+      "length_mm": 21.291883092036784,
+      "target_mm": 20.0,
+      "length_err_pct": 6.459415460183919,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "IC1_pin2_seg6",
+      "polyline_um": [
+        [
+          13800,
+          14800
+        ],
+        [
+          26400,
+          2200
+        ],
+        [
+          27200,
+          2200
+        ],
+        [
+          28000,
+          1400
+        ],
+        [
+          28000,
+          0
+        ]
+      ],
+      "length_mm": 21.15046173579947,
+      "target_mm": 20.0,
+      "length_err_pct": 5.752308678997355,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "IC1_pin1_seg2_to_C7",
+      "polyline_um": [
+        [
+          18000,
+          27800
+        ]
+      ],
+      "length_mm": 0.0,
+      "target_mm": null,
+      "length_err_pct": null,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "IC1_pin1_seg3_to_C5",
+      "polyline_um": [
+        [
+          18200,
+          25800
+        ]
+      ],
+      "length_mm": 0.0,
+      "target_mm": null,
+      "length_err_pct": null,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "IC1_pin1_seg4_to_C1R1",
+      "polyline_um": [
+        [
+          16000,
+          19600
+        ]
+      ],
+      "length_mm": 0.0,
+      "target_mm": null,
+      "length_err_pct": null,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "C1R1_to_combiner",
+      "polyline_um": [
+        [
+          17400,
+          19600
+        ]
+      ],
+      "length_mm": 0.0,
+      "target_mm": null,
+      "length_err_pct": null,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "IC1_pin2_seg2_to_C3",
+      "polyline_um": [
+        [
+          6000,
+          27800
+        ]
+      ],
+      "length_mm": 0.0,
+      "target_mm": null,
+      "length_err_pct": null,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "IC1_pin2_seg3_to_C6",
+      "polyline_um": [
+        [
+          5800,
+          25800
+        ]
+      ],
+      "length_mm": 0.0,
+      "target_mm": null,
+      "length_err_pct": null,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "R3_to_combiner",
+      "polyline_um": [
+        [
+          10600,
+          19600
+        ]
+      ],
+      "length_mm": 0.0,
+      "target_mm": null,
+      "length_err_pct": null,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    }
+  ],
+  "rip_up_rounds": 0,
+  "wall_seconds": 0.28115077200345695
+}
