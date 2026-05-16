@@ -274,6 +274,21 @@ components:
       PIN_1: "GND"
       PIN_2: "RF_NET_2"
     properties: {}
+  C7:
+    footprint_ref: "PKG_CAP"
+    placement:
+      type: parametric_uv
+      anchor_pin: PIN_1
+      reference_net: "RF_NET_1"
+      origin:
+        offset_u: null
+        offset_v: auto
+      relative_rotation: null
+    pin_nets:
+      PIN_1: "RF_NET_1"
+      PIN_2: "GND"
+    properties:
+      Value: 3.9pF
   TP2:
     footprint_ref: "PKG_TEST_POINT"
     placement:
@@ -323,6 +338,11 @@ nodes:    #承载微带线连接点信息
     connection_rules:    #连接规则，承载微带线或附带RLC间连接位置详情
       reference_edge: IC1_pin1_seg1    #连接点参考的微带线名称
       branches:
+      - edge: IC1_pin1_seg2
+        angle: 90    #+90表示IC1_pin1_seg2相对IC1_pin1_seg1向左转90度（pin1在IC右侧，向外即东向）
+        origin:
+          offset_u: -3.61
+          offset_v: edge_left    #pin1侧出线锚定左边沿（与pin2 edge_right镜像）
       - edge: IC1_pin1_seg3
         angle: 90
         origin:
@@ -333,6 +353,9 @@ nodes:    #承载微带线连接点信息
         origin:
           offset_u: align_left    #align_left表示IC1_pin1_seg4与IC1_pin1_seg1左边对齐
           offset_v: edge_front    #edge_front表示IC1_pin1_seg4与IC1_pin1_seg1前向边相连
+  IC1_pin1_seg2_end_split_pad:
+    type: t_junction
+    description: 微带线末端一分二焊盘
   IC1_pin1_seg4_end_split_pad:
     type: t_junction
     description: 微带线末端一分二焊盘
@@ -404,6 +427,27 @@ edges:
     geometry:
       bend_style: mitered_45    #微带线可45度切角绕线
       launch_rule: normal
+  IC1_pin1_seg2:
+    type: microstrip
+    net: RF_NET_1
+    routing_class: rf_constrained
+    connections:
+    - IC1_pin1_seg1_universal_node
+    - IC1_pin1_seg2_end_split_pad
+    constraint:
+      width: 1.88
+      target_length: 1.29
+    geometry:
+      bend_style: mitered_45
+  IC1_pin1_seg2_to_C7:
+    type: microstrip
+    net: RF_NET_1
+    routing_class: rf_constrained
+    connections:
+    - IC1_pin1_seg2_end_split_pad
+    - C7.PIN_1
+    geometry:
+      bend_style: mitered_45
   IC1_pin1_seg3:
     type: microstrip
     net: RF_NET_1

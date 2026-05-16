@@ -14,8 +14,8 @@ def test_pa_module_solver_ir_full_unique() -> None:
     ir = compile_solver_ir(YAML_PATH)
     assert ir.project == "PA_Module_Simplified"
     summary = host_match_summary(ir)
-    # R2 removed; was 7 unique, now 6
-    assert summary["unique"] == 6
+    # R2 removed; pin1_seg2+C7 added → 7 unique
+    assert summary["unique"] == 7
     assert summary["ambiguous"] == 0
     assert summary["missing"] == 2
 
@@ -35,8 +35,8 @@ def test_pa_module_universal_junctions() -> None:
         "IC1_pin2_seg1_universal_node",
     }
     total_branches = sum(len(t.branches) for t in ir.junction_templates.values())
-    # IC1_pin1_seg2 branch removed; pin1 node now has 2 branches, pin2 node has 3
-    assert total_branches == 5
+    # pin1 node has 3 branches (seg2, seg3, seg4); pin2 node has 3 (seg2, seg3, seg4)
+    assert total_branches == 6
 
     # Sanity-check axis-aligned trig: angle=0/90/-90 produce exact integer cos/sin.
     for tpl in ir.junction_templates.values():

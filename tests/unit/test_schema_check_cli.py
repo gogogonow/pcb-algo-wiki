@@ -15,11 +15,11 @@ def test_main_reports_real_case_counts(capsys) -> None:
 
     captured = capsys.readouterr()
     assert "PA_Module_Simplified" in captured.out
-    assert "components: 13" in captured.out
+    assert "components: 14" in captured.out
     assert "footprints: 5" in captured.out
-    assert "nodes: 7" in captured.out
+    assert "nodes: 8" in captured.out
     assert "terminals: 9" in captured.out
-    assert "edges: 19" in captured.out
+    assert "edges: 21" in captured.out
 
 
 def test_module_invocation_reports_real_case_counts() -> None:
@@ -35,11 +35,11 @@ def test_module_invocation_reports_real_case_counts() -> None:
     assert result.stderr == ""
     assert result.stdout == (
         "project: PA_Module_Simplified\n"
-        "components: 13\n"
+        "components: 14\n"
         "footprints: 5\n"
-        "nodes: 7\n"
+        "nodes: 8\n"
         "terminals: 9\n"
-        "edges: 19\n"
+        "edges: 21\n"
     )
 
 

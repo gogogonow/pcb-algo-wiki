@@ -218,6 +218,35 @@ def _phase_a_diag_overlay(
     parts: list[str] = []
     routes = result.phase_a.skeleton.routes
 
+    # Node-id labels (preA-style): place a small label near every endpoint
+    # used by a successful route so the user can correlate route ids with
+    # node ids. Deduplicate by world position to avoid stacking when
+    # several edges share a junction.
+    ep_xy_map = result.phase_a.plan.endpoint_xy
+    drawn_node_positions: set[tuple[float, float]] = set()
+    for edge_id, route in routes.items():
+        if not route.success:
+            continue
+        edge = result.artifact.edges.get(edge_id)
+        if edge is None:
+            continue
+        for node_id in edge.connections:
+            xy = ep_xy_map.get(node_id)
+            if xy is None:
+                continue
+            key = (round(xy[0], 2), round(xy[1], 2))
+            if key in drawn_node_positions:
+                continue
+            drawn_node_positions.add(key)
+            label = node_id.split(".")[0] if "." in node_id else node_id
+            parts.append(
+                f'<text x="{_x(xy[0]):.2f}" y="{_y(xy[1]) - 4:.2f}" '
+                f'font-family="sans-serif" font-size="4.5" fill="#7c3aed" '
+                'text-anchor="middle" stroke="#ffffff" stroke-width="0.5" '
+                'paint-order="stroke">'
+                f"{escape(label)}</text>"
+            )
+
     # preA-style: visible label is just the short edge id; detailed
     # width/length/err information is exposed via <title> tooltips on
     # transparent overlay lines that lie on the route midpoint.

@@ -39,7 +39,7 @@ def test_solver_ir_cli_writes_json(tmp_path: Path) -> None:
     assert data["project"] == "PA_Module_Simplified"
     assert "uv_resolutions" in data
     assert "junction_templates" in data
-    assert len(data["uv_resolutions"]) == 8
+    assert len(data["uv_resolutions"]) == 9
     assert len(data["junction_templates"]) == 2
 
 
@@ -49,4 +49,4 @@ def test_solver_ir_cli_summary_only(tmp_path: Path) -> None:
         "--summary-only",
     )
     assert proc.returncode == 0, proc.stderr
-    assert "unique=6" in proc.stdout
+    assert "unique=7" in proc.stdout

@@ -11,10 +11,10 @@ def test_real_case_extracts_expected_entity_counts() -> None:
     graph = load_topology_graph(REAL_CASE_PATH)
 
     assert len(graph.fixed_components) == 5
-    assert len(graph.parametric_uv_components) == 8
-    assert len(graph.nodes) == 10
+    assert len(graph.parametric_uv_components) == 9
+    assert len(graph.nodes) == 11
     assert len(graph.terminals) == 9
-    assert len(graph.edges) == 19
+    assert len(graph.edges) == 21
 
 
 def test_real_case_preserves_named_entities_and_classification() -> None:
@@ -35,6 +35,7 @@ def test_real_case_preserves_t_junction_classification() -> None:
     graph = load_topology_graph(REAL_CASE_PATH)
 
     assert {node.id for node in graph.nodes if node.kind == "t_junction"} == {
+        "IC1_pin1_seg2_end_split_pad",
         "IC1_pin1_seg3_end_split_pad",
         "IC1_pin1_seg4_end_split_pad",
         "IC1_pin2_seg2_end_split_pad",

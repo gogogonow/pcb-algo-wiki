@@ -34,7 +34,7 @@ def test_pa_module_fixed_pads_count() -> None:
 
 def test_pa_module_uv_components_count() -> None:
     artifact = compile_layout(REAL_CASE_PATH)
-    # C1..C6 + R1, R3 = 8 UV components (R2 removed)
+    # C1..C7 + R1, R3 = 9 UV components (R2 removed; C7 added with pin1_seg2)
     assert set(artifact.uv_components) == {
         "C1",
         "C2",
@@ -42,6 +42,7 @@ def test_pa_module_uv_components_count() -> None:
         "C4",
         "C5",
         "C6",
+        "C7",
         "R1",
         "R3",
     }
@@ -50,20 +51,23 @@ def test_pa_module_uv_components_count() -> None:
 def test_pa_module_edge_routing_class_histogram() -> None:
     artifact = compile_layout(REAL_CASE_PATH)
     hist = artifact.edges_by_class()
-    # Removed IC1_pin1_seg2 (locked) + IC1_pin1_seg2_to_R2 (free) + R2_to_TP1 (locked)
-    # = 13 locked, 6 free, total 19
-    assert hist.get("rf_constrained_locked") == 13
-    assert hist.get("rf_constrained_free") == 6
+    # Added IC1_pin1_seg2 (locked) + IC1_pin1_seg2_to_C7 (free)
+    # = 14 locked, 7 free, total 21
+    assert hist.get("rf_constrained_locked") == 14
+    assert hist.get("rf_constrained_free") == 7
     assert hist.get("flexible_path", 0) == 0
-    assert sum(hist.values()) == 19
+    assert sum(hist.values()) == 21
 
 
 def test_pa_module_node_type_histogram() -> None:
     artifact = compile_layout(REAL_CASE_PATH)
     hist = artifact.nodes_by_type()
     assert hist.get("universal_junction") == 2
-    # IC1_pin1_seg2_end_split_pad removed; remaining: seg4, pin2_seg2, pin2_seg3
-    assert hist.get("t_junction") == 3
+    # Restored IC1_pin1_seg2_end_split_pad; t_junctions: seg2(pin1), seg3(pin1),
+    # seg4(pin1), seg2(pin2), seg3(pin2) = 4 (seg4 is one of the four)
+    # Actually: pin1_seg2_end_split_pad, pin1_seg3_end_split_pad,
+    # pin1_seg4_end_split_pad, pin2_seg2_end_split_pad, pin2_seg3_end_split_pad
+    assert hist.get("t_junction") == 4
     assert hist.get("t_combiner_junction") == 2
 
 

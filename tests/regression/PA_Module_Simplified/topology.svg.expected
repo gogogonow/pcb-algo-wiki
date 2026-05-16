@@ -6,24 +6,26 @@
 .topology-terminal-shape { fill: #f3e8ff; stroke: #7e22ce; stroke-width: 2; }
 .topology-label { fill: #111827; font-family: Arial, sans-serif; font-size: 11px; }</style>
   <g id="topology-edges" class="topology-edges">
-    <line class="topology-edge" data-edge-id="C1R1_to_combiner" data-kind="microstrip" x1="450.0" y1="192.0" x2="450.0" y2="480.0" />
+    <line class="topology-edge" data-edge-id="C1R1_to_combiner" data-kind="microstrip" x1="450.0" y1="192.0" x2="450.0" y2="552.0" />
     <line class="topology-edge" data-edge-id="IC1_pin1_seg1" data-kind="microstrip" x1="214.4" y1="227.0" x2="450.0" y2="264.0" />
-    <line class="topology-edge" data-edge-id="IC1_pin1_seg3" data-kind="microstrip" x1="450.0" y1="264.0" x2="450.0" y2="336.0" />
-    <line class="topology-edge" data-edge-id="IC1_pin1_seg3_to_C5" data-kind="microstrip" x1="450.0" y1="336.0" x2="140.0" y2="296.0" />
-    <line class="topology-edge" data-edge-id="IC1_pin1_seg4" data-kind="microstrip" x1="450.0" y1="264.0" x2="450.0" y2="408.0" />
-    <line class="topology-edge" data-edge-id="IC1_pin1_seg4_to_C1R1" data-kind="microstrip" x1="450.0" y1="408.0" x2="450.0" y2="120.0" />
-    <line class="topology-edge" data-edge-id="IC1_pin1_seg5" data-kind="microstrip" x1="450.0" y1="480.0" x2="680.0" y2="140.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin1_seg2" data-kind="microstrip" x1="450.0" y1="264.0" x2="450.0" y2="336.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin1_seg2_to_C7" data-kind="microstrip" x1="450.0" y1="336.0" x2="140.0" y2="374.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin1_seg3" data-kind="microstrip" x1="450.0" y1="264.0" x2="450.0" y2="408.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin1_seg3_to_C5" data-kind="microstrip" x1="450.0" y1="408.0" x2="140.0" y2="296.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin1_seg4" data-kind="microstrip" x1="450.0" y1="264.0" x2="450.0" y2="480.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin1_seg4_to_C1R1" data-kind="microstrip" x1="450.0" y1="480.0" x2="450.0" y2="120.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin1_seg5" data-kind="microstrip" x1="450.0" y1="552.0" x2="680.0" y2="140.0" />
     <line class="topology-edge" data-edge-id="IC1_pin1_seg6" data-kind="microstrip" x1="740.0" y1="140.0" x2="562.0" y2="80.0" />
-    <line class="topology-edge" data-edge-id="IC1_pin2_seg1" data-kind="microstrip" x1="214.4" y1="283.0" x2="450.0" y2="552.0" />
-    <line class="topology-edge" data-edge-id="IC1_pin2_seg2" data-kind="microstrip" x1="450.0" y1="552.0" x2="450.0" y2="624.0" />
-    <line class="topology-edge" data-edge-id="IC1_pin2_seg2_to_C3" data-kind="microstrip" x1="450.0" y1="624.0" x2="140.0" y2="218.0" />
-    <line class="topology-edge" data-edge-id="IC1_pin2_seg3" data-kind="microstrip" x1="450.0" y1="552.0" x2="450.0" y2="696.0" />
-    <line class="topology-edge" data-edge-id="IC1_pin2_seg3_to_C6" data-kind="microstrip" x1="450.0" y1="696.0" x2="740.0" y2="296.0" />
-    <line class="topology-edge" data-edge-id="IC1_pin2_seg4" data-kind="microstrip" x1="450.0" y1="552.0" x2="680.0" y2="374.0" />
-    <line class="topology-edge" data-edge-id="IC1_pin2_seg5" data-kind="microstrip" x1="450.0" y1="768.0" x2="680.0" y2="218.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin2_seg1" data-kind="microstrip" x1="214.4" y1="283.0" x2="450.0" y2="624.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin2_seg2" data-kind="microstrip" x1="450.0" y1="624.0" x2="450.0" y2="696.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin2_seg2_to_C3" data-kind="microstrip" x1="450.0" y1="696.0" x2="140.0" y2="218.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin2_seg3" data-kind="microstrip" x1="450.0" y1="624.0" x2="450.0" y2="768.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin2_seg3_to_C6" data-kind="microstrip" x1="450.0" y1="768.0" x2="740.0" y2="296.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin2_seg4" data-kind="microstrip" x1="450.0" y1="624.0" x2="140.0" y2="452.0" />
+    <line class="topology-edge" data-edge-id="IC1_pin2_seg5" data-kind="microstrip" x1="450.0" y1="840.0" x2="680.0" y2="218.0" />
     <line class="topology-edge" data-edge-id="IC1_pin2_seg6" data-kind="microstrip" x1="740.0" y1="218.0" x2="464.0" y2="80.0" />
     <line class="topology-edge" data-edge-id="PWR_VDD_bus" data-kind="microstrip" x1="282.0" y1="405.0" x2="324.4" y2="283.0" />
-    <line class="topology-edge" data-edge-id="R3_to_combiner" data-kind="microstrip" x1="740.0" y1="374.0" x2="450.0" y2="768.0" />
+    <line class="topology-edge" data-edge-id="R3_to_combiner" data-kind="microstrip" x1="200.0" y1="452.0" x2="450.0" y2="840.0" />
     <line class="topology-edge" data-edge-id="RF_INPUT_to_IC1" data-kind="microstrip" x1="422.0" y1="505.0" x2="324.4" y2="227.0" />
   </g>
   <g id="topology-fixed-components" class="topology-fixed-components">
@@ -73,13 +75,17 @@
       <ellipse class="topology-uv-component-shape" cx="710.0" cy="296.0" rx="30" ry="18" />
       <text class="topology-label" x="710.0" y="330.0" text-anchor="middle">C6</text>
     </g>
-    <g class="topology-component topology-uv-component" data-component-id="R1">
+    <g class="topology-component topology-uv-component" data-component-id="C7">
       <ellipse class="topology-uv-component-shape" cx="170.0" cy="374.0" rx="30" ry="18" />
-      <text class="topology-label" x="170.0" y="408.0" text-anchor="middle">R1</text>
+      <text class="topology-label" x="170.0" y="408.0" text-anchor="middle">C7</text>
+    </g>
+    <g class="topology-component topology-uv-component" data-component-id="R1">
+      <ellipse class="topology-uv-component-shape" cx="710.0" cy="374.0" rx="30" ry="18" />
+      <text class="topology-label" x="710.0" y="408.0" text-anchor="middle">R1</text>
     </g>
     <g class="topology-component topology-uv-component" data-component-id="R3">
-      <ellipse class="topology-uv-component-shape" cx="710.0" cy="374.0" rx="30" ry="18" />
-      <text class="topology-label" x="710.0" y="408.0" text-anchor="middle">R3</text>
+      <ellipse class="topology-uv-component-shape" cx="170.0" cy="452.0" rx="30" ry="18" />
+      <text class="topology-label" x="170.0" y="486.0" text-anchor="middle">R3</text>
     </g>
   </g>
   <g id="topology-nodes" class="topology-nodes">
@@ -95,33 +101,37 @@
       <circle class="topology-node-shape" cx="450.0" cy="264.0" r="12" />
       <text class="topology-label" x="470.0" y="268.0" text-anchor="start">IC1_pin1_seg1_universal_node</text>
     </g>
-    <g class="topology-node" data-node-id="IC1_pin1_seg3_end_split_pad">
+    <g class="topology-node" data-node-id="IC1_pin1_seg2_end_split_pad">
       <circle class="topology-node-shape" cx="450.0" cy="336.0" r="12" />
-      <text class="topology-label" x="470.0" y="340.0" text-anchor="start">IC1_pin1_seg3_end_split_pad</text>
+      <text class="topology-label" x="470.0" y="340.0" text-anchor="start">IC1_pin1_seg2_end_split_pad</text>
+    </g>
+    <g class="topology-node" data-node-id="IC1_pin1_seg3_end_split_pad">
+      <circle class="topology-node-shape" cx="450.0" cy="408.0" r="12" />
+      <text class="topology-label" x="470.0" y="412.0" text-anchor="start">IC1_pin1_seg3_end_split_pad</text>
     </g>
     <g class="topology-node" data-node-id="IC1_pin1_seg4_end_split_pad">
-      <circle class="topology-node-shape" cx="450.0" cy="408.0" r="12" />
-      <text class="topology-label" x="470.0" y="412.0" text-anchor="start">IC1_pin1_seg4_end_split_pad</text>
+      <circle class="topology-node-shape" cx="450.0" cy="480.0" r="12" />
+      <text class="topology-label" x="470.0" y="484.0" text-anchor="start">IC1_pin1_seg4_end_split_pad</text>
     </g>
     <g class="topology-node" data-node-id="IC1_pin1_seg5_start_combiner">
-      <circle class="topology-node-shape" cx="450.0" cy="480.0" r="12" />
-      <text class="topology-label" x="470.0" y="484.0" text-anchor="start">IC1_pin1_seg5_start_combiner</text>
+      <circle class="topology-node-shape" cx="450.0" cy="552.0" r="12" />
+      <text class="topology-label" x="470.0" y="556.0" text-anchor="start">IC1_pin1_seg5_start_combiner</text>
     </g>
     <g class="topology-node" data-node-id="IC1_pin2_seg1_universal_node">
-      <circle class="topology-node-shape" cx="450.0" cy="552.0" r="12" />
-      <text class="topology-label" x="470.0" y="556.0" text-anchor="start">IC1_pin2_seg1_universal_node</text>
+      <circle class="topology-node-shape" cx="450.0" cy="624.0" r="12" />
+      <text class="topology-label" x="470.0" y="628.0" text-anchor="start">IC1_pin2_seg1_universal_node</text>
     </g>
     <g class="topology-node" data-node-id="IC1_pin2_seg2_end_split_pad">
-      <circle class="topology-node-shape" cx="450.0" cy="624.0" r="12" />
-      <text class="topology-label" x="470.0" y="628.0" text-anchor="start">IC1_pin2_seg2_end_split_pad</text>
+      <circle class="topology-node-shape" cx="450.0" cy="696.0" r="12" />
+      <text class="topology-label" x="470.0" y="700.0" text-anchor="start">IC1_pin2_seg2_end_split_pad</text>
     </g>
     <g class="topology-node" data-node-id="IC1_pin2_seg3_end_split_pad">
-      <circle class="topology-node-shape" cx="450.0" cy="696.0" r="12" />
-      <text class="topology-label" x="470.0" y="700.0" text-anchor="start">IC1_pin2_seg3_end_split_pad</text>
+      <circle class="topology-node-shape" cx="450.0" cy="768.0" r="12" />
+      <text class="topology-label" x="470.0" y="772.0" text-anchor="start">IC1_pin2_seg3_end_split_pad</text>
     </g>
     <g class="topology-node" data-node-id="IC1_pin2_seg5_start_combiner">
-      <circle class="topology-node-shape" cx="450.0" cy="768.0" r="12" />
-      <text class="topology-label" x="470.0" y="772.0" text-anchor="start">IC1_pin2_seg5_start_combiner</text>
+      <circle class="topology-node-shape" cx="450.0" cy="840.0" r="12" />
+      <text class="topology-label" x="470.0" y="844.0" text-anchor="start">IC1_pin2_seg5_start_combiner</text>
     </g>
   </g>
   <g id="topology-terminals" class="topology-terminals">
