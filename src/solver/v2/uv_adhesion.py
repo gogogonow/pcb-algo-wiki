@@ -200,9 +200,8 @@ def _infer_anchor_from_virtual_stub(
 ) -> tuple[int, int] | None:
     """WI-H2: infer anchor endpoint from a virtual stub edge (zero-length
     placeholder created for topology but not actually routed). Virtual stubs
-    like IC1_pin1_seg2_to_C7 have `polyline_um` with 1 point and were filtered
-    by WI-G4 from slot-search, but we can extract the stub's far-end real pin
-    endpoint from final_endpoint_um.
+    like IC1_pin1_seg2_to_C7 have `polyline_um` with 1 point — that point IS
+    the anchor coordinate (the far-end real pin on the microstrip).
 
     Returns anchor coordinate in μm if found, else None.
     """
@@ -215,26 +214,9 @@ def _infer_anchor_from_virtual_stub(
         route = skeleton.routes.get(eid)
         if route is None or not route.success:
             continue
-        # Stub edges typically have 1-point polylines (degenerate).
-        # The connections field has "A → B" where B is the UV's anchor pin.
-        # We want to extract A's coordinate from final_endpoint_um.
-        conns = getattr(route, "connections", None)
-        if not conns:
-            continue
-        # Connection format: "IC1.PIN_1 → C7.PIN_1"
-        parts = conns.split(" → ")
-        if len(parts) != 2:
-            continue
-        far_ep = parts[0].strip()
-        near_ep = parts[1].strip()
-        # Validate that near_ep matches our UV anchor pin.
-        expected_near = f"{uv_name}.{anchor_pin}"
-        if near_ep != expected_near:
-            continue
-        # Lookup far_ep in final_endpoint_um.
-        far_um = _lookup_endpoint_um(skeleton.final_endpoint_um, far_ep)
-        if far_um is not None:
-            return far_um
+        # Stub edges have 1-point polylines; that point is the anchor coordinate.
+        if len(route.polyline_um) == 1:
+            return route.polyline_um[0]
     return None
 
 
