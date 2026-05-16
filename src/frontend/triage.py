@@ -50,6 +50,7 @@ def triage_edge(name: str, edge: Edge) -> TriagedEdge:
         connections=tuple(edge.connections),
         bend_style=(edge.geometry.bend_style if edge.geometry else None),
         launch_rule=(edge.geometry.launch_rule if edge.geometry else None),
+        net=edge.net,
     )
 
 

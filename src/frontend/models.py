@@ -105,6 +105,7 @@ class TriagedEdge:
     connections: tuple[str, ...]
     bend_style: str | None = None
     launch_rule: str | None = None
+    net: str | None = None
 
 
 @dataclass(frozen=True)
