@@ -1,5 +1,6 @@
 """WI-F3: ensure _sample_polyline produces ≥1 interior sample on short edges
 so slot search does not silently fall back to legacy anchor placement."""
+
 from src.solver.v2.uv_slot_search import _sample_polyline
 
 

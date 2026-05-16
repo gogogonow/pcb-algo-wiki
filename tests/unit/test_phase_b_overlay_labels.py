@@ -1,4 +1,5 @@
 """WI-F2: phaseB SVG must show RLC PIN short labels and no long ids."""
+
 import subprocess
 import sys
 from pathlib import Path

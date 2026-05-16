@@ -86,19 +86,24 @@ def adhere_uv_components(
         )
         if placement is not None:
             report.placements[uv_name] = placement
-            # Add this UV's bbox as a future obstacle.
-            xs = [float(p.point.x) for p in placement.pads]
-            ys = [float(p.point.y) for p in placement.pads]
-            if xs and ys:
-                margin = 0.2
-                placed_obstacles.append(
-                    (
-                        min(xs) - margin,
-                        min(ys) - margin,
-                        max(xs) + margin,
-                        max(ys) + margin,
-                    )
+            # WI-F4: use rotated footprint bbox as obstacle (raw pad min/max
+            # is degenerate for two-pad 0402 packages where both pads share y
+            # → height ≈ 0 → subsequent UVs cannot see this footprint and
+            # would overlap it visually).
+            fw, fh = _footprint_size(uv)
+            rot_q = int(round(float(placement.rotation_deg or 0.0))) % 180
+            bw, bh = (fw, fh) if rot_q == 0 else (fh, fw)
+            ax = float(placement.anchor.x)
+            ay = float(placement.anchor.y)
+            margin = 0.4
+            placed_obstacles.append(
+                (
+                    ax - bw / 2.0 - margin,
+                    ay - bh / 2.0 - margin,
+                    ax + bw / 2.0 + margin,
+                    ay + bh / 2.0 + margin,
                 )
+            )
         else:
             report.failed.append((uv_name, "could not derive placement"))
     return report
@@ -138,6 +143,13 @@ def _place_uv(
     # 2. Fallback: legacy anchor-pin-on-routed-endpoint derivation.
     legacy = _legacy_anchor_placement(
         uv_name, uv, artifact, skeleton, edges_by_net, seed_anchor_mm, seed_rotation_deg
+    )
+    if legacy is None:
+        return None
+    # WI-F4: legacy path is obstacle-blind; nudge along host trace tangent
+    # if rendered footprint bbox overlaps an existing obstacle.
+    legacy = _nudge_clear_of_obstacles(
+        legacy, uv, artifact, skeleton, edges_by_net, obstacles
     )
     return legacy
 
@@ -297,6 +309,99 @@ def _local_pin_offset(uv: ComponentExpansion, pin: str) -> tuple[float, float]:
     return (0.0, 0.0)
 
 
+def _rect_overlaps_any(
+    rect: tuple[float, float, float, float],
+    obstacles: list[tuple[float, float, float, float]],
+    margin: float = 0.0,
+) -> bool:
+    x0, y0, x1, y1 = rect
+    for ox0, oy0, ox1, oy1 in obstacles:
+        if not (
+            x1 + margin <= ox0
+            or ox1 <= x0 - margin
+            or y1 + margin <= oy0
+            or oy1 <= y0 - margin
+        ):
+            return True
+    return False
+
+
+def _placement_bbox(
+    placement: ComponentPlacement, uv: ComponentExpansion
+) -> tuple[float, float, float, float]:
+    fw, fh = _footprint_size(uv)
+    rot_q = int(round(float(placement.rotation_deg or 0.0))) % 180
+    bw, bh = (fw, fh) if rot_q == 0 else (fh, fw)
+    ax = float(placement.anchor.x)
+    ay = float(placement.anchor.y)
+    return (ax - bw / 2.0, ay - bh / 2.0, ax + bw / 2.0, ay + bh / 2.0)
+
+
+def _translate_placement(
+    placement: ComponentPlacement, dx: float, dy: float
+) -> ComponentPlacement:
+    return ComponentPlacement(
+        component=placement.component,
+        anchor=Point(
+            x=float(placement.anchor.x) + dx, y=float(placement.anchor.y) + dy
+        ),
+        rotation_deg=placement.rotation_deg,
+        pads=tuple(
+            PinPlacement(
+                pin=p.pin, point=Point(x=float(p.point.x) + dx, y=float(p.point.y) + dy)
+            )
+            for p in placement.pads
+        ),
+    )
+
+
+def _nudge_clear_of_obstacles(
+    placement: ComponentPlacement,
+    uv: ComponentExpansion,
+    artifact: FrontendArtifact,
+    skeleton: SkeletonReport,
+    edges_by_net: dict[str, list[str]],
+    obstacles: list[tuple[float, float, float, float]],
+) -> ComponentPlacement:
+    """Shift legacy placement along host-trace tangent until bbox is clear.
+
+    Generalised obstacle-aware adjustment for the legacy fallback path
+    (slot search already handles obstacles). Walks symmetric offsets up
+    to a few footprint heights; returns the first clear placement, else
+    the original.
+    """
+    rect = _placement_bbox(placement, uv)
+    if not _rect_overlaps_any(rect, obstacles, margin=0.05):
+        return placement
+    meta = uv.uv_meta
+    if meta is None or not meta.reference_net:
+        return placement
+    anchor_endpoint = f"{uv.name}.{meta.anchor_pin}"
+    tangent_deg = _host_edge_tangent(
+        anchor_endpoint,
+        skeleton,
+        edges_by_net,
+        meta.reference_net,
+        artifact,
+        anchor_xy_mm=(float(placement.anchor.x), float(placement.anchor.y)),
+    )
+    if tangent_deg is None:
+        return placement
+    tx = math.cos(math.radians(tangent_deg))
+    ty = math.sin(math.radians(tangent_deg))
+    fw, fh = _footprint_size(uv)
+    step = max(fw, fh) + 0.4
+    for k in range(1, 6):
+        for sign in (1.0, -1.0):
+            dx = sign * k * step * tx
+            dy = sign * k * step * ty
+            candidate = _translate_placement(placement, dx, dy)
+            cand_rect = _placement_bbox(candidate, uv)
+            if not _rect_overlaps_any(cand_rect, obstacles, margin=0.05):
+                return candidate
+    return placement
+
+
 def _host_edge_tangent(
     anchor_endpoint: str,
     skeleton: SkeletonReport,
@@ -337,7 +442,7 @@ def _host_edge_tangent(
         route = skeleton.routes.get(eid)
         if route is None or not route.success:
             continue
-        angle = _route_tangent(route.polyline_um)
+        angle = _route_tangent(list(route.polyline_um))
         if angle is not None:
             return angle
 
@@ -356,7 +461,7 @@ def _host_edge_tangent(
             d = _point_seg_distance_mm((ax, ay), poly_mm[j], poly_mm[j + 1])
             if d < best_d:
                 best_d = d
-                best_angle = _route_tangent(route.polyline_um)
+                best_angle = _route_tangent(list(route.polyline_um))
     return best_angle
 
 

@@ -1,4 +1,5 @@
 """Tests for src.postproc.short_name.short_id."""
+
 from src.postproc.short_name import short_id
 
 

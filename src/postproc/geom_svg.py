@@ -9,7 +9,7 @@ from __future__ import annotations
 from xml.sax.saxutils import escape
 
 from schema.geometry_ir import GeometryIR
-from src.postproc.short_name import short_id
+from postproc.short_name import short_id
 
 _FOOTPRINT_FILL = "#fde68a"
 _FOOTPRINT_STROKE = "#92400e"

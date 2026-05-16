@@ -1197,7 +1197,7 @@ def _expand_endpoint_tokens(endpoint_id: str) -> tuple[str, ...]:
 def _prea_short_name(name: str) -> str:
     # WI-F1a: delegate to shared short_id implementation (generic across
     # components, used both by base geom_svg renderer and overlay code).
-    from src.postproc.short_name import short_id
+    from postproc.short_name import short_id
 
     return short_id(name)
 

@@ -1,4 +1,5 @@
 """Shared short-id formatter for SVG labels across postproc + tools."""
+
 from __future__ import annotations
 
 import re

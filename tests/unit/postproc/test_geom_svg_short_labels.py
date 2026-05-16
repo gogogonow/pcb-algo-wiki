@@ -1,4 +1,5 @@
 """WI-F1b: base geom_svg renderer must use short_id for node + edge labels."""
+
 from src.postproc.geom_svg import render_geometry_svg
 from src.schema.geometry_ir import GeometryIR, RoutePolyline
 from src.schema.v6_ir import Board, Point
