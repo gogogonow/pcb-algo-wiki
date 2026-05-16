@@ -104,17 +104,39 @@ class ChannelGrid:
         clearance_um: int,
         label: str,
     ) -> None:
-        """Inflate each polyline segment to an AABB and store it as obstacle."""
+        """Inflate each polyline segment to an AABB and store it as obstacle.
+
+        Diagonal segments are split into shorter sub-segments so the per-AABB
+        bounding box stays tight around the actual trace. Without splitting,
+        a long 45° segment's AABB covers the entire enclosing square,
+        falsely blocking nearby parallel routes.
+        """
         inflate = width_um // 2 + clearance_um
+        # Cap each sub-segment length so AABB stays close to trace width.
+        chunk_um = max(width_um * 2, 1000)
         for (x1, y1), (x2, y2) in zip(points, points[1:], strict=False):
-            min_x = min(x1, x2) - inflate
-            max_x = max(x1, x2) + inflate
-            min_y = min(y1, y2) - inflate
-            max_y = max(y1, y2) + inflate
-            idx = len(self.routed_obstacles)
-            aabb = (min_x, min_y, max_x, max_y, label)
-            self.routed_obstacles.append(aabb)
-            self._bucketize(self._routed_buckets, idx, aabb)
+            dx = x2 - x1
+            dy = y2 - y1
+            is_diagonal = dx != 0 and dy != 0
+            seg_len = max(abs(dx), abs(dy))
+            n_chunks = (
+                max(1, (seg_len + chunk_um - 1) // chunk_um) if is_diagonal else 1
+            )
+            for k in range(n_chunks):
+                t0 = k / n_chunks
+                t1 = (k + 1) / n_chunks
+                sx = x1 + int(dx * t0)
+                sy = y1 + int(dy * t0)
+                ex = x1 + int(dx * t1)
+                ey = y1 + int(dy * t1)
+                min_x = min(sx, ex) - inflate
+                max_x = max(sx, ex) + inflate
+                min_y = min(sy, ey) - inflate
+                max_y = max(sy, ey) + inflate
+                idx = len(self.routed_obstacles)
+                aabb = (min_x, min_y, max_x, max_y, label)
+                self.routed_obstacles.append(aabb)
+                self._bucketize(self._routed_buckets, idx, aabb)
 
     def remove_routed(self, label: str) -> int:
         before = len(self.routed_obstacles)

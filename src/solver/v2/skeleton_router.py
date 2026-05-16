@@ -435,10 +435,12 @@ def route_skeleton(
                         ripped = next(
                             (x for x in routes_plan if x.edge_id == neighbour), None
                         )
+                        report.routes.pop(neighbour, None)
                         if ripped:
                             next_pending.append(ripped)
-                        report.routes.pop(neighbour, None)
-                    next_pending.append(ep)
+                        next_pending.append(ep)
+                    else:
+                        next_pending.append(ep)
                 else:
                     report.routes[ep.edge_id] = RouteOutcome(
                         edge_id=ep.edge_id,

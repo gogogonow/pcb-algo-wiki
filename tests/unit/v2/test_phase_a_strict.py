@@ -129,3 +129,18 @@ def test_phase_a_no_segment_intersections() -> None:
             + ", ".join(f"{a}×{b}" for a, b in crossings[:3])
         )
     assert not crossings
+
+
+@pytest.mark.skipif(not YAML_PATH.exists(), reason="PA yaml missing")
+def test_phase_a_parallel_diagonal_pin_segs_route_successfully() -> None:
+    """Both IC1 pin1_seg6 and pin2_seg6 are parallel ~45° diagonals to TP4/TP5.
+
+    Regression for WI-B3: routed-polyline AABB inflation must not falsely
+    block parallel diagonals. Channel grid splits long diagonals into
+    short chunks so per-AABB bounding stays tight around the trace.
+    """
+    result = solve_layout_v2(str(YAML_PATH))
+    for edge_id in ("IC1_pin1_seg6", "IC1_pin2_seg6"):
+        route = result.phase_a.skeleton.routes.get(edge_id)
+        assert route is not None, f"{edge_id} missing from skeleton routes"
+        assert route.success, f"{edge_id} failed: {route.failure_reason!r}"
