@@ -164,15 +164,16 @@ def _edge_align_shift(
     rotation_deg: float,
     trace_width: float,
 ) -> tuple[float, float]:
-    """WI-G2: compute (dx, dy) to shift placement so the anchor pad's
-    outer edge (the edge nearest the host trace) sits on the trace edge
-    instead of crossing the trace centerline.
+    """WI-H1: compute (dx, dy) to shift placement so the anchor pad embeds
+    about half its width into the trace. Inner edge sits near the trace
+    centerline, outer edge extends beyond the trace edge, ensuring the
+    non-anchor pad stays clear and doesn't short to the trace.
 
     Geometry: the body extends from the anchor pin away from the trace
     (anchor pin local offset != (0,0) for two-pin RLCs). The unit vector
     from anchor pin local toward body center (= origin (0,0)) gives the
     "into body" direction in local frame; rotated to world coordinates
-    it becomes the shift direction. Magnitude = trace_width/2 + pad_perp/2.
+    it becomes the shift direction. Magnitude = pad_perp/2.
     """
     alx, aly = _local_pin_offset(uv, anchor_pin)
     bx, by = -alx, -aly  # anchor pin → body center, local frame
@@ -186,8 +187,55 @@ def _edge_align_shift(
     wx = cos_t * bx - sin_t * by  # rotate to world
     wy = sin_t * bx + cos_t * by
     pad_perp = _pad_perp_size(uv, anchor_pin)
-    mag = trace_width * 0.5 + pad_perp * 0.5
+    mag = pad_perp * 0.5
     return (wx * mag, wy * mag)
+
+
+def _infer_anchor_from_virtual_stub(
+    uv_name: str,
+    anchor_pin: str,
+    skeleton: SkeletonReport,
+    edges_by_net: dict[str, list[str]],
+    reference_net: str | None,
+) -> tuple[int, int] | None:
+    """WI-H2: infer anchor endpoint from a virtual stub edge (zero-length
+    placeholder created for topology but not actually routed). Virtual stubs
+    like IC1_pin1_seg2_to_C7 have `polyline_um` with 1 point and were filtered
+    by WI-G4 from slot-search, but we can extract the stub's far-end real pin
+    endpoint from final_endpoint_um.
+
+    Returns anchor coordinate in μm if found, else None.
+    """
+    if not reference_net:
+        return None
+    # Search for edge named *_to_{uv_name} on the reference net.
+    for eid in edges_by_net.get(reference_net, []):
+        if not eid.endswith(f"_to_{uv_name}"):
+            continue
+        route = skeleton.routes.get(eid)
+        if route is None or not route.success:
+            continue
+        # Stub edges typically have 1-point polylines (degenerate).
+        # The connections field has "A → B" where B is the UV's anchor pin.
+        # We want to extract A's coordinate from final_endpoint_um.
+        conns = getattr(route, "connections", None)
+        if not conns:
+            continue
+        # Connection format: "IC1.PIN_1 → C7.PIN_1"
+        parts = conns.split(" → ")
+        if len(parts) != 2:
+            continue
+        far_ep = parts[0].strip()
+        near_ep = parts[1].strip()
+        # Validate that near_ep matches our UV anchor pin.
+        expected_near = f"{uv_name}.{anchor_pin}"
+        if near_ep != expected_near:
+            continue
+        # Lookup far_ep in final_endpoint_um.
+        far_um = _lookup_endpoint_um(skeleton.final_endpoint_um, far_ep)
+        if far_um is not None:
+            return far_um
+    return None
 
 
 def _place_uv(
@@ -395,6 +443,11 @@ def _legacy_anchor_placement(
     anchor_pin = uv.uv_meta.anchor_pin
     anchor_endpoint = f"{uv_name}.{anchor_pin}"
     anchor_um = _lookup_endpoint_um(skeleton.final_endpoint_um, anchor_endpoint)
+    # WI-H2: if anchor endpoint not found, try inferring from virtual stub.
+    if anchor_um is None:
+        anchor_um = _infer_anchor_from_virtual_stub(
+            uv_name, anchor_pin, skeleton, edges_by_net, uv.uv_meta.reference_net
+        )
     other_um: tuple[int, int] | None = None
     other_pin: str | None = None
     for pad in uv.pads:
