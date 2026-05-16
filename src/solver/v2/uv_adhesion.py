@@ -26,6 +26,7 @@ from schema.v6_ir import Point
 from solver.units import MM_TO_UM
 
 from .skeleton_router import SkeletonReport
+from .uv_classify import UvKind, classify_uv
 from .uv_slot_search import SlotCandidate, search_slot
 
 
@@ -70,8 +71,16 @@ def adhere_uv_components(
 
     # Iterate UVs in deterministic order so already-placed bboxes are
     # consistent across runs.
+    # WI-G3: place series UVs first so shunt/slot-search placements can
+    # treat their pad span as obstacles. Within each group, alphabetical.
+    def _order_key(name: str) -> tuple[int, str]:
+        kind = classify_uv(artifact.uv_components[name])
+        # series first (0), then shunt/probe (1)
+        return (0 if kind == UvKind.SERIES else 1, name)
+
     placed_obstacles: list[tuple[float, float, float, float]] = []
-    for uv_name in sorted(artifact.uv_components.keys()):
+    used_series_endpoints: set[tuple[float, float]] = set()
+    for uv_name in sorted(artifact.uv_components.keys(), key=_order_key):
         uv = artifact.uv_components[uv_name]
         placement = _place_uv(
             uv_name,
@@ -83,18 +92,28 @@ def adhere_uv_components(
             (board_w, board_h),
             seed_anchor_mm,
             seed_rotation_deg,
+            used_series_endpoints,
         )
         if placement is not None:
             report.placements[uv_name] = placement
-            # WI-F4: use rotated footprint bbox as obstacle (raw pad min/max
-            # is degenerate for two-pad 0402 packages where both pads share y
-            # → height ≈ 0 → subsequent UVs cannot see this footprint and
-            # would overlap it visually).
+            # WI-F4/G3: use rotated footprint bbox sized to actual pad
+            # extent (series components may stretch beyond local footprint).
             fw, fh = _footprint_size(uv)
             rot_q = int(round(float(placement.rotation_deg or 0.0))) % 180
             bw, bh = (fw, fh) if rot_q == 0 else (fh, fw)
             ax = float(placement.anchor.x)
             ay = float(placement.anchor.y)
+            # Expand to enclose actual pad positions
+            pad_xs = [float(p.point.x) for p in placement.pads]
+            pad_ys = [float(p.point.y) for p in placement.pads]
+            if pad_xs and pad_ys:
+                pad_perp = max(_pad_perp_size(uv, p.pin) for p in placement.pads)
+                pad_min_x = min(pad_xs) - pad_perp * 0.5
+                pad_max_x = max(pad_xs) + pad_perp * 0.5
+                pad_min_y = min(pad_ys) - pad_perp * 0.5
+                pad_max_y = max(pad_ys) + pad_perp * 0.5
+                bw = max(bw, pad_max_x - pad_min_x)
+                bh = max(bh, pad_max_y - pad_min_y)
             margin = 0.4
             placed_obstacles.append(
                 (
@@ -121,6 +140,56 @@ def _footprint_size(uv: ComponentExpansion) -> tuple[float, float]:
     return (max(w, 1.0) + 0.6, max(h, 1.0) + 0.6)
 
 
+def _pad_perp_size(uv: ComponentExpansion, pin: str) -> float:
+    """WI-G2: pad dimension perpendicular to body long-axis (mm).
+
+    For default-rotated CAP/RES the body's long axis runs along local-x
+    (pads at ±local_x, both at local_y=0), so the perp dimension is the
+    pad's smaller side. Falls back to footprint short side when
+    ``pad_geometry`` is absent.
+    """
+    for pad in uv.pads:
+        if pad.pin == pin:
+            w = float(pad.pad_width) if pad.pad_width else 0.0
+            ln = float(pad.pad_length) if pad.pad_length else 0.0
+            if w > 0 and ln > 0:
+                return min(w, ln)
+    fw, fh = _footprint_size(uv)
+    return min(fw, fh)
+
+
+def _edge_align_shift(
+    uv: ComponentExpansion,
+    anchor_pin: str,
+    rotation_deg: float,
+    trace_width: float,
+) -> tuple[float, float]:
+    """WI-G2: compute (dx, dy) to shift placement so the anchor pad's
+    outer edge (the edge nearest the host trace) sits on the trace edge
+    instead of crossing the trace centerline.
+
+    Geometry: the body extends from the anchor pin away from the trace
+    (anchor pin local offset != (0,0) for two-pin RLCs). The unit vector
+    from anchor pin local toward body center (= origin (0,0)) gives the
+    "into body" direction in local frame; rotated to world coordinates
+    it becomes the shift direction. Magnitude = trace_width/2 + pad_perp/2.
+    """
+    alx, aly = _local_pin_offset(uv, anchor_pin)
+    bx, by = -alx, -aly  # anchor pin → body center, local frame
+    norm = math.hypot(bx, by)
+    if norm < 1e-9:
+        return (0.0, 0.0)
+    bx /= norm
+    by /= norm
+    cos_t = math.cos(math.radians(rotation_deg))
+    sin_t = math.sin(math.radians(rotation_deg))
+    wx = cos_t * bx - sin_t * by  # rotate to world
+    wy = sin_t * bx + cos_t * by
+    pad_perp = _pad_perp_size(uv, anchor_pin)
+    mag = trace_width * 0.5 + pad_perp * 0.5
+    return (wx * mag, wy * mag)
+
+
 def _place_uv(
     uv_name: str,
     uv: ComponentExpansion,
@@ -131,9 +200,18 @@ def _place_uv(
     board: tuple[float, float],
     seed_anchor_mm: dict[str, tuple[float, float]],
     seed_rotation_deg: dict[str, float],
+    used_series_endpoints: set[tuple[float, float]],
 ) -> ComponentPlacement | None:
     if uv.uv_meta is None:
         return None
+
+    # WI-G3: series components — both pins land on respective net hosts.
+    if classify_uv(uv) == UvKind.SERIES:
+        series = _place_series_uv(
+            uv_name, uv, skeleton, edges_by_net, used_series_endpoints
+        )
+        if series is not None:
+            return series
 
     # 1. Try slot-search (perpendicular adhesion on a host microstrip).
     cand = _try_slot_search(uv, artifact, skeleton, edges_by_net, obstacles, board)
@@ -166,6 +244,11 @@ def _try_slot_search(
     if meta is None or not meta.reference_net:
         return None
     host_eids = edges_by_net.get(meta.reference_net, [])
+    if not host_eids:
+        return None
+    # WI-G4: skip virtual stub edges (e.g. "IC1_pin1_seg2_to_C7") that
+    # carry no rendered routing and would mislead the slot search.
+    host_eids = [eid for eid in host_eids if "_to_" not in eid]
     if not host_eids:
         return None
     host_polylines: dict[str, list[tuple[float, float]]] = {}
@@ -210,9 +293,11 @@ def _materialise_from_slot(
     sin_t = math.sin(math.radians(rotation))
     anchor_pin = meta.anchor_pin
     lx, ly = _local_pin_offset(uv, anchor_pin)
-    # Anchor pin must land on host_pin_xy.
-    px = cand.host_pin_xy[0]
-    py = cand.host_pin_xy[1]
+    # WI-G2: shift anchor pin off the trace centerline so pad's outer
+    # edge sits on the trace edge.
+    sdx, sdy = _edge_align_shift(uv, anchor_pin, rotation, cand.trace_width)
+    px = cand.host_pin_xy[0] + sdx
+    py = cand.host_pin_xy[1] + sdy
     placement_x = px - (cos_t * lx - sin_t * ly)
     placement_y = py - (sin_t * lx + cos_t * ly)
     pad_placements = []
@@ -223,9 +308,76 @@ def _materialise_from_slot(
         pad_placements.append(PinPlacement(pin=pad.pin, point=Point(x=ppx, y=ppy)))
     return ComponentPlacement(
         component=uv.name,
-        anchor=Point(x=cand.anchor_xy[0], y=cand.anchor_xy[1]),
+        anchor=Point(x=placement_x, y=placement_y),
         rotation_deg=_quantize_rotation(rotation),
         pads=tuple(pad_placements),
+    )
+
+
+def _place_series_uv(
+    uv_name: str,
+    uv: ComponentExpansion,
+    skeleton: SkeletonReport,
+    edges_by_net: dict[str, list[str]],
+    used_endpoints: set[tuple[float, float]],
+) -> ComponentPlacement | None:
+    """WI-G3: place a series RLC with both pins on routed endpoints of
+    their respective nets.  Greedy: pick the closest pair of routed-edge
+    endpoints (one per pin net). Body axis runs from PIN_1 → PIN_2.
+    """
+    pn = dict(uv.pin_nets or {})
+    if len(pn) < 2:
+        return None
+    pins = list(pn.keys())[:2]
+    nets = [pn[pins[0]], pn[pins[1]]]
+    eps_per_pin: list[list[tuple[float, float]]] = []
+    for net in nets:
+        eps: list[tuple[float, float]] = []
+        for eid in edges_by_net.get(net, []):
+            if "_to_" in eid:
+                continue
+            route = skeleton.routes.get(eid)
+            if route is None or not route.success or len(route.polyline_um) < 2:
+                continue
+            poly = [(p[0] / MM_TO_UM, p[1] / MM_TO_UM) for p in route.polyline_um]
+            eps.append(poly[0])
+            eps.append(poly[-1])
+        eps_per_pin.append(eps)
+    if not eps_per_pin[0] or not eps_per_pin[1]:
+        return None
+    best: tuple[float, tuple[float, float], tuple[float, float]] | None = None
+    for p1 in eps_per_pin[0]:
+        for p2 in eps_per_pin[1]:
+            k1 = (round(p1[0], 4), round(p1[1], 4))
+            k2 = (round(p2[0], 4), round(p2[1], 4))
+            if k1 in used_endpoints or k2 in used_endpoints:
+                continue
+            d = math.hypot(p1[0] - p2[0], p1[1] - p2[1])
+            if best is None or d < best[0]:
+                best = (d, p1, p2)
+    if best is None:
+        return None
+    _, p1, p2 = best
+    # Limit stretch: if endpoints are too far, fallback to None so the
+    # slot-search / legacy paths handle this UV instead.
+    fw, _fh = _footprint_size(uv)
+    if best[0] > max(5.0 * fw, 20.0):
+        return None
+    used_endpoints.add((round(p1[0], 4), round(p1[1], 4)))
+    used_endpoints.add((round(p2[0], 4), round(p2[1], 4)))
+    angle = math.degrees(math.atan2(p2[1] - p1[1], p2[0] - p1[0]))
+    rotation = _quantize_rotation(angle)
+    anchor_x = (p1[0] + p2[0]) * 0.5
+    anchor_y = (p1[1] + p2[1]) * 0.5
+    pads = (
+        PinPlacement(pin=pins[0], point=Point(x=float(p1[0]), y=float(p1[1]))),
+        PinPlacement(pin=pins[1], point=Point(x=float(p2[0]), y=float(p2[1]))),
+    )
+    return ComponentPlacement(
+        component=uv_name,
+        anchor=Point(x=anchor_x, y=anchor_y),
+        rotation_deg=rotation,
+        pads=pads,
     )
 
 
@@ -284,8 +436,22 @@ def _legacy_anchor_placement(
     if anchor_pad is None:
         return None
     local_x, local_y = _local_pin_offset(uv, anchor_pin)
-    placement_x = anchor_xy[0] - (cos_t * local_x - sin_t * local_y)
-    placement_y = anchor_xy[1] - (sin_t * local_x + cos_t * local_y)
+    # WI-G2: shift anchor pin off trace centerline so pad outer edge sits
+    # on trace edge. Look up the host edge width on reference_net.
+    trace_w = 0.5
+    if uv.uv_meta.reference_net:
+        for eid in edges_by_net.get(uv.uv_meta.reference_net, []):
+            if "_to_" in eid:
+                continue
+            edge = artifact.edges.get(eid)
+            if edge and edge.width is not None:
+                trace_w = float(edge.width)
+                break
+    sdx, sdy = _edge_align_shift(uv, anchor_pin, rotation, trace_w)
+    anchor_world_x = anchor_xy[0] + sdx
+    anchor_world_y = anchor_xy[1] + sdy
+    placement_x = anchor_world_x - (cos_t * local_x - sin_t * local_y)
+    placement_y = anchor_world_y - (sin_t * local_x + cos_t * local_y)
 
     pad_placements = []
     for pad in uv.pads:

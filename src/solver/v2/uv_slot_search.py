@@ -30,6 +30,7 @@ class SlotCandidate:
     rotation_deg: float  # quantised {0, 90, 180, -90}
     clearance: float  # min distance from RLC bbox to nearest obstacle (mm)
     host_pin_xy: Point  # point on host trace where anchor pin attaches
+    trace_width: float = 0.5  # WI-G2: host trace width (mm)
 
 
 def _polyline_length(poly: list[Point]) -> float:
@@ -263,6 +264,7 @@ def search_slot(
                         rotation_deg=rot,
                         clearance=clr,
                         host_pin_xy=pt,
+                        trace_width=float(host_widths.get(edge_id, 0.5)),
                     )
                 )
     if not candidates:

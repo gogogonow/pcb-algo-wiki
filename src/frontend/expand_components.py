@@ -78,6 +78,16 @@ def _expand_fixed(
         abs_x = placement.x + cos_t * local_x - sin_t * local_y
         abs_y = placement.y + sin_t * local_x + cos_t * local_y
         local_orientation = float(pin.local_orientation or 0.0)
+        pad_w = (
+            float(pin.pad_geometry.width)
+            if pin.pad_geometry and pin.pad_geometry.width
+            else None
+        )
+        pad_l = (
+            float(pin.pad_geometry.length)
+            if pin.pad_geometry and pin.pad_geometry.length
+            else None
+        )
         pads.append(
             ExpandedPad(
                 component=name,
@@ -88,6 +98,8 @@ def _expand_fixed(
                 kind="fixed",
                 local_x=local_x,
                 local_y=local_y,
+                pad_width=pad_w,
+                pad_length=pad_l,
             )
         )
         xs.append(abs_x)
@@ -109,6 +121,7 @@ def _expand_fixed(
         pads=tuple(pads),
         bbox=bbox,
         uv_meta=None,
+        pin_nets=dict(component.pin_nets or {}),
     )
 
 
@@ -123,6 +136,16 @@ def _expand_uv(
     for pin_name, pin in pin_items:
         local_x = float(pin.local_x or 0.0)
         local_y = float(pin.local_y or 0.0)
+        pad_w = (
+            float(pin.pad_geometry.width)
+            if pin.pad_geometry and pin.pad_geometry.width
+            else None
+        )
+        pad_l = (
+            float(pin.pad_geometry.length)
+            if pin.pad_geometry and pin.pad_geometry.length
+            else None
+        )
         pads.append(
             ExpandedPad(
                 component=name,
@@ -133,6 +156,8 @@ def _expand_uv(
                 kind="uv_deferred",
                 local_x=local_x,
                 local_y=local_y,
+                pad_width=pad_w,
+                pad_length=pad_l,
             )
         )
     uv_meta = UvMeta(
@@ -146,6 +171,7 @@ def _expand_uv(
         pads=tuple(pads),
         bbox=None,
         uv_meta=uv_meta,
+        pin_nets=dict(component.pin_nets or {}),
     )
 
 

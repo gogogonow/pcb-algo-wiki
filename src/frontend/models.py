@@ -53,6 +53,8 @@ class ExpandedPad:
     kind: PadKind
     local_x: float = 0.0
     local_y: float = 0.0
+    pad_width: float | None = None
+    pad_length: float | None = None
 
 
 @dataclass(frozen=True)
@@ -86,6 +88,7 @@ class ComponentExpansion:
     pads: tuple[ExpandedPad, ...]
     bbox: BBox | None = None
     uv_meta: UvMeta | None = None
+    pin_nets: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
