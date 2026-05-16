@@ -115,6 +115,130 @@ def _phase_banner(phase: str, description: str, color: str) -> str:
     )
 
 
+def _phase_b_rlc_overlay(
+    geom: GeometryIR,
+    result: OrchestratorV2Result,
+    layout: V33Layout | None,
+    *,
+    px_per_mm: float = 6.0,
+    margin_mm: float = 5.0,
+) -> str:
+    """Render placed UV/RLC components with bbox + pads + GND markers (WI-D5)."""
+    if layout is None:
+        return ""
+    board_h = float(geom.board.height) + 2 * margin_mm
+
+    def _x(mm: float) -> float:
+        return (mm + margin_mm) * px_per_mm
+
+    def _y(mm: float) -> float:
+        return (board_h - (mm + margin_mm)) * px_per_mm
+
+    parts: list[str] = [
+        "<style>",
+        ".prea-rlc-bbox{fill:#ecfdf5;stroke:#0f766e;stroke-width:0.8;"
+        "stroke-dasharray:2 2;opacity:0.85;}",
+        ".prea-rlc-pad{fill:#cbd5e1;stroke:#475569;stroke-width:0.7;opacity:0.95;}",
+        ".prea-gnd-pin{fill:#f59e0b;stroke:#92400e;stroke-width:0.7;}",
+        ".phb-name-label{fill:#0f172a;font-family:Arial,sans-serif;font-size:7px;"
+        "font-weight:bold;}",
+        ".phb-net-label{fill:#7c2d12;font-family:Arial,sans-serif;font-size:6px;"
+        "font-weight:bold;}",
+        "</style>",
+        '<g class="phaseB-rlc">',
+    ]
+
+    def _emit_polygon(cls: str, pts: list[tuple[float, float]], title: str) -> str:
+        coords = " ".join(f"{_x(px):.2f},{_y(py):.2f}" for px, py in pts)
+        return f'<polygon class="{cls}" points="{coords}"><title>{escape(title)}</title></polygon>'
+
+    for comp_id, uv in sorted(result.artifact.uv_components.items()):
+        placement = geom.placements.get(comp_id)
+        if placement is None:
+            continue
+        component = layout.components.get(comp_id)
+        if component is None or component.footprint_ref is None:
+            continue
+        footprint = layout.footprints.get(component.footprint_ref)
+        if footprint is None:
+            continue
+        ax = float(placement.anchor.x)
+        ay = float(placement.anchor.y)
+        rot = float(placement.rotation_deg or 0.0)
+        cos_t = math.cos(math.radians(rot))
+        sin_t = math.sin(math.radians(rot))
+
+        def _world(
+            lx: float,
+            ly: float,
+            ax: float = ax,
+            ay: float = ay,
+            cos_t: float = cos_t,
+            sin_t: float = sin_t,
+        ) -> tuple[float, float]:
+            return (ax + cos_t * lx - sin_t * ly, ay + sin_t * lx + cos_t * ly)
+
+        bbox = uv.bbox
+        if bbox is not None:
+            local_corners = [
+                (bbox.min_x, bbox.min_y),
+                (bbox.max_x, bbox.min_y),
+                (bbox.max_x, bbox.max_y),
+                (bbox.min_x, bbox.max_y),
+            ]
+            pts = [_world(lx, ly) for lx, ly in local_corners]
+            parts.append(_emit_polygon("prea-rlc-bbox", pts, comp_id))
+
+        gnd_pins = {
+            pin_name
+            for pin_name, net_name in component.pin_nets.items()
+            if net_name.strip().upper() == "GND"
+        }
+
+        for pad in placement.pads:
+            pin = footprint.pins.get(pad.pin)
+            geom_pad = pin.pad_geometry if pin is not None else None
+            if (
+                geom_pad is None
+                or geom_pad.length is None
+                or geom_pad.width is None
+                or (geom_pad.shape or "rect").lower() != "rect"
+            ):
+                continue
+            pcx = float(pad.point.x)
+            pcy = float(pad.point.y)
+            pad_rot = rot + float(pin.local_orientation or 0.0 if pin else 0.0)
+            cp = math.cos(math.radians(pad_rot))
+            sp = math.sin(math.radians(pad_rot))
+            hl = float(geom_pad.length) / 2.0
+            hw = float(geom_pad.width) / 2.0
+            pad_pts = [
+                (pcx + cp * lx - sp * ly, pcy + sp * lx + cp * ly)
+                for lx, ly in ((-hl, -hw), (hl, -hw), (hl, hw), (-hl, hw))
+            ]
+            cls = "prea-gnd-pin" if pad.pin in gnd_pins else "prea-rlc-pad"
+            parts.append(_emit_polygon(cls, pad_pts, f"{comp_id}.{pad.pin}"))
+            if pad.pin in gnd_pins:
+                parts.append(
+                    f'<text class="phb-net-label" x="{_x(pcx)+3:.2f}" '
+                    f'y="{_y(pcy)+8:.2f}">GND</text>'
+                )
+
+        label = _prea_short_name(comp_id)
+        if bbox is not None:
+            # anchor label at upper-left corner of rotated bbox
+            lcx = (bbox.min_x + bbox.max_x) / 2.0
+            lcy = bbox.max_y
+            wx, wy = _world(lcx, lcy)
+            parts.append(
+                f'<text class="phb-name-label" x="{_x(wx):.2f}" '
+                f'y="{_y(wy)-2:.2f}" text-anchor="middle">{escape(label)}</text>'
+            )
+
+    parts.append("</g>")
+    return "".join(parts)
+
+
 def _uv_highlight_overlay(
     geom: GeometryIR, uv_names: set[str], px_per_mm: float = 6.0, margin_mm: float = 5.0
 ) -> str:
@@ -2227,7 +2351,8 @@ def _persist_phase_artefacts(
             f"UV adhesion — {uv_placed}/{uv_total} components placed (highlighted green)",
             "#15803d",
         ),
-        overlay=_uv_highlight_overlay(geom_b, uv_names),
+        overlay=_pin_label_overlay(geom_b)
+        + _phase_b_rlc_overlay(geom_b, result, layout),
         layout=layout,
     )
     artefacts["phaseB_svg"] = phase_b_svg
@@ -2255,6 +2380,18 @@ def _emit_svg(
     svg_path.parent.mkdir(parents=True, exist_ok=True)
     svg_text = render_full_layout(result.geometry, layout=layout)
     svg_path.write_text(svg_text)
+
+
+def solve_and_emit(
+    yaml_path: Path,
+    out_dir: Path,
+) -> dict[str, Path]:
+    """Test/automation entrypoint: solve a YAML layout and persist phase artefacts."""
+    layout = load_v33_layout(yaml_path)
+    result = solve_layout_v2(yaml_path)
+    return _persist_phase_artefacts(
+        result, out_dir, layout_path=yaml_path, layout=layout
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
