@@ -238,7 +238,7 @@ def _phase_a_diag_overlay(
             if key in drawn_node_positions:
                 continue
             drawn_node_positions.add(key)
-            label = node_id.split(".")[0] if "." in node_id else node_id
+            label = _prea_short_name(node_id)
             parts.append(
                 f'<text x="{_x(xy[0]):.2f}" y="{_y(xy[1]) - 4:.2f}" '
                 f'font-family="sans-serif" font-size="4.5" fill="#7c3aed" '
@@ -1055,6 +1055,7 @@ def _prea_short_name(name: str) -> str:
     out = out.replace("_universal_node", "_u")
     out = out.replace("_end_split_pad", "_sp")
     out = out.replace("_start_combiner", "_sc")
+    out = out.replace("_seg", "s")
     out = out.replace("_to_", "->")
     out = out.replace(".PIN_", ".")
     return out
