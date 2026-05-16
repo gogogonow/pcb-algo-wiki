@@ -218,21 +218,37 @@ def _phase_a_diag_overlay(
     parts: list[str] = []
     routes = result.phase_a.skeleton.routes
 
-    # Length error labels (only when target is set).
+    # preA-style: visible label is just the short edge id; detailed
+    # width/length/err information is exposed via <title> tooltips on
+    # transparent overlay lines that lie on the route midpoint.
     for edge_id, route in routes.items():
-        if not route.success or route.target_mm is None or not route.polyline_um:
+        if not route.success or not route.polyline_um:
             continue
         mid = route.polyline_um[len(route.polyline_um) // 2]
         mx, my = mid[0] / 1000.0, mid[1] / 1000.0
-        err = (route.length_mm - route.target_mm) / route.target_mm * 100.0
-        color = (
-            "#15803d" if abs(err) < 0.5 else ("#b45309" if abs(err) < 5 else "#b91c1c")
+        short = _prea_short_name(edge_id)
+        edge = result.artifact.edges.get(edge_id)
+        width_mm = float(edge.width) if (edge and edge.width is not None) else 0.0
+        if route.target_mm is not None:
+            err = (route.length_mm - route.target_mm) / route.target_mm * 100.0
+            tooltip = (
+                f"{edge_id} | w={width_mm:.2f}mm | "
+                f"L={route.length_mm:.2f}/{route.target_mm:.2f}mm "
+                f"({err:+.1f}%)"
+            )
+        else:
+            tooltip = f"{edge_id} | w={width_mm:.2f}mm | L={route.length_mm:.2f}mm"
+        # Invisible overlay marker carries the tooltip so the user can hover
+        # the label region for the full diagnostic.
+        parts.append(
+            f'<circle cx="{_x(mx):.2f}" cy="{_y(my):.2f}" r="3" '
+            f'fill="rgba(0,0,0,0)"><title>{escape(tooltip)}</title></circle>'
         )
         parts.append(
-            f'<text x="{_x(mx):.2f}" y="{_y(my) + 8:.2f}" '
-            f'font-family="sans-serif" font-size="5" fill="{color}" '
+            f'<text x="{_x(mx):.2f}" y="{_y(my) + 7:.2f}" '
+            f'font-family="sans-serif" font-size="5.5" fill="#1f2937" '
             'text-anchor="middle" stroke="#ffffff" stroke-width="0.6" paint-order="stroke">'
-            f"L={route.length_mm:.1f}/{route.target_mm:.1f}({err:+.1f}%)</text>"
+            f"{escape(short)}</text>"
         )
 
     # Failed edges marker (red dashed line between endpoints).
