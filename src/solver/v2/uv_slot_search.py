@@ -47,7 +47,12 @@ def _sample_polyline(poly: list[Point], step: float) -> list[tuple[Point, Point]
     total = _polyline_length(poly)
     if total <= 0:
         return out
-    n = max(1, int(total / step))
+    # WI-F3: ensure short edges still produce ≥1 interior sample; previously
+    # n = max(1, int(total/step)) yielded only the two endpoints for any edge
+    # shorter than `step`, silently disabling slot search for short host
+    # traces (e.g. IC1_pin1_seg2 at 1.3 mm with step 0.8 mm → 0 candidates →
+    # C7 fell back to legacy anchor with rot=0).
+    n = max(2, int(total / step))
     distances = [i * total / n for i in range(n + 1)]
     seg_idx = 0
     seg_start_dist = 0.0

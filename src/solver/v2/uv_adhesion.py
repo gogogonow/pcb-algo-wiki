@@ -250,9 +250,15 @@ def _legacy_anchor_placement(
 
     rotation = _derive_rotation(uv, anchor_pin, anchor_um, other_pin, other_um)
     if rotation is None and uv.uv_meta.reference_net:
-        # Derive perpendicular rotation from host edge direction.
+        # Derive perpendicular rotation from host edge direction (WI-F3:
+        # falls back to geometric-nearest routed edge when name match fails).
         host_angle = _host_edge_tangent(
-            anchor_endpoint, skeleton, edges_by_net, uv.uv_meta.reference_net, artifact
+            anchor_endpoint,
+            skeleton,
+            edges_by_net,
+            uv.uv_meta.reference_net,
+            artifact,
+            anchor_xy_mm=anchor_xy,
         )
         if host_angle is not None:
             rotation = host_angle + 90.0
@@ -297,27 +303,81 @@ def _host_edge_tangent(
     edges_by_net: dict[str, list[str]],
     net: str,
     artifact: FrontendArtifact,
+    *,
+    anchor_xy_mm: tuple[float, float] | None = None,
 ) -> float | None:
-    """Return the trace angle (degrees) of the host edge containing
-    anchor_endpoint, or None if not found.  Used to derive perpendicular
-    rotation for the UV body when the GND endpoint has no routed position.
+    """Return the trace angle (degrees) of the host edge near anchor_endpoint.
+
+    WI-F3: tries two strategies, in order:
+
+    1. **Name match** — find a routed host edge whose ``connections`` list
+       contains ``anchor_endpoint``.  Skips degenerate (<2 pt) routes.
+    2. **Geometric nearest** — if (1) fails (e.g. the matching edge is a
+       1-point stub or anchor_endpoint is a synthetic id absent from any
+       connections list), pick the routed edge whose polyline lies closest
+       to ``anchor_xy_mm`` and return its overall tangent.
+
+    Returns None only when no usable routed edge exists on the net.
     """
+
+    def _route_tangent(poly_um: list[tuple[int, int]]) -> float | None:
+        if len(poly_um) < 2:
+            return None
+        dx = poly_um[-1][0] - poly_um[0][0]
+        dy = poly_um[-1][1] - poly_um[0][1]
+        if dx == 0 and dy == 0:
+            return None
+        return math.degrees(math.atan2(dy, dx))
+
+    # Strategy 1: name match on edge.connections.
     for eid in edges_by_net.get(net, []):
         edge = artifact.edges.get(eid)
-        if edge is None:
+        if edge is None or anchor_endpoint not in edge.connections:
             continue
-        if anchor_endpoint not in edge.connections:
+        route = skeleton.routes.get(eid)
+        if route is None or not route.success:
             continue
+        angle = _route_tangent(route.polyline_um)
+        if angle is not None:
+            return angle
+
+    # Strategy 2: geometric nearest routed edge in the net.
+    if anchor_xy_mm is None:
+        return None
+    ax, ay = anchor_xy_mm
+    best_d = math.inf
+    best_angle: float | None = None
+    for eid in edges_by_net.get(net, []):
         route = skeleton.routes.get(eid)
         if route is None or not route.success or len(route.polyline_um) < 2:
             continue
-        poly = route.polyline_um
-        dx = poly[-1][0] - poly[0][0]
-        dy = poly[-1][1] - poly[0][1]
-        if dx == 0 and dy == 0:
-            continue
-        return math.degrees(math.atan2(dy, dx))
-    return None
+        poly_mm = [(p[0] / MM_TO_UM, p[1] / MM_TO_UM) for p in route.polyline_um]
+        for j in range(len(poly_mm) - 1):
+            d = _point_seg_distance_mm((ax, ay), poly_mm[j], poly_mm[j + 1])
+            if d < best_d:
+                best_d = d
+                best_angle = _route_tangent(route.polyline_um)
+    return best_angle
+
+
+def _point_seg_distance_mm(
+    p: tuple[float, float],
+    a: tuple[float, float],
+    b: tuple[float, float],
+) -> float:
+    """Shortest distance from point p to segment ab (mm)."""
+    px, py = p
+    ax, ay = a
+    bx, by = b
+    dx, dy = bx - ax, by - ay
+    seg_len_sq = dx * dx + dy * dy
+    if seg_len_sq <= 0:
+        return math.hypot(px - ax, py - ay)
+    t = ((px - ax) * dx + (py - ay) * dy) / seg_len_sq
+    t = max(0.0, min(1.0, t))
+    cx = ax + t * dx
+    cy = ay + t * dy
+    return math.hypot(px - cx, py - cy)
 
 
 def _derive_rotation(
