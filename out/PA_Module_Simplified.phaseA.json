@@ -1,6 +1,25 @@
 {
   "routes": [
     {
+      "edge_id": "IC1_pin2_seg1",
+      "polyline_um": [
+        [
+          9200,
+          30000
+        ],
+        [
+          9200,
+          24200
+        ]
+      ],
+      "length_mm": 5.8,
+      "target_mm": 5.75,
+      "length_err_pct": 0.8695652173913012,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
       "edge_id": "IC1_pin1_seg1",
       "polyline_um": [
         [
@@ -23,21 +42,17 @@
       "edge_id": "IC1_pin1_seg4",
       "polyline_um": [
         [
-          15000,
+          16000,
           24200
-        ],
-        [
-          15000,
-          20600
         ],
         [
           16000,
           19600
         ]
       ],
-      "length_mm": 5.0142135623730955,
+      "length_mm": 4.6,
       "target_mm": 4.67,
-      "length_err_pct": 7.370740093642302,
+      "length_err_pct": -1.498929336188443,
       "success": true,
       "rip_up_round": 0,
       "failure_reason": null
@@ -57,6 +72,25 @@
       "length_mm": 4.6,
       "target_mm": 4.67,
       "length_err_pct": -1.498929336188443,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "IC1_pin2_seg2",
+      "polyline_um": [
+        [
+          7200,
+          27800
+        ],
+        [
+          6000,
+          27800
+        ]
+      ],
+      "length_mm": 1.2,
+      "target_mm": 1.29,
+      "length_err_pct": -6.976744186046517,
       "success": true,
       "rip_up_round": 0,
       "failure_reason": null
@@ -111,21 +145,82 @@
       "edge_id": "IC1_pin1_seg3",
       "polyline_um": [
         [
-          15000,
-          24200
-        ],
-        [
-          16600,
-          24200
+          16800,
+          25800
         ],
         [
           18200,
           25800
         ]
       ],
-      "length_mm": 3.862741699796952,
+      "length_mm": 1.4,
       "target_mm": 1.47,
-      "length_err_pct": 162.77154420387427,
+      "length_err_pct": -4.761904761904766,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "IC1_pin2_seg3",
+      "polyline_um": [
+        [
+          7200,
+          25800
+        ],
+        [
+          5800,
+          25800
+        ]
+      ],
+      "length_mm": 1.4,
+      "target_mm": 1.47,
+      "length_err_pct": -4.761904761904766,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "IC1_pin1_seg6",
+      "polyline_um": [
+        [
+          20600,
+          14800
+        ],
+        [
+          35000,
+          400
+        ],
+        [
+          35000,
+          0
+        ]
+      ],
+      "length_mm": 20.76467529817257,
+      "target_mm": 20.0,
+      "length_err_pct": 3.8233764908628487,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "IC1_pin2_seg6",
+      "polyline_um": [
+        [
+          13800,
+          14800
+        ],
+        [
+          28000,
+          600
+        ],
+        [
+          28000,
+          0
+        ]
+      ],
+      "length_mm": 20.68183258569795,
+      "target_mm": 20.0,
+      "length_err_pct": 3.409162928489753,
       "success": true,
       "rip_up_round": 0,
       "failure_reason": null
@@ -221,58 +316,6 @@
       "failure_reason": null
     },
     {
-      "edge_id": "IC1_pin2_seg1",
-      "polyline_um": [
-        [
-          9200,
-          30000
-        ],
-        [
-          9200,
-          24200
-        ]
-      ],
-      "length_mm": 5.8,
-      "target_mm": 5.75,
-      "length_err_pct": 0.8695652173913012,
-      "success": true,
-      "rip_up_round": 1,
-      "failure_reason": null
-    },
-    {
-      "edge_id": "IC1_pin2_seg3",
-      "polyline_um": [
-        [
-          9200,
-          24200
-        ],
-        [
-          7400,
-          24200
-        ],
-        [
-          5800,
-          25800
-        ]
-      ],
-      "length_mm": 4.062741699796952,
-      "target_mm": 1.47,
-      "length_err_pct": 176.37698638074505,
-      "success": true,
-      "rip_up_round": 2,
-      "failure_reason": null
-    },
-    {
-      "edge_id": "IC1_pin2_seg2",
-      "polyline_um": [],
-      "length_mm": 0.0,
-      "target_mm": 1.29,
-      "length_err_pct": -100.0,
-      "success": false,
-      "rip_up_round": 2,
-      "failure_reason": "no path"
-    },
-    {
       "edge_id": "RF_INPUT_to_IC1",
       "polyline_um": [
         [
@@ -335,12 +378,8 @@
           64800
         ],
         [
-          14800,
-          64800
-        ],
-        [
           7200,
-          57200
+          56800
         ],
         [
           7200,
@@ -351,51 +390,26 @@
           38000
         ],
         [
-          12800,
+          16000,
           38000
+        ],
+        [
+          16400,
+          38400
+        ],
+        [
+          16400,
+          38800
         ]
       ],
-      "length_mm": 35.713708498984765,
+      "length_mm": 39.645079348883236,
       "target_mm": 25.5,
-      "length_err_pct": 40.053758819548094,
+      "length_err_pct": 55.47089940738525,
       "success": true,
       "rip_up_round": 0,
       "failure_reason": null
-    },
-    {
-      "edge_id": "IC1_pin1_seg6",
-      "polyline_um": [
-        [
-          20600,
-          14800
-        ],
-        [
-          35000,
-          400
-        ],
-        [
-          35000,
-          0
-        ]
-      ],
-      "length_mm": 20.76467529817257,
-      "target_mm": 20.0,
-      "length_err_pct": 3.8233764908628487,
-      "success": true,
-      "rip_up_round": 2,
-      "failure_reason": null
-    },
-    {
-      "edge_id": "IC1_pin2_seg6",
-      "polyline_um": [],
-      "length_mm": 0.0,
-      "target_mm": 20.0,
-      "length_err_pct": -100.0,
-      "success": false,
-      "rip_up_round": 2,
-      "failure_reason": "max_expansions exhausted"
     }
   ],
   "rip_up_rounds": 2,
-  "wall_seconds": 3.110162291995948
+  "wall_seconds": 1.8616691310016904
 }

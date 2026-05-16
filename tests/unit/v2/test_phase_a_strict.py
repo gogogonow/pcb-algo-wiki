@@ -144,3 +144,48 @@ def test_phase_a_parallel_diagonal_pin_segs_route_successfully() -> None:
         route = result.phase_a.skeleton.routes.get(edge_id)
         assert route is not None, f"{edge_id} missing from skeleton routes"
         assert route.success, f"{edge_id} failed: {route.failure_reason!r}"
+
+
+@pytest.mark.skipif(not YAML_PATH.exists(), reason="PA yaml missing")
+def test_phase_a_ic_pin_first_leg_along_orientation() -> None:
+    """IC pin first leg must exit along the pad's local_orientation (WI-B4).
+
+    Pins 1/2 of IC1 face south (orientation=-90); pins 3/4 face north
+    (orientation=+90). The first polyline segment from those pads must be
+    axial and pointing the right way.
+    """
+    result = solve_layout_v2(str(YAML_PATH))
+
+    pin_dir_y = {
+        "IC1_pin1_seg1": -1,  # PIN_1 south
+        "IC1_pin2_seg1": -1,  # PIN_2 south
+    }
+    for edge_id, want_sign in pin_dir_y.items():
+        route = result.phase_a.skeleton.routes[edge_id]
+        assert route.success, f"{edge_id} did not route"
+        pts = route.polyline_um
+        assert len(pts) >= 2
+        dx = pts[1][0] - pts[0][0]
+        dy = pts[1][1] - pts[0][1]
+        # First leg should be axial (purely vertical) and pointing south.
+        assert dx == 0, f"{edge_id} first leg not vertical: dx={dx}"
+        assert (dy < 0) == (
+            want_sign < 0
+        ), f"{edge_id} first leg direction wrong (dy={dy}, want sign {want_sign})"
+
+
+@pytest.mark.skipif(not YAML_PATH.exists(), reason="PA yaml missing")
+def test_phase_a_board_frame_endpoint_exits_inward() -> None:
+    """Routes whose endpoint sits on the board frame must exit inward (WI-B5).
+
+    RF_INPUT_to_IC1 starts at TP3 on the y=85 top edge; its first leg
+    must go south (into the board), not skim along the edge.
+    """
+    result = solve_layout_v2(str(YAML_PATH))
+    route = result.phase_a.skeleton.routes["RF_INPUT_to_IC1"]
+    assert route.success
+    pts = route.polyline_um
+    dx = pts[1][0] - pts[0][0]
+    dy = pts[1][1] - pts[0][1]
+    assert dx == 0, f"first leg should be axial, dx={dx}"
+    assert dy < 0, f"first leg should head south (inward), dy={dy}"

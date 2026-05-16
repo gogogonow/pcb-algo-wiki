@@ -133,6 +133,107 @@ def _build_routing_plan(
     return out
 
 
+def _orientation_unit(orient_deg: float) -> tuple[float, float]:
+    """Convert orientation in degrees (CCW from +x) to a unit vector."""
+    import math as _m
+
+    rad = _m.radians(orient_deg)
+    return (_m.cos(rad), _m.sin(rad))
+
+
+def _build_pin_orientations(
+    artifact: FrontendArtifact,
+) -> dict[str, tuple[float, float]]:
+    """Map ``"Component.PIN_N" -> (ux, uy)`` for fixed pads with orientation.
+
+    Used to force the first leg of a microstrip route to escape along the
+    pad's local_orientation, matching the physical pad anatomy (a pin
+    pointing south must launch its trace going south, not diagonally).
+    """
+    out: dict[str, tuple[float, float]] = {}
+    for comp_name, comp in artifact.components.items():
+        if comp.placement_kind != "fixed":
+            continue
+        for pad in comp.pads:
+            if pad.orientation is None:
+                continue
+            key = f"{comp_name}.{pad.pin}"
+            out[key] = _orientation_unit(pad.orientation)
+    return out
+
+
+def _board_frame_inward(
+    xy: tuple[float, float],
+    board_w: float,
+    board_h: float,
+    tol: float = 0.05,
+) -> tuple[float, float] | None:
+    """If ``xy`` sits on a board frame, return the inward unit normal."""
+    x, y = xy
+    if abs(y) <= tol:
+        return (0.0, 1.0)
+    if abs(y - board_h) <= tol:
+        return (0.0, -1.0)
+    if abs(x) <= tol:
+        return (1.0, 0.0)
+    if abs(x - board_w) <= tol:
+        return (-1.0, 0.0)
+    return None
+
+
+def _compute_escape_stub(
+    endpoint: str,
+    xy: tuple[float, float],
+    width_mm: float,
+    pin_orient: dict[str, tuple[float, float]],
+    board_w: float,
+    board_h: float,
+    clearance_mm: float,
+    other_xy: tuple[float, float] | None = None,
+) -> tuple[tuple[float, float], tuple[float, float]] | None:
+    """Return (stub_anchor_xy_mm, unit_dir) for a forced escape leg.
+
+    Priority:
+      1. IC fixed pad with known orientation whose direction agrees with
+         the bearing to the other endpoint → escape along orientation.
+      2. Endpoint sits on board frame → escape inward along the normal
+         (regardless of any stale pin orientation that may point outward).
+      3. Otherwise no stub.
+
+    ``other_xy`` is the opposite endpoint of the same edge. If supplied,
+    we filter out pin orientations that would force a U-turn (orientation
+    dot bearing < 0) — those usually indicate that the universal node was
+    placed against the pin axis and adding a stub would only hurt.
+    """
+    frame_dir = _board_frame_inward(xy, board_w, board_h)
+    direction = pin_orient.get(endpoint)
+    if direction is not None and other_xy is not None:
+        bearing = (other_xy[0] - xy[0], other_xy[1] - xy[1])
+        bearing_len = (bearing[0] ** 2 + bearing[1] ** 2) ** 0.5
+        if bearing_len > 1e-6:
+            dot = (direction[0] * bearing[0] + direction[1] * bearing[1]) / bearing_len
+            if dot < 0.2:
+                # Orientation disagrees with reach direction; skip stub.
+                direction = None
+    if direction is None:
+        direction = frame_dir
+    elif frame_dir is not None:
+        # Endpoint on board frame: prefer inward frame normal so the trace
+        # never starts by skimming along (or off) the board edge.
+        if direction[0] * frame_dir[0] + direction[1] * frame_dir[1] < 0.2:
+            direction = frame_dir
+    if direction is None:
+        return None
+    base_stub = max(width_mm * 2.0, clearance_mm + 0.6, 1.2)
+    if other_xy is not None:
+        dist = ((other_xy[0] - xy[0]) ** 2 + (other_xy[1] - xy[1]) ** 2) ** 0.5
+        # Cap stub at 1/3 of the start→goal distance so we never overshoot.
+        base_stub = min(base_stub, max(0.6, dist * 0.33))
+    stub_len = base_stub
+    anchor = (xy[0] + direction[0] * stub_len, xy[1] + direction[1] * stub_len)
+    return anchor, direction
+
+
 def _make_grid(
     artifact: FrontendArtifact,
     *,
@@ -300,6 +401,9 @@ def route_skeleton(
     grid = _make_grid(artifact, clearance_mm=clearance_mm, config=config)
     pad_owners = _carve_pad_corridor(grid, artifact, plan)
     routes_plan = _build_routing_plan(artifact.edges.values(), plan)
+    pin_orient = _build_pin_orientations(artifact)
+    board_w = float(artifact.board.get("width", 40.0))
+    board_h = float(artifact.board.get("height", 100.0))
 
     report = SkeletonReport()
     pending = list(routes_plan)
@@ -381,8 +485,50 @@ def route_skeleton(
                 if shared_endpoint:
                     ignore.append(f"route:{sibling_id}")
             ignore_tuple = tuple(ignore)
-            start_um = (int(start[0] * MM_TO_UM), int(start[1] * MM_TO_UM))
-            goal_um = (int(goal[0] * MM_TO_UM), int(goal[1] * MM_TO_UM))
+            # Forced escape stubs: IC pins exit along local_orientation;
+            # board-frame terminals exit inward along the normal. The A*
+            # search runs between the stub anchors; we prepend / append the
+            # straight stub leg afterwards so the trace honours pin anatomy
+            # and never crosses the board frame.
+            start_stub = _compute_escape_stub(
+                ep.start_endpoint,
+                start,
+                ep.width_mm,
+                pin_orient,
+                board_w,
+                board_h,
+                clearance_mm,
+                other_xy=goal,
+            )
+            goal_stub = _compute_escape_stub(
+                ep.goal_endpoint,
+                goal,
+                ep.width_mm,
+                pin_orient,
+                board_w,
+                board_h,
+                clearance_mm,
+                other_xy=start,
+            )
+            astar_start = start_stub[0] if start_stub else start
+            astar_goal = goal_stub[0] if goal_stub else goal
+            start_um = (
+                int(astar_start[0] * MM_TO_UM),
+                int(astar_start[1] * MM_TO_UM),
+            )
+            goal_um = (
+                int(astar_goal[0] * MM_TO_UM),
+                int(astar_goal[1] * MM_TO_UM),
+            )
+            # If the stub anchor is blocked under the active ignore set, drop
+            # the stub (avoid letting A* snap to a far-away free cell which
+            # would create overshoots).
+            if start_stub and grid.is_blocked(*start_um, ignore_labels=ignore_tuple):
+                start_stub = None
+                start_um = (int(start[0] * MM_TO_UM), int(start[1] * MM_TO_UM))
+            if goal_stub and grid.is_blocked(*goal_um, ignore_labels=ignore_tuple):
+                goal_stub = None
+                goal_um = (int(goal[0] * MM_TO_UM), int(goal[1] * MM_TO_UM))
             max_len_um: int | None = None
             if ep.target_length_mm is not None:
                 # Cap upper-length to 1.3× target. The post-Phase-A meander
@@ -401,10 +547,44 @@ def route_skeleton(
             )
             if path.success and path.points_um:
                 width_um = int(ep.width_mm * MM_TO_UM)
+                pts = list(path.points_um)
+                # Prepend / append straight stub legs so the trace exits the
+                # pad along its physical orientation (or inward from a
+                # board frame). Without this, A* may diverge diagonally
+                # from the very first cell.
+                if start_stub is not None:
+                    # Align the real start onto the stub's axial line by
+                    # snapping the perpendicular coordinate to the A* start.
+                    s_dir = start_stub[1]
+                    if abs(s_dir[0]) < 1e-6:  # vertical stub
+                        real_start_um = (pts[0][0], int(start[1] * MM_TO_UM))
+                    elif abs(s_dir[1]) < 1e-6:  # horizontal stub
+                        real_start_um = (int(start[0] * MM_TO_UM), pts[0][1])
+                    else:
+                        real_start_um = (
+                            int(start[0] * MM_TO_UM),
+                            int(start[1] * MM_TO_UM),
+                        )
+                    if pts and pts[0] != real_start_um:
+                        pts.insert(0, real_start_um)
+                if goal_stub is not None:
+                    g_dir = goal_stub[1]
+                    if abs(g_dir[0]) < 1e-6:
+                        real_goal_um = (pts[-1][0], int(goal[1] * MM_TO_UM))
+                    elif abs(g_dir[1]) < 1e-6:
+                        real_goal_um = (int(goal[0] * MM_TO_UM), pts[-1][1])
+                    else:
+                        real_goal_um = (
+                            int(goal[0] * MM_TO_UM),
+                            int(goal[1] * MM_TO_UM),
+                        )
+                    if pts and pts[-1] != real_goal_um:
+                        pts.append(real_goal_um)
+                stubbed = tuple(pts)
                 # Strict 45°: chamfer 90° corners. Chamfer size = max(width,
                 # 2 grid steps) so the triangular cap is always visible.
                 chamfer_um = max(width_um, config.step_um * 2)
-                chamfered = _chamfer_90deg_corners(path.points_um, chamfer_um)
+                chamfered = _chamfer_90deg_corners(stubbed, chamfer_um)
                 grid.add_routed_polyline(
                     chamfered,
                     width_um=width_um,

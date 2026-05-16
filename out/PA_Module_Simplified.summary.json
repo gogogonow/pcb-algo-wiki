@@ -1,33 +1,24 @@
 {
   "project": "PA_Module_Simplified",
-  "status": "FEASIBLE",
+  "status": "OPTIMAL",
   "phase_a": {
-    "routed": 17,
+    "routed": 19,
     "total": 19,
     "rip_up_rounds": 2,
-    "wall_s": 3.110162291995948,
-    "max_len_err_pct": 176.37698638074505,
-    "failed": [
-      {
-        "edge_id": "IC1_pin2_seg2",
-        "reason": "no path"
-      },
-      {
-        "edge_id": "IC1_pin2_seg6",
-        "reason": "max_expansions exhausted"
-      }
-    ]
+    "wall_s": 1.8616691310016904,
+    "max_len_err_pct": 55.47089940738525,
+    "failed": []
   },
   "phase_b": {
     "uv_placed": 8,
     "uv_total": 8,
-    "wall_s": 0.00017844501417130232,
+    "wall_s": 0.00016889499966055155,
     "failed": []
   },
   "phase_c": {
     "flex_routed": 0,
     "flex_failed": [],
-    "wall_s": 0.0549855119897984
+    "wall_s": 0.055757177993655205
   },
-  "wall_total_s": 3.165326248999918
+  "wall_total_s": 1.9175952039950062
 }
