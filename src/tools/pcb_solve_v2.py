@@ -144,6 +144,8 @@ def _phase_b_rlc_overlay(
         "font-weight:bold;}",
         ".phb-net-label{fill:#7c2d12;font-family:Arial,sans-serif;font-size:6px;"
         "font-weight:bold;}",
+        ".phb-pin-label{fill:#111827;font-family:Arial,sans-serif;font-size:5px;"
+        "font-weight:bold;stroke:#ffffff;stroke-width:0.6;paint-order:stroke;}",
         "</style>",
         '<g class="phaseB-rlc">',
     ]
@@ -218,6 +220,15 @@ def _phase_b_rlc_overlay(
             ]
             cls = "prea-gnd-pin" if pad.pin in gnd_pins else "prea-rlc-pad"
             parts.append(_emit_polygon(cls, pad_pts, f"{comp_id}.{pad.pin}"))
+            # WI-F2: render PIN short label on top of pad polygon so users can
+            # tell PIN_1 from PIN_2 (the base _pin_label_overlay skips UVs to
+            # avoid being covered by the bbox).
+            pin_label_text = _prea_short_name(f"{comp_id}.{pad.pin}")
+            parts.append(
+                f'<text class="phb-pin-label" x="{_x(pcx):.2f}" '
+                f'y="{_y(pcy) - 3:.2f}" text-anchor="middle">'
+                f"{escape(pin_label_text)}</text>"
+            )
             if pad.pin in gnd_pins:
                 parts.append(
                     f'<text class="phb-net-label" x="{_x(pcx)+3:.2f}" '
@@ -296,9 +307,18 @@ def _pin_label_text(pin: str) -> str:
 
 
 def _pin_label_overlay(
-    geom: GeometryIR, px_per_mm: float = 6.0, margin_mm: float = 5.0
+    geom: GeometryIR,
+    *,
+    skip_components: frozenset[str] = frozenset(),
+    px_per_mm: float = 6.0,
+    margin_mm: float = 5.0,
 ) -> str:
-    """SVG overlay to show per-pad pin numbers from GeometryIR placements."""
+    """SVG overlay to show per-pad pin numbers from GeometryIR placements.
+
+    WI-F2: ``skip_components`` lets callers exclude UV/RLC components whose
+    pad labels are rendered by ``_phase_b_rlc_overlay`` on top of the bbox /
+    pad polygons (otherwise the bbox covers these labels).
+    """
     board_h = float(geom.board.height) + 2 * margin_mm
 
     def _x(mm: float) -> float:
@@ -308,7 +328,9 @@ def _pin_label_overlay(
         return (board_h - (mm + margin_mm)) * px_per_mm
 
     parts: list[str] = []
-    for placement in geom.placements.values():
+    for comp_name, placement in geom.placements.items():
+        if comp_name in skip_components:
+            continue
         for pad in placement.pads:
             px = float(pad.point.x)
             py = float(pad.point.y)
@@ -2346,7 +2368,10 @@ def _persist_phase_artefacts(
             f"UV adhesion — {uv_placed}/{uv_total} components placed (highlighted green)",
             "#15803d",
         ),
-        overlay=_pin_label_overlay(geom_b)
+        overlay=_pin_label_overlay(
+            geom_b,
+            skip_components=frozenset(result.artifact.uv_components.keys()),
+        )
         + _phase_a_diag_overlay(result, geom_b)
         + _phase_b_rlc_overlay(geom_b, result, layout),
         layout=layout,
