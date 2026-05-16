@@ -180,6 +180,60 @@
       "failure_reason": null
     },
     {
+      "edge_id": "RF_INPUT_to_IC1",
+      "polyline_um": [
+        [
+          25000,
+          85000
+        ],
+        [
+          25000,
+          77800
+        ],
+        [
+          9200,
+          62000
+        ],
+        [
+          9200,
+          40000
+        ]
+      ],
+      "length_mm": 51.5445742854949,
+      "target_mm": 80.0,
+      "length_err_pct": -35.56928214313137,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
+      "edge_id": "PWR_VDD_bus",
+      "polyline_um": [
+        [
+          16600,
+          63600
+        ],
+        [
+          16600,
+          48800
+        ],
+        [
+          15000,
+          47200
+        ],
+        [
+          15000,
+          40000
+        ]
+      ],
+      "length_mm": 24.26274169979695,
+      "target_mm": 25.5,
+      "length_err_pct": -4.851993334129603,
+      "success": true,
+      "rip_up_round": 0,
+      "failure_reason": null
+    },
+    {
       "edge_id": "IC1_pin1_seg6",
       "polyline_um": [
         [
@@ -187,17 +241,25 @@
           14800
         ],
         [
+          33200,
+          2200
+        ],
+        [
+          34100,
+          2200
+        ],
+        [
           35000,
-          400
+          1300
         ],
         [
           35000,
           0
         ]
       ],
-      "length_mm": 20.76467529817257,
+      "length_mm": 21.291883092036784,
       "target_mm": 20.0,
-      "length_err_pct": 3.8233764908628487,
+      "length_err_pct": 6.459415460183919,
       "success": true,
       "rip_up_round": 0,
       "failure_reason": null
@@ -210,17 +272,25 @@
           14800
         ],
         [
+          26400,
+          2200
+        ],
+        [
+          27200,
+          2200
+        ],
+        [
           28000,
-          600
+          1400
         ],
         [
           28000,
           0
         ]
       ],
-      "length_mm": 20.68183258569795,
+      "length_mm": 21.15046173579947,
       "target_mm": 20.0,
-      "length_err_pct": 3.409162928489753,
+      "length_err_pct": 5.752308678997355,
       "success": true,
       "rip_up_round": 0,
       "failure_reason": null
@@ -314,102 +384,8 @@
       "success": true,
       "rip_up_round": 0,
       "failure_reason": null
-    },
-    {
-      "edge_id": "RF_INPUT_to_IC1",
-      "polyline_um": [
-        [
-          25000,
-          85000
-        ],
-        [
-          25000,
-          79560
-        ],
-        [
-          25400,
-          79160
-        ],
-        [
-          38828,
-          79160
-        ],
-        [
-          39228,
-          78760
-        ],
-        [
-          39228,
-          74160
-        ],
-        [
-          38828,
-          73760
-        ],
-        [
-          25400,
-          73760
-        ],
-        [
-          25000,
-          73360
-        ],
-        [
-          25000,
-          55800
-        ],
-        [
-          9200,
-          40000
-        ]
-      ],
-      "length_mm": 79.06331598529187,
-      "target_mm": 80.0,
-      "length_err_pct": -1.1708550183851685,
-      "success": true,
-      "rip_up_round": 2,
-      "failure_reason": null
-    },
-    {
-      "edge_id": "PWR_VDD_bus",
-      "polyline_um": [
-        [
-          15200,
-          64800
-        ],
-        [
-          7200,
-          56800
-        ],
-        [
-          7200,
-          38400
-        ],
-        [
-          7600,
-          38000
-        ],
-        [
-          16000,
-          38000
-        ],
-        [
-          16400,
-          38400
-        ],
-        [
-          16400,
-          38800
-        ]
-      ],
-      "length_mm": 39.645079348883236,
-      "target_mm": 25.5,
-      "length_err_pct": 55.47089940738525,
-      "success": true,
-      "rip_up_round": 0,
-      "failure_reason": null
     }
   ],
-  "rip_up_rounds": 2,
-  "wall_seconds": 1.8616691310016904
+  "rip_up_rounds": 0,
+  "wall_seconds": 0.2742112520209048
 }

@@ -153,9 +153,8 @@ def test_meander_report_has_correct_fields() -> None:
 
 def test_meander_multiple_edges() -> None:
     """Two edges both needing meanders → both processed independently."""
-    pts = (Point(x=0.0, y=0.0), Point(x=50.0, y=0.0))
-    r1 = _route("E1", 1.0, pts)
-    r2 = _route("E2", 0.5, pts)
+    r1 = _route("E1", 1.0, (Point(x=0.0, y=20.0), Point(x=50.0, y=20.0)))
+    r2 = _route("E2", 0.5, (Point(x=0.0, y=80.0), Point(x=50.0, y=80.0)))
     g = _geom(r1, r2)
     ir = _ir(
         {
