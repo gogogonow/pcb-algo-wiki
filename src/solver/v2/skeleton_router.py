@@ -311,8 +311,13 @@ def route_skeleton(
         report.rip_up_rounds = round_idx
         next_pending: list[EdgeRoutingPlan] = []
         for ep in pending:
-            start = plan.endpoint_xy.get(ep.start_endpoint)
-            goal = plan.endpoint_xy.get(ep.goal_endpoint)
+            edge_overrides = plan.edge_endpoint_xy.get(ep.edge_id, {})
+            start = edge_overrides.get(
+                ep.start_endpoint, plan.endpoint_xy.get(ep.start_endpoint)
+            )
+            goal = edge_overrides.get(
+                ep.goal_endpoint, plan.endpoint_xy.get(ep.goal_endpoint)
+            )
             if start is None or goal is None:
                 report.routes[ep.edge_id] = RouteOutcome(
                     edge_id=ep.edge_id,
@@ -339,7 +344,7 @@ def route_skeleton(
                     continue
                 bb = comp.bbox
                 for ep_name in (ep.start_endpoint, ep.goal_endpoint):
-                    xy = plan.endpoint_xy.get(ep_name)
+                    xy = edge_overrides.get(ep_name, plan.endpoint_xy.get(ep_name))
                     if xy is None:
                         continue
                     if bb.min_x <= xy[0] <= bb.max_x and bb.min_y <= xy[1] <= bb.max_y:

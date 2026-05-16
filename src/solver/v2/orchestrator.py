@@ -132,7 +132,7 @@ def _inject_prea_endpoints(
 
         templates = _load_junction_templates(layout_path=Path(yaml_path))
         tokens = _load_branch_offset_u_tokens(layout_path=Path(yaml_path))
-        positions, _ = solve_pre_a_from_artifact(
+        positions, edge_overrides = solve_pre_a_from_artifact(
             artifact,
             plan.endpoint_xy,
             board_w=board_w,
@@ -145,6 +145,8 @@ def _inject_prea_endpoints(
 
     for endpoint, xy in positions.items():
         plan.endpoint_xy[endpoint] = xy
+    for edge_id, overrides in edge_overrides.items():
+        plan.edge_endpoint_xy.setdefault(edge_id, {}).update(overrides)
     return plan
 
 

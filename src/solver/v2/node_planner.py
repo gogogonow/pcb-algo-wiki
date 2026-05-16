@@ -34,6 +34,17 @@ class NodePlan:
     endpoint_xy: dict[str, tuple[float, float]] = field(default_factory=dict)
     """Map ``"NodeId"`` or ``"Component.PIN_x"`` → (x_mm, y_mm)."""
 
+    edge_endpoint_xy: dict[str, dict[str, tuple[float, float]]] = field(
+        default_factory=dict
+    )
+    """Per-edge endpoint override: ``edge_id -> {endpoint_name -> (x, y)}``.
+
+    Populated by PreA's junction-template branch placement. A single junction
+    node may participate in multiple branches with distinct geometric anchors
+    (one per branch edge), so the flat ``endpoint_xy`` cannot represent it.
+    Phase A consults this map first; falls back to ``endpoint_xy`` if absent.
+    """
+
     uv_anchor_seed: dict[str, tuple[float, float]] = field(default_factory=dict)
     """Per-UV-component initial anchor pin position (mm)."""
 
