@@ -2352,6 +2352,7 @@ def _persist_phase_artefacts(
             "#15803d",
         ),
         overlay=_pin_label_overlay(geom_b)
+        + _phase_a_diag_overlay(result, geom_b)
         + _phase_b_rlc_overlay(geom_b, result, layout),
         layout=layout,
     )

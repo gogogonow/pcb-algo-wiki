@@ -182,20 +182,61 @@ def search_slot(
                 if blocked:
                     continue
                 # Clearance to OTHER host polylines (not self) and to
-                # OWN polyline excluding the segment containing pt.
+                # OWN polyline excluding the connection region around pt.
                 for other_eid, other_poly in host_polylines.items():
                     other_hw = host_widths.get(other_eid, 0.0) / 2.0
                     for j in range(len(other_poly) - 1):
-                        # Skip self-segment that touches pt
+                        a_pt = other_poly[j]
+                        b_pt = other_poly[j + 1]
                         if other_eid == edge_id:
-                            seg_dist_to_pt = _point_seg_distance(
-                                pt, other_poly[j], other_poly[j + 1]
-                            )
+                            seg_dist_to_pt = _point_seg_distance(pt, a_pt, b_pt)
                             if seg_dist_to_pt < 1e-6:
+                                # Connection segment: only block if the body
+                                # overlaps portions of the trace BEYOND the
+                                # connection buffer.  Do NOT include these
+                                # distances in the clearance score — it is
+                                # expected that the body sits right next to
+                                # the trace at the attachment point.
+                                conn_buf = max(fw, fh) / 2.0 + other_hw + min_clearance
+                                axb = b_pt[0] - a_pt[0]
+                                ayb = b_pt[1] - a_pt[1]
+                                seg_len_j = math.hypot(axb, ayb)
+                                if seg_len_j < 1e-6:
+                                    continue
+                                t_pt = max(
+                                    0.0,
+                                    min(
+                                        1.0,
+                                        (
+                                            (pt[0] - a_pt[0]) * axb
+                                            + (pt[1] - a_pt[1]) * ayb
+                                        )
+                                        / (seg_len_j * seg_len_j),
+                                    ),
+                                )
+                                t_buf = conn_buf / seg_len_j
+                                # Sub-segment before pt (block only)
+                                t1 = max(0.0, t_pt - t_buf)
+                                if t1 > 1e-3:
+                                    p1 = (a_pt[0] + t1 * axb, a_pt[1] + t1 * ayb)
+                                    if (
+                                        _rect_seg_distance(rect, a_pt, p1, other_hw)
+                                        < min_clearance
+                                    ):
+                                        blocked = True
+                                        break
+                                # Sub-segment after pt (block only)
+                                t2 = min(1.0, t_pt + t_buf)
+                                if t2 < 1.0 - 1e-3:
+                                    p2 = (a_pt[0] + t2 * axb, a_pt[1] + t2 * ayb)
+                                    if (
+                                        _rect_seg_distance(rect, p2, b_pt, other_hw)
+                                        < min_clearance
+                                    ):
+                                        blocked = True
+                                        break
                                 continue
-                        d = _rect_seg_distance(
-                            rect, other_poly[j], other_poly[j + 1], other_hw
-                        )
+                        d = _rect_seg_distance(rect, a_pt, b_pt, other_hw)
                         if d < min_clearance:
                             blocked = True
                             break

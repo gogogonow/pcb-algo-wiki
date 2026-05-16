@@ -137,7 +137,7 @@ def _place_uv(
 
     # 2. Fallback: legacy anchor-pin-on-routed-endpoint derivation.
     legacy = _legacy_anchor_placement(
-        uv_name, uv, skeleton, seed_anchor_mm, seed_rotation_deg
+        uv_name, uv, artifact, skeleton, edges_by_net, seed_anchor_mm, seed_rotation_deg
     )
     return legacy
 
@@ -159,21 +159,32 @@ def _try_slot_search(
     host_polylines: dict[str, list[tuple[float, float]]] = {}
     host_widths: dict[str, float] = {}
     for eid in host_eids:
-        route = skeleton.routes[eid]
+        route = skeleton.routes.get(eid)
+        if route is None:
+            continue
         poly_mm = [(p[0] / MM_TO_UM, p[1] / MM_TO_UM) for p in route.polyline_um]
+        if len(poly_mm) < 2:
+            continue
         host_polylines[eid] = poly_mm
         edge = artifact.edges.get(eid)
         host_widths[eid] = (
             float(edge.width) if (edge and edge.width is not None) else 0.5
         )
+    if not host_polylines:
+        return None
+    # Prefer non-seg1 edges; only fall back to seg1 when nothing else exists.
+    non_seg1 = {eid: poly for eid, poly in host_polylines.items() if "_seg1" not in eid}
+    search_poly = non_seg1 if non_seg1 else host_polylines
+    search_widths = {eid: host_widths[eid] for eid in search_poly}
     fw, fh = _footprint_size(uv)
     return search_slot(
         footprint_size=(fw, fh),
         anchor_pin_local=_local_pin_offset(uv, meta.anchor_pin),
-        host_polylines=host_polylines,
-        host_widths=host_widths,
+        host_polylines=search_poly,
+        host_widths=search_widths,
         board=board,
         obstacles=obstacles,
+        step_mm=0.8,  # smaller step → interior samples even on short seg2/seg3
     )
 
 
@@ -209,7 +220,9 @@ def _materialise_from_slot(
 def _legacy_anchor_placement(
     uv_name: str,
     uv: ComponentExpansion,
+    artifact: FrontendArtifact,
     skeleton: SkeletonReport,
+    edges_by_net: dict[str, list[str]],
     seed_anchor_mm: dict[str, tuple[float, float]],
     seed_rotation_deg: dict[str, float],
 ) -> ComponentPlacement | None:
@@ -236,6 +249,13 @@ def _legacy_anchor_placement(
         anchor_xy = seed_anchor_mm.get(uv_name, (0.0, 0.0))
 
     rotation = _derive_rotation(uv, anchor_pin, anchor_um, other_pin, other_um)
+    if rotation is None and uv.uv_meta.reference_net:
+        # Derive perpendicular rotation from host edge direction.
+        host_angle = _host_edge_tangent(
+            anchor_endpoint, skeleton, edges_by_net, uv.uv_meta.reference_net, artifact
+        )
+        if host_angle is not None:
+            rotation = host_angle + 90.0
     if rotation is None:
         rotation = float(seed_rotation_deg.get(uv_name, 0.0))
     rotation = _quantize_rotation(rotation)
@@ -269,6 +289,35 @@ def _local_pin_offset(uv: ComponentExpansion, pin: str) -> tuple[float, float]:
         if pad.pin == pin:
             return (float(pad.local_x), float(pad.local_y))
     return (0.0, 0.0)
+
+
+def _host_edge_tangent(
+    anchor_endpoint: str,
+    skeleton: SkeletonReport,
+    edges_by_net: dict[str, list[str]],
+    net: str,
+    artifact: FrontendArtifact,
+) -> float | None:
+    """Return the trace angle (degrees) of the host edge containing
+    anchor_endpoint, or None if not found.  Used to derive perpendicular
+    rotation for the UV body when the GND endpoint has no routed position.
+    """
+    for eid in edges_by_net.get(net, []):
+        edge = artifact.edges.get(eid)
+        if edge is None:
+            continue
+        if anchor_endpoint not in edge.connections:
+            continue
+        route = skeleton.routes.get(eid)
+        if route is None or not route.success or len(route.polyline_um) < 2:
+            continue
+        poly = route.polyline_um
+        dx = poly[-1][0] - poly[0][0]
+        dy = poly[-1][1] - poly[0][1]
+        if dx == 0 and dy == 0:
+            continue
+        return math.degrees(math.atan2(dy, dx))
+    return None
 
 
 def _derive_rotation(

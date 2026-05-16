@@ -20,3 +20,7 @@ def test_phase_b_svg_has_rlc_bbox_pads_and_gnd(tmp_path: Path) -> None:
     assert ">GND<" in svg
     # short labels (e.g. C1, R1) appear once placements rendered
     assert ">C1<" in svg or ">C1 " in svg or ">C1.PIN_" in svg
+    # WI-E4: phaseA/preA style labels (node IDs and edge short names) must
+    # also appear in phaseB via _phase_a_diag_overlay.
+    # The overlay renders text with fill="#1f2937" (edge short labels).
+    assert 'fill="#1f2937"' in svg
