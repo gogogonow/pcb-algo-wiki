@@ -9,6 +9,7 @@ from __future__ import annotations
 from xml.sax.saxutils import escape
 
 from schema.geometry_ir import GeometryIR
+from src.postproc.short_name import short_id
 
 _FOOTPRINT_FILL = "#fde68a"
 _FOOTPRINT_STROKE = "#92400e"
@@ -114,7 +115,7 @@ def render_geometry_svg(
         parts.append(
             f'<text x="{x(float(mid.x)) + 3:.2f}" y="{y(float(mid.y)) - 3:.2f}" '
             f'font-family="sans-serif" font-size="6" fill="{stroke}" opacity="0.85">'
-            f"{escape(route.edge_id)}</text>"
+            f"{escape(short_id(route.edge_id))}</text>"
         )
 
     # Junction / free node markers.
@@ -127,7 +128,7 @@ def render_geometry_svg(
         parts.append(
             f'<text x="{cx + 4:.2f}" y="{cy - 4:.2f}" '
             'font-family="sans-serif" font-size="7" fill="#1f2937">'
-            f"{escape(node_id)}</text>"
+            f"{escape(short_id(node_id))}</text>"
         )
 
     # Status banner.

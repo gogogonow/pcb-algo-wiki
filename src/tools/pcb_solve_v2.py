@@ -1173,16 +1173,11 @@ def _expand_endpoint_tokens(endpoint_id: str) -> tuple[str, ...]:
 
 
 def _prea_short_name(name: str) -> str:
-    out = name
-    out = out.replace("IC1_pin1_", "p1_")
-    out = out.replace("IC1_pin2_", "p2_")
-    out = out.replace("_universal_node", "_u")
-    out = out.replace("_end_split_pad", "_sp")
-    out = out.replace("_start_combiner", "_sc")
-    out = out.replace("_seg", "s")
-    out = out.replace("_to_", "->")
-    out = out.replace(".PIN_", ".")
-    return out
+    # WI-F1a: delegate to shared short_id implementation (generic across
+    # components, used both by base geom_svg renderer and overlay code).
+    from src.postproc.short_name import short_id
+
+    return short_id(name)
 
 
 def _clamp_board(
