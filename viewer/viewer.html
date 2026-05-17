@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PCB Phase Viewer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #111; color: #ccc; font-family: monospace; font-size: 12px; }
+
+  #header {
+    display: flex; align-items: center; gap: 8px;
+    height: 48px; padding: 0 12px;
+    background: #1e1e1e; border-bottom: 1px solid #333;
+    flex-shrink: 0;
+  }
+  #tab-bar { display: flex; gap: 4px; }
+  .tab {
+    padding: 4px 14px; background: #2a2a2a; border: 1px solid #444;
+    color: #aaa; cursor: pointer; border-radius: 3px; font-family: monospace; font-size: 12px;
+  }
+  .tab:hover { background: #333; color: #ddd; }
+  .tab.active { background: #0d3560; border-color: #2196f3; color: #fff; }
+  #load-btn {
+    margin-left: 12px; padding: 4px 14px;
+    background: #145214; border: 1px solid #4caf50; color: #4caf50;
+    cursor: pointer; border-radius: 3px; font-family: monospace; font-size: 12px;
+  }
+  #load-btn:hover { background: #1e7a1e; }
+  #project-name { color: #888; margin-left: 8px; font-size: 11px; }
+
+  #main {
+    display: flex; flex-direction: row;
+    width: 100%; height: calc(100% - 48px);
+  }
+
+  #filter-panel {
+    width: 200px; flex-shrink: 0;
+    background: #181818; border-right: 1px solid #2a2a2a;
+    padding: 10px 8px; overflow-y: auto;
+  }
+  #filter-panel h3 { color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .filter-item { display: flex; align-items: center; gap: 6px; padding: 3px 0; cursor: pointer; }
+  .filter-item input[type=checkbox] { cursor: pointer; accent-color: #2196f3; }
+  .filter-item label { cursor: pointer; color: #bbb; user-select: none; }
+
+  #canvas-container {
+    flex: 1 1 auto; overflow: hidden; position: relative; background: #111;
+  }
+  #canvas-container canvas { display: block; }
+
+  #prop-panel {
+    width: 260px; flex-shrink: 0;
+    background: #181818; border-left: 1px solid #2a2a2a;
+    padding: 10px 10px; overflow-y: auto;
+  }
+  #prop-panel h3 { color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .prop-row { display: flex; gap: 4px; padding: 2px 0; border-bottom: 1px solid #222; }
+  .prop-key { color: #888; min-width: 80px; }
+  .prop-val { color: #ddd; word-break: break-all; }
+  .prop-val.success { color: #4caf50; }
+  .prop-val.fail { color: #e74c3c; }
+  #prop-placeholder { color: #555; font-style: italic; margin-top: 20px; text-align: center; }
+
+  #tooltip {
+    position: fixed; pointer-events: none;
+    background: rgba(0,0,0,0.85); border: 1px solid #444;
+    color: #ddd; padding: 4px 8px; border-radius: 3px;
+    font-size: 11px; white-space: nowrap;
+    display: none; z-index: 100;
+  }
+</style>
+</head>
+<body>
+<div id="header">
+  <div id="tab-bar">
+    <button class="tab active" data-phase="preA">preA</button>
+    <button class="tab" data-phase="phaseA">phaseA</button>
+    <button class="tab" data-phase="phaseB">phaseB</button>
+    <button class="tab" data-phase="phaseC">phaseC</button>
+  </div>
+  <button id="load-btn">Load JSON ▶</button>
+  <input type="file" id="file-input" accept=".json" style="display:none">
+  <span id="project-name">no project loaded</span>
+</div>
+<div id="main">
+  <div id="filter-panel">
+    <h3>Layers</h3>
+    <div class="filter-item"><input type="checkbox" id="chk-routes" checked><label for="chk-routes">Routes / Edges</label></div>
+    <div class="filter-item"><input type="checkbox" id="chk-uv" checked><label for="chk-uv">UV Placements</label></div>
+    <div class="filter-item"><input type="checkbox" id="chk-float" checked><label for="chk-float">Floating Components</label></div>
+    <div class="filter-item"><input type="checkbox" id="chk-fixed" checked><label for="chk-fixed">Fixed Components</label></div>
+    <div class="filter-item"><input type="checkbox" id="chk-pads" checked><label for="chk-pads">Pads</label></div>
+    <div class="filter-item"><input type="checkbox" id="chk-failed" checked><label for="chk-failed">Failed Routes</label></div>
+  </div>
+  <div id="canvas-container"></div>
+  <div id="prop-panel">
+    <h3>Inspector</h3>
+    <div id="prop-content"><div id="prop-placeholder">Click an element to inspect</div></div>
+  </div>
+</div>
+<div id="tooltip"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@8/dist/pixi.min.js"></script>
+<script>
+// ─── Colour constants ────────────────────────────────────────────────────────
+const C = {
+  BG: 0x111111,
+  BOARD_FILL: 0x1a1a1a,
+  BOARD_STROKE: 0x444444,
+  COMP_FIXED_FILL: 0x333333,   COMP_FIXED_STROKE: 0x888888,
+  COMP_UV_FILL: 0x1a4d2e,      COMP_UV_STROKE: 0x4caf50,
+  COMP_FLOAT_FILL: 0x0d2b4d,   COMP_FLOAT_STROKE: 0x2196f3,
+  COMP_UNK_FILL: 0x2a2a2a,     COMP_UNK_STROKE: 0x666666,
+  PAD_FILL: 0xffffff,          PAD_STROKE: 0x555555,
+  ROUTE_RF: 0x4a90d9,
+  ROUTE_FLEX: 0xf5a623,
+  ROUTE_FAIL: 0xe74c3c,
+  EDGE_PRE: 0x888888,
+  SEL: 0xf0c040,
+  DIM_ALPHA: 0.25,
+};
+
+// ─── DataLoader ──────────────────────────────────────────────────────────────
+class DataLoader {
+  constructor(json) {
+    this.raw = json;
+    this.project = json.project;
+    this.board = json.board;
+    this.components = json.components || [];
+    this.phases = json.phases || {};
+    // lookup maps
+    this.compByRef = {};
+    for (const c of this.components) this.compByRef[c.ref] = c;
+  }
+  phaseNames() { return Object.keys(this.phases); }
+  phaseData(name) { return this.phases[name] || {}; }
+}
+
+// ─── SceneRenderer ───────────────────────────────────────────────────────────
+class SceneRenderer {
+  constructor(container) {
+    this.container = container;
+    this.app = null;
+    this.data = null;
+    this.scale = 1;
+
+    // layers
+    this.boardLayer = null;
+    this.componentLayer = null;
+    this.routeLayer = null;
+    this.highlightLayer = null;
+
+    // sub-containers for filter
+    this.layerFixedComps = null;
+    this.layerUVComps = null;
+    this.layerFloatComps = null;
+    this.layerPads = null;
+    this.layerRoutes = null;
+    this.layerFailRoutes = null;
+    this.layerEdges = null;
+
+    // interaction data
+    this.allRouteGfx = [];    // [{gfx, route, kind}]
+    this.allCompGfx = [];     // [{gfx, comp, kind}]
+    this.selectedGfx = null;
+
+    // callbacks set by InteractionMgr
+    this.onHover = null;
+    this.onHoverEnd = null;
+    this.onClick = null;
+    this.onClickEmpty = null;
+  }
+
+  async init() {
+    this.app = new PIXI.Application();
+    await this.app.init({
+      background: C.BG,
+      resizeTo: this.container,
+      antialias: true,
+    });
+    this.container.appendChild(this.app.canvas);
+    this._buildLayers();
+  }
+
+  _buildLayers() {
+    const stage = this.app.stage;
+    // world container holds board+comp+route; gets panzoom transforms
+    this.world = new PIXI.Container();
+    stage.addChild(this.world);
+
+    this.boardLayer = new PIXI.Container();
+    this.componentLayer = new PIXI.Container();
+    this.routeLayer = new PIXI.Container();
+    this.highlightLayer = new PIXI.Container();
+
+    this.layerFixedComps = new PIXI.Container();
+    this.layerUVComps    = new PIXI.Container();
+    this.layerFloatComps = new PIXI.Container();
+    this.layerPads       = new PIXI.Container();
+    this.layerRoutes     = new PIXI.Container();
+    this.layerFailRoutes = new PIXI.Container();
+    this.layerEdges      = new PIXI.Container();
+
+    this.componentLayer.addChild(this.layerFixedComps);
+    this.componentLayer.addChild(this.layerUVComps);
+    this.componentLayer.addChild(this.layerFloatComps);
+    this.componentLayer.addChild(this.layerPads);
+
+    this.routeLayer.addChild(this.layerEdges);
+    this.routeLayer.addChild(this.layerRoutes);
+    this.routeLayer.addChild(this.layerFailRoutes);
+
+    this.world.addChild(this.boardLayer);
+    this.world.addChild(this.componentLayer);
+    this.world.addChild(this.routeLayer);
+    this.world.addChild(this.highlightLayer);
+  }
+
+  // mm → screen pixel
+  sx(x_mm) {
+    const b = this.data.board;
+    return (x_mm - b.origin_x_mm) * this.scale;
+  }
+  sy(y_mm) {
+    const b = this.data.board;
+    return (b.height_mm - (y_mm - b.origin_y_mm)) * this.scale;
+  }
+
+  fitBoard() {
+    const b = this.data.board;
+    const cw = this.container.clientWidth;
+    const ch = this.container.clientHeight;
+    const margin = 40;
+    const sx = (cw - margin * 2) / b.width_mm;
+    const sy = (ch - margin * 2) / b.height_mm;
+    this.scale = Math.min(sx, sy);
+    const bw = b.width_mm * this.scale;
+    const bh = b.height_mm * this.scale;
+    this.world.x = (cw - bw) / 2;
+    this.world.y = (ch - bh) / 2;
+    this.world.scale.set(1);
+  }
+
+  clearScene() {
+    this.allRouteGfx = [];
+    this.allCompGfx = [];
+    this.selectedGfx = null;
+    for (const c of [
+      this.boardLayer, this.layerFixedComps, this.layerUVComps,
+      this.layerFloatComps, this.layerPads, this.layerRoutes,
+      this.layerFailRoutes, this.layerEdges, this.highlightLayer,
+    ]) c.removeChildren();
+  }
+
+  loadPhase(data, phaseName) {
+    this.data = data;
+    this.clearScene();
+    this.fitBoard();
+    this._drawBoard();
+    this._drawComponents(data.components);
+    const phaseData = data.phaseData(phaseName);
+    this._drawPhase(phaseData, phaseName);
+  }
+
+  _drawBoard() {
+    const b = this.data.board;
+    const g = new PIXI.Graphics();
+    const w = b.width_mm * this.scale;
+    const h = b.height_mm * this.scale;
+    g.rect(0, 0, w, h).fill(C.BOARD_FILL).stroke({ color: C.BOARD_STROKE, width: 1.5 });
+    this.boardLayer.addChild(g);
+  }
+
+  _compColors(kind) {
+    if (kind === 'fixed')    return [C.COMP_FIXED_FILL,  C.COMP_FIXED_STROKE];
+    if (kind === 'uv')       return [C.COMP_UV_FILL,    C.COMP_UV_STROKE];
+    if (kind === 'floating') return [C.COMP_FLOAT_FILL,  C.COMP_FLOAT_STROKE];
+    return [C.COMP_UNK_FILL, C.COMP_UNK_STROKE];
+  }
+
+  _compLayer(kind) {
+    if (kind === 'fixed')    return this.layerFixedComps;
+    if (kind === 'uv')       return this.layerUVComps;
+    if (kind === 'floating') return this.layerFloatComps;
+    return this.layerFloatComps;
+  }
+
+  _drawComponents(components) {
+    for (const comp of components) {
+      this._drawOneComponent(comp, comp.kind || 'unknown');
+    }
+  }
+
+  _drawOneComponent(comp, kind) {
+    const [fill, stroke] = this._compColors(kind);
+    const layer = this._compLayer(kind);
+
+    const cx = this.sx(comp.x_mm);
+    const cy = this.sy(comp.y_mm);
+    const w  = (comp.w_mm || 2) * this.scale;
+    const h  = (comp.h_mm || 2) * this.scale;
+
+    const g = new PIXI.Graphics();
+    g.rect(cx - w / 2, cy - h / 2, w, h)
+      .fill(fill)
+      .stroke({ color: stroke, width: 1 });
+
+    // ref label
+    const lbl = new PIXI.Text({
+      text: comp.ref,
+      style: { fontSize: Math.max(7, Math.min(10, w / 4)), fill: 0xcccccc, resolution: 2 },
+    });
+    lbl.x = cx - w / 2 + 2;
+    lbl.y = cy - h / 2 + 2;
+
+    g.eventMode = 'static';
+    g.cursor = 'pointer';
+    const self = this;
+    g.on('pointerover', (e) => self.onHover && self.onHover({ type: 'comp', comp, kind }, e));
+    g.on('pointerout', () => self.onHoverEnd && self.onHoverEnd());
+    g.on('pointerdown', (e) => { e.stopPropagation(); self.onClick && self.onClick({ type: 'comp', comp, kind }, g); });
+
+    layer.addChild(g);
+    layer.addChild(lbl);
+    this.allCompGfx.push({ gfx: g, comp, kind });
+
+    // draw pads
+    if (comp.pads) {
+      for (const pad of comp.pads) {
+        this._drawPad(pad);
+      }
+    }
+  }
+
+  _drawPad(pad) {
+    const px = this.sx(pad.x_mm);
+    const py = this.sy(pad.y_mm);
+    const r = Math.max(1.5, 0.3 * this.scale);
+    const g = new PIXI.Graphics();
+    g.circle(px, py, r).fill(C.PAD_FILL).stroke({ color: C.PAD_STROKE, width: 0.5 });
+    this.layerPads.addChild(g);
+  }
+
+  _drawPhase(phaseData, phaseName) {
+    // preA: draw edges as dashed lines
+    if (phaseName === 'preA' && phaseData.edges) {
+      for (const edge of phaseData.edges) {
+        this._drawPreAEdge(edge);
+      }
+    }
+    // phaseA / phaseB / phaseC: draw routes
+    if (phaseData.routes) {
+      for (const route of phaseData.routes) {
+        this._drawRoute(route, 'route');
+      }
+    }
+    // phaseC: flex routes
+    if (phaseData.flex_routes) {
+      for (const route of phaseData.flex_routes) {
+        this._drawRoute(route, 'flex');
+      }
+    }
+    // phaseB / phaseC: UV placements
+    if (phaseData.uv_placements) {
+      for (const uv of phaseData.uv_placements) {
+        const comp = {
+          ref: uv.ref,
+          x_mm: uv.anchor_x_mm, y_mm: uv.anchor_y_mm,
+          w_mm: 2, h_mm: 2,
+          rotation_deg: uv.rotation_deg || 0,
+          pads: uv.pads || [],
+        };
+        this._drawOneComponent(comp, 'uv');
+      }
+    }
+  }
+
+  _drawPreAEdge(edge) {
+    const ep = edge.endpoint_positions_mm || {};
+    const pts = Object.values(ep);
+    if (pts.length === 0) return;
+
+    const g = new PIXI.Graphics();
+    g.eventMode = 'static';
+    g.cursor = 'pointer';
+    const self = this;
+    g.on('pointerover', (e) => self.onHover && self.onHover({ type: 'edge', edge }, e));
+    g.on('pointerout', () => self.onHoverEnd && self.onHoverEnd());
+    g.on('pointerdown', (e) => { e.stopPropagation(); self.onClick && self.onClick({ type: 'edge', edge }, g); });
+
+    if (pts.length >= 2) {
+      // dashed line between first two endpoints
+      const x1 = this.sx(pts[0].x); const y1 = this.sy(pts[0].y);
+      const x2 = this.sx(pts[1].x); const y2 = this.sy(pts[1].y);
+      this._dashedLine(g, x1, y1, x2, y2, C.EDGE_PRE, Math.max(1, 0.3 * this.scale));
+    } else {
+      // single endpoint: draw a small circle
+      const x = this.sx(pts[0].x); const y = this.sy(pts[0].y);
+      g.circle(x, y, 4).stroke({ color: C.EDGE_PRE, width: 1 });
+    }
+
+    this.layerEdges.addChild(g);
+    this.allRouteGfx.push({ gfx: g, route: edge, kind: 'edge' });
+  }
+
+  _dashedLine(g, x1, y1, x2, y2, color, width) {
+    const dx = x2 - x1; const dy = y2 - y1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len === 0) return;
+    const dashLen = 6; const gapLen = 4;
+    let t = 0; let drawing = true;
+    g.moveTo(x1, y1);
+    while (t < len) {
+      const step = drawing ? dashLen : gapLen;
+      const t2 = Math.min(t + step, len);
+      const x = x1 + dx * (t2 / len);
+      const y = y1 + dy * (t2 / len);
+      if (drawing) g.lineTo(x, y).stroke({ color, width });
+      else         g.moveTo(x, y);
+      t = t2;
+      drawing = !drawing;
+    }
+  }
+
+  _routeColor(route, kind) {
+    if (!route.success && route.success !== undefined) return C.ROUTE_FAIL;
+    if (kind === 'flex') return C.ROUTE_FLEX;
+    const rc = route.routing_class || '';
+    if (rc.startsWith('flexible')) return C.ROUTE_FLEX;
+    return C.ROUTE_RF;
+  }
+
+  _drawRoute(route, kind) {
+    const poly = route.polyline_mm;
+    if (!poly || poly.length < 2) return;
+
+    const color = this._routeColor(route, kind);
+    const success = route.success !== false;
+    const targetLayer = success ? this.layerRoutes : this.layerFailRoutes;
+    const lw = Math.max(1, (route.width_mm || 0.1) * this.scale);
+
+    const g = new PIXI.Graphics();
+    g.eventMode = 'static';
+    g.cursor = 'pointer';
+    const self = this;
+    g.on('pointerover', (e) => self.onHover && self.onHover({ type: 'route', route, kind }, e));
+    g.on('pointerout', () => self.onHoverEnd && self.onHoverEnd());
+    g.on('pointerdown', (e) => { e.stopPropagation(); self.onClick && self.onClick({ type: 'route', route, kind }, g); });
+
+    const [x0, y0] = poly[0];
+    g.moveTo(this.sx(x0), this.sy(y0));
+    for (let i = 1; i < poly.length; i++) {
+      g.lineTo(this.sx(poly[i][0]), this.sy(poly[i][1]));
+    }
+    g.stroke({ color, width: lw, cap: 'round', join: 'round' });
+
+    targetLayer.addChild(g);
+    this.allRouteGfx.push({ gfx: g, route, kind });
+  }
+
+  // ── Selection / dimming ───────────────────────────────────────────────────
+
+  clearSelection() {
+    for (const { gfx } of this.allRouteGfx) gfx.alpha = 1;
+    for (const { gfx } of this.allCompGfx)  gfx.alpha = 1;
+    this.highlightLayer.removeChildren();
+    this.selectedGfx = null;
+  }
+
+  selectRoute(route, gfx) {
+    this.clearSelection();
+    this.selectedGfx = gfx;
+    // dim all others
+    for (const r of this.allRouteGfx) {
+      if (r.gfx !== gfx) r.gfx.alpha = C.DIM_ALPHA;
+    }
+    for (const c of this.allCompGfx) c.gfx.alpha = C.DIM_ALPHA;
+    // highlight
+    this._highlightRoute(route, gfx);
+  }
+
+  selectComponent(comp, gfx) {
+    this.clearSelection();
+    this.selectedGfx = gfx;
+    gfx.alpha = 1;
+    // find connected routes by checking connections list
+    const compRefs = new Set();
+    compRefs.add(comp.ref);
+    const connectedGfx = new Set([gfx]);
+
+    for (const r of this.allRouteGfx) {
+      const route = r.route;
+      const conns = route.connections || [];
+      const related = conns.some(c => c.startsWith(comp.ref + '.') || c === comp.ref);
+      if (related) {
+        connectedGfx.add(r.gfx);
+      }
+    }
+
+    // dim everything not connected
+    for (const r of this.allRouteGfx) {
+      r.gfx.alpha = connectedGfx.has(r.gfx) ? 1 : C.DIM_ALPHA;
+    }
+    for (const c of this.allCompGfx) {
+      c.gfx.alpha = connectedGfx.has(c.gfx) ? 1 : C.DIM_ALPHA;
+    }
+
+    // highlight the component
+    this._highlightComp(comp, gfx);
+  }
+
+  _highlightRoute(route, gfx) {
+    const poly = route.polyline_mm;
+    if (!poly || poly.length < 2) return;
+    const h = new PIXI.Graphics();
+    const lw = Math.max(2, (route.width_mm || 0.1) * this.scale) + 3;
+    h.moveTo(this.sx(poly[0][0]), this.sy(poly[0][1]));
+    for (let i = 1; i < poly.length; i++) {
+      h.lineTo(this.sx(poly[i][0]), this.sy(poly[i][1]));
+    }
+    h.stroke({ color: C.SEL, width: lw, cap: 'round' });
+    h.alpha = 0.6;
+    this.highlightLayer.addChild(h);
+  }
+
+  _highlightComp(comp, gfx) {
+    const cx = this.sx(comp.x_mm);
+    const cy = this.sy(comp.y_mm);
+    const w  = (comp.w_mm || 2) * this.scale;
+    const h  = (comp.h_mm || 2) * this.scale;
+    const hl = new PIXI.Graphics();
+    hl.rect(cx - w / 2 - 2, cy - h / 2 - 2, w + 4, h + 4)
+      .stroke({ color: C.SEL, width: 2 });
+    this.highlightLayer.addChild(hl);
+  }
+
+  // expose layer refs for FilterPanel
+  get filterTargets() {
+    return {
+      routes:    [this.layerRoutes, this.layerEdges],
+      failroutes:[this.layerFailRoutes],
+      uv:        [this.layerUVComps],
+      floating:  [this.layerFloatComps],
+      fixed:     [this.layerFixedComps],
+      pads:      [this.layerPads],
+    };
+  }
+}
+
+// ─── PanZoom ─────────────────────────────────────────────────────────────────
+class PanZoom {
+  constructor(renderer) {
+    this.renderer = renderer;
+    this._dragging = false;
+    this._lastX = 0; this._lastY = 0;
+  }
+
+  attach() {
+    const canvas = this.renderer.app.canvas;
+    canvas.addEventListener('wheel', this._onWheel.bind(this), { passive: false });
+    canvas.addEventListener('pointerdown', this._onPointerDown.bind(this));
+    canvas.addEventListener('pointermove', this._onPointerMove.bind(this));
+    canvas.addEventListener('pointerup', this._onPointerUp.bind(this));
+    canvas.addEventListener('pointerleave', this._onPointerUp.bind(this));
+  }
+
+  _onWheel(e) {
+    e.preventDefault();
+    const world = this.renderer.world;
+    const canvas = this.renderer.app.canvas;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+    // transform mouse pos to world coords before scaling
+    const wx = (mx - world.x) / world.scale.x;
+    const wy = (my - world.y) / world.scale.y;
+
+    world.scale.x *= factor;
+    world.scale.y *= factor;
+
+    world.x = mx - wx * world.scale.x;
+    world.y = my - wy * world.scale.y;
+  }
+
+  _onPointerDown(e) {
+    if (e.button !== 0) return;
+    this._dragging = true;
+    this._lastX = e.clientX;
+    this._lastY = e.clientY;
+  }
+
+  _onPointerMove(e) {
+    if (!this._dragging) return;
+    const dx = e.clientX - this._lastX;
+    const dy = e.clientY - this._lastY;
+    this.renderer.world.x += dx;
+    this.renderer.world.y += dy;
+    this._lastX = e.clientX;
+    this._lastY = e.clientY;
+  }
+
+  _onPointerUp() { this._dragging = false; }
+}
+
+// ─── PropertyInspector ───────────────────────────────────────────────────────
+class PropertyInspector {
+  constructor(el) { this.el = el; }
+
+  clear() {
+    this.el.innerHTML = '<div id="prop-placeholder">Click an element to inspect</div>';
+  }
+
+  showRoute(route, kind) {
+    const rows = [
+      ['Net',     route.edge_id || '—'],
+      ['Class',   route.routing_class || kind],
+      ['Width',   (route.width_mm != null ? route.width_mm + ' mm' : '—')],
+      ['Length',  (route.length_mm != null ? route.length_mm + ' mm' : '—')],
+      ['Target',  (route.target_mm != null ? route.target_mm + ' mm' : (route.target_length_mm != null ? route.target_length_mm + ' mm' : '—'))],
+      ['Err%',    (route.length_err_pct != null ? route.length_err_pct + '%' : '—')],
+    ];
+    let html = rows.map(([k, v]) => `<div class="prop-row"><span class="prop-key">${k}:</span><span class="prop-val">${v}</span></div>`).join('');
+    if (route.success !== undefined) {
+      const sc = route.success ? 'success' : 'fail';
+      const sv = route.success ? '✓' : `✗ ${route.failure_reason || ''}`;
+      html += `<div class="prop-row"><span class="prop-key">Success:</span><span class="prop-val ${sc}">${sv}</span></div>`;
+    }
+    if (route.rip_up_round !== undefined) {
+      html += `<div class="prop-row"><span class="prop-key">Rip-up:</span><span class="prop-val">${route.rip_up_round}</span></div>`;
+    }
+    this.el.innerHTML = html;
+  }
+
+  showEdge(edge) {
+    const rows = [
+      ['Net',    edge.edge_id || '—'],
+      ['Class',  edge.routing_class || '—'],
+      ['Width',  (edge.width_mm != null ? edge.width_mm + ' mm' : '—')],
+      ['Target', (edge.target_length_mm != null ? edge.target_length_mm + ' mm' : '—')],
+      ['Conns',  (edge.connections || []).join(', ') || '—'],
+    ];
+    this.el.innerHTML = rows.map(([k, v]) =>
+      `<div class="prop-row"><span class="prop-key">${k}:</span><span class="prop-val">${v}</span></div>`
+    ).join('');
+  }
+
+  showComponent(comp, kind) {
+    const rows = [
+      ['Ref',   comp.ref],
+      ['Kind',  kind],
+      ['Pos',   `(${comp.x_mm}, ${comp.y_mm}) mm`],
+      ['Size',  `${comp.w_mm}×${comp.h_mm} mm`],
+      ['Pads',  (comp.pads || []).length],
+    ];
+    this.el.innerHTML = rows.map(([k, v]) =>
+      `<div class="prop-row"><span class="prop-key">${k}:</span><span class="prop-val">${v}</span></div>`
+    ).join('');
+  }
+}
+
+// ─── FilterPanel ─────────────────────────────────────────────────────────────
+class FilterPanel {
+  constructor(renderer) {
+    this.renderer = renderer;
+    this._setup();
+  }
+
+  _setup() {
+    const map = {
+      'chk-routes':  (t) => [...t.routes, ...t.failroutes],
+      'chk-failed':  (t) => t.failroutes,
+      'chk-uv':      (t) => t.uv,
+      'chk-float':   (t) => t.floating,
+      'chk-fixed':   (t) => t.fixed,
+      'chk-pads':    (t) => t.pads,
+    };
+    for (const [id, getter] of Object.entries(map)) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      el.addEventListener('change', () => {
+        const targets = getter(this.renderer.filterTargets);
+        for (const c of targets) c.visible = el.checked;
+        // special: failed routes visibility also controlled by chk-routes
+        if (id === 'chk-routes') {
+          const failChk = document.getElementById('chk-failed');
+          if (failChk && !el.checked) {
+            for (const c of this.renderer.filterTargets.failroutes) c.visible = false;
+          }
+        }
+      });
+    }
+  }
+}
+
+// ─── InteractionMgr ──────────────────────────────────────────────────────────
+class InteractionMgr {
+  constructor(renderer, inspector) {
+    this.renderer = renderer;
+    this.inspector = inspector;
+    const tooltip = document.getElementById('tooltip');
+
+    renderer.onHover = (info, e) => {
+      let txt = '';
+      if (info.type === 'route') {
+        txt = `Net: ${info.route.edge_id || '?'} | W: ${info.route.width_mm ?? '?'}mm`;
+      } else if (info.type === 'edge') {
+        txt = `Net: ${info.edge.edge_id || '?'} | W: ${info.edge.width_mm ?? '?'}mm`;
+      } else if (info.type === 'comp') {
+        txt = `${info.comp.ref} (${info.kind}) | ${info.comp.w_mm}×${info.comp.h_mm}mm`;
+      }
+      tooltip.textContent = txt;
+      tooltip.style.display = 'block';
+      tooltip.style.left = (e.clientX + 12) + 'px';
+      tooltip.style.top  = (e.clientY + 12) + 'px';
+    };
+
+    renderer.onHoverEnd = () => { tooltip.style.display = 'none'; };
+
+    renderer.onClick = (info, gfx) => {
+      if (info.type === 'route') {
+        renderer.selectRoute(info.route, gfx);
+        inspector.showRoute(info.route, info.kind);
+      } else if (info.type === 'edge') {
+        renderer.selectRoute(info.route || info.edge, gfx);
+        inspector.showEdge(info.edge);
+      } else if (info.type === 'comp') {
+        renderer.selectComponent(info.comp, gfx);
+        inspector.showComponent(info.comp, info.kind);
+      }
+    };
+
+    // click on empty canvas → clear selection
+    renderer.app.stage.eventMode = 'static';
+    renderer.app.stage.on('pointerdown', () => {
+      renderer.clearSelection();
+      inspector.clear();
+    });
+  }
+}
+
+// ─── PhaseTabBar ─────────────────────────────────────────────────────────────
+class PhaseTabBar {
+  constructor(renderer) {
+    this.renderer = renderer;
+    this.data = null;
+    this.currentPhase = 'preA';
+    document.querySelectorAll('.tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.currentPhase = btn.dataset.phase;
+        if (this.data) this._render();
+      });
+    });
+  }
+
+  load(data) {
+    this.data = data;
+    this._render();
+  }
+
+  _render() {
+    if (!this.data) return;
+    this.renderer.loadPhase(this.data, this.currentPhase);
+  }
+}
+
+// ─── Bootstrap ───────────────────────────────────────────────────────────────
+(async () => {
+  const container = document.getElementById('canvas-container');
+  const renderer  = new SceneRenderer(container);
+  await renderer.init();
+
+  const panZoom   = new PanZoom(renderer);
+  panZoom.attach();
+
+  const inspector = new PropertyInspector(document.getElementById('prop-content'));
+  const interMgr  = new InteractionMgr(renderer, inspector);  // eslint-disable-line no-unused-vars
+  const filterPanel = new FilterPanel(renderer);              // eslint-disable-line no-unused-vars
+  const tabBar    = new PhaseTabBar(renderer);
+
+  // Load button
+  const loadBtn   = document.getElementById('load-btn');
+  const fileInput = document.getElementById('file-input');
+  const projName  = document.getElementById('project-name');
+
+  loadBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const json = JSON.parse(e.target.result);
+        const data = new DataLoader(json);
+        projName.textContent = data.project || file.name;
+        tabBar.load(data);
+        inspector.clear();
+      } catch (err) {
+        alert('Failed to parse JSON: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  });
+
+  // Load a default demo if a URL param ?src=... is provided
+  const params = new URLSearchParams(location.search);
+  const src = params.get('src');
+  if (src) {
+    try {
+      const resp = await fetch(src);
+      const json = await resp.json();
+      const data = new DataLoader(json);
+      projName.textContent = data.project || src;
+      tabBar.load(data);
+    } catch (err) {
+      console.warn('Could not load ?src=', src, err);
+    }
+  }
+})();
+</script>
+</body>
+</html>
