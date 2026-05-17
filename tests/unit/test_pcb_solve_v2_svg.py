@@ -2,11 +2,19 @@ from pathlib import Path
 import json
 import math
 import re
+from types import SimpleNamespace
 
 import pytest
 
 from tools import pcb_solve_v2
 from tools.pcb_solve_v2 import _pin_label_overlay
+from frontend.models import (
+    ExpandedPad,
+    FrontendArtifact,
+    LintReport,
+    NormalizedNode,
+    TriagedEdge,
+)
 
 from schema.geometry_ir import ComponentPlacement, GeometryIR, PinPlacement
 from schema.v6_ir import Board, Point
@@ -239,3 +247,56 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     phase_b_text = phase_b_svg.read_text(encoding="utf-8")
     assert 'class="component-bbox"' in phase_b_text
     assert "<title>C1.PIN_1</title>" in phase_b_text
+
+
+def test_render_pre_phase_svg_zero_length_edge_no_crash(
+    scratch_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact = FrontendArtifact(
+        project_name="zero_len",
+        board={"width": 20.0, "height": 20.0},
+        lint_report=LintReport(),
+        fixed_terminals={
+            "A.P1": ExpandedPad(
+                component="A",
+                pin="P1",
+                abs_x=5.0,
+                abs_y=5.0,
+                orientation=0.0,
+                kind="fixed",
+            )
+        },
+        edges={
+            "E0": TriagedEdge(
+                name="E0",
+                edge_type="microstrip",
+                routing_class="rf_constrained",
+                target_length=4.0,
+                width=1.0,
+                connections=("A.P1", "N1"),
+            )
+        },
+        nodes={
+            "N1": NormalizedNode(
+                name="N1",
+                original_type="junction",
+                normalized_type="junction",
+            )
+        },
+    )
+    fake_result = SimpleNamespace(artifact=artifact)
+
+    def _fake_positions(*_args, **_kwargs):
+        return {"A.P1": (5.0, 5.0), "N1": (5.0, 5.0)}, {}
+
+    monkeypatch.setattr(pcb_solve_v2, "_solve_pre_a_positions", _fake_positions)
+    svg_path = scratch_dir / "zero_len.preA.svg"
+
+    positions, virtual_endpoints, overrides = pcb_solve_v2._render_pre_phase_svg(
+        fake_result, svg_path
+    )
+
+    assert svg_path.exists()
+    assert "A.P1" in positions and "N1" in positions
+    assert virtual_endpoints == set()
+    assert overrides == {}

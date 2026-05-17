@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import math
 import sys
+import time
 from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
@@ -29,6 +31,8 @@ from solver.v2.orchestrator import (
     phase_summary,
 )
 from solver.v2.uv_adhesion import UvAdhesionReport
+
+logger = logging.getLogger(__name__)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -710,6 +714,7 @@ def _render_pre_phase_svg(
     constrained_draw_segments: list[
         tuple[str, tuple[float, float], tuple[float, float]]
     ] = []
+    zero_length_edges: set[str] = set()
 
     def _add_endpoint_vector(
         endpoint_id: str, vx: float, vy: float, weight: float
@@ -783,15 +788,18 @@ def _render_pre_phase_svg(
                     bx, by = ex, ey
                     anchor_is_start = True
                 if pin_oriented_anchor is None:
-                    ux = (bx - ax) / seg_len
-                    uy = (by - ay) / seg_len
-                    px = ax + ux * desired
-                    py = ay + uy * desired
-                    if anchor_is_start:
-                        main_sx, main_sy, main_ex, main_ey = ax, ay, px, py
+                    if seg_len <= 1e-9:
+                        zero_length_edges.add(edge_id)
                     else:
-                        main_sx, main_sy, main_ex, main_ey = px, py, ax, ay
-                    bridge = (px, py, bx, by)
+                        ux = (bx - ax) / seg_len
+                        uy = (by - ay) / seg_len
+                        px = ax + ux * desired
+                        py = ay + uy * desired
+                        if anchor_is_start:
+                            main_sx, main_sy, main_ex, main_ey = ax, ay, px, py
+                        else:
+                            main_sx, main_sy, main_ex, main_ey = px, py, ax, ay
+                        bridge = (px, py, bx, by)
         stroke_width = max(float(edge.width or 0.2) * px_per_mm, 1.2)
         length_text = (
             f"L={float(edge.target_length):.1f}mm"
@@ -1250,6 +1258,11 @@ def _render_pre_phase_svg(
 
     if banner:
         lines.append(banner)
+    if zero_length_edges:
+        logger.warning(
+            "preA skipped target projection for zero-length edges: %s",
+            ", ".join(sorted(zero_length_edges)),
+        )
     lines.append("</svg>")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("".join(lines), encoding="utf-8")
@@ -2317,16 +2330,20 @@ def _persist_phase_artefacts(
     layout_path: Path,
     layout: V33Layout | None = None,
 ) -> dict[str, Path]:
+    t_all = time.perf_counter()
     out_dir.mkdir(parents=True, exist_ok=True)
     project = result.geometry.project
     artefacts: dict[str, Path] = {}
 
+    t_step = time.perf_counter()
     summary = phase_summary(result)
     summary_path = out_dir / f"{project}.summary.json"
     summary_path.write_text(json.dumps(summary, indent=2, default=str))
     artefacts["summary"] = summary_path
+    logger.info("persist summary: wall=%.2fs", time.perf_counter() - t_step)
 
     # Pre-Phase-A: raw YAML topology connectivity snapshot.
+    t_step = time.perf_counter()
     pre_a_svg = out_dir / f"{project}.preA.svg"
     templates = _load_junction_templates(layout_path=layout_path)
     branch_offset_u_tokens = _load_branch_offset_u_tokens(layout_path=layout_path)
@@ -2343,7 +2360,9 @@ def _persist_phase_artefacts(
         ),
     )
     artefacts["preA_svg"] = pre_a_svg
+    logger.info("persist preA svg: wall=%.2fs", time.perf_counter() - t_step)
 
+    t_step = time.perf_counter()
     pre_a_json = out_dir / f"{project}.preA.json"
     pre_a_json.write_text(
         json.dumps(
@@ -2391,8 +2410,10 @@ def _persist_phase_artefacts(
         )
     )
     artefacts["preA"] = pre_a_json
+    logger.info("persist preA json: wall=%.2fs", time.perf_counter() - t_step)
 
     # Per-phase JSON (Phase A and B are the meaningful ones).
+    t_step = time.perf_counter()
     phase_a_path = out_dir / f"{project}.phaseA.json"
     phase_a_path.write_text(
         json.dumps(
@@ -2418,7 +2439,9 @@ def _persist_phase_artefacts(
         )
     )
     artefacts["phaseA"] = phase_a_path
+    logger.info("persist phaseA json: wall=%.2fs", time.perf_counter() - t_step)
 
+    t_step = time.perf_counter()
     phase_b_path = out_dir / f"{project}.phaseB.json"
     phase_b_path.write_text(
         json.dumps(
@@ -2443,6 +2466,7 @@ def _persist_phase_artefacts(
         )
     )
     artefacts["phaseB"] = phase_b_path
+    logger.info("persist phaseB json: wall=%.2fs", time.perf_counter() - t_step)
 
     # Per-phase SVG snapshots
     routed_ok, routed_total = result.phase_a.skeleton.success_rate()
@@ -2454,6 +2478,7 @@ def _persist_phase_artefacts(
 
     phase_a_svg = out_dir / f"{project}.phaseA.svg"
     phase_a_geom = _build_phase_a_geom(result)
+    t_step = time.perf_counter()
     _render_svg(
         phase_a_geom,
         phase_a_svg,
@@ -2467,9 +2492,11 @@ def _persist_phase_artefacts(
         layout=layout,
     )
     artefacts["phaseA_svg"] = phase_a_svg
+    logger.info("persist phaseA svg: wall=%.2fs", time.perf_counter() - t_step)
 
     geom_b = _build_phase_b_geom(result)
     phase_b_svg = out_dir / f"{project}.phaseB.svg"
+    t_step = time.perf_counter()
     _render_svg(
         geom_b,
         phase_b_svg,
@@ -2488,9 +2515,11 @@ def _persist_phase_artefacts(
         show_pad_labels=False,  # WI-I7: disable pad labels (use _pin_label_overlay instead)
     )
     artefacts["phaseB_svg"] = phase_b_svg
+    logger.info("persist phaseB svg: wall=%.2fs", time.perf_counter() - t_step)
 
     # Phase C SVG = final geometry (flex routes already in result.geometry)
     phase_c_svg = out_dir / f"{project}.phaseC.svg"
+    t_step = time.perf_counter()
     _render_svg(
         result.geometry,
         phase_c_svg,
@@ -2509,6 +2538,8 @@ def _persist_phase_artefacts(
         show_pad_labels=False,
     )
     artefacts["phaseC_svg"] = phase_c_svg
+    logger.info("persist phaseC svg: wall=%.2fs", time.perf_counter() - t_step)
+    logger.info("persist artefacts total: wall=%.2fs", time.perf_counter() - t_all)
 
     return artefacts
 
@@ -2536,22 +2567,39 @@ def solve_and_emit(
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
+    logging.basicConfig(
+        level=logging.WARNING if args.quiet else logging.INFO,
+        format="[%(levelname)s] %(message)s",
+    )
+    logger.info("pcb_solve_v2 start: layout=%s", args.layout)
 
+    t_step = time.perf_counter()
     options = OrchestratorV2Options(
         clearance_mm=args.clearance_mm,
         grid_step_um=args.grid_step_um,
         rip_up_rounds=args.rip_up_rounds,
         out_dir=args.out_dir,
     )
+    logger.info("build options: wall=%.2fs", time.perf_counter() - t_step)
+    t_step = time.perf_counter()
     result = solve_layout_v2(args.layout, options=options)
+    logger.info("solve layout: wall=%.2fs", time.perf_counter() - t_step)
 
+    t_step = time.perf_counter()
     layout = load_v33_layout(args.layout)
+    logger.info("load layout: wall=%.2fs", time.perf_counter() - t_step)
+    t_step = time.perf_counter()
     artefacts = _persist_phase_artefacts(
         result, args.out_dir, layout_path=Path(args.layout), layout=layout
     )
+    logger.info("persist phase artefacts: wall=%.2fs", time.perf_counter() - t_step)
 
     svg_path = args.svg_out or (args.out_dir / f"{result.geometry.project}.final.svg")
+    t_step = time.perf_counter()
     _emit_svg(result, svg_path, layout=layout)
+    logger.info(
+        "persist final svg: wall=%.2fs path=%s", time.perf_counter() - t_step, svg_path
+    )
     artefacts["final_svg"] = svg_path
 
     if args.report_out:

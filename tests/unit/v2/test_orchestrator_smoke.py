@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -39,3 +40,15 @@ def test_skeleton_first_runs_end_to_end() -> None:
     }
     # Wall time guardrail (loose; tightened in M10c).
     assert summary["wall_total_s"] < 60.0
+
+
+@pytest.mark.skipif(not YAML_PATH.exists(), reason="PA yaml missing")
+def test_solve_layout_v2_emits_phase_timing_logs(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO)
+    solve_layout_v2(YAML_PATH)
+    log_text = "\n".join(rec.getMessage() for rec in caplog.records)
+    assert "phase A" in log_text
+    assert "phase B" in log_text
+    assert "phase C" in log_text

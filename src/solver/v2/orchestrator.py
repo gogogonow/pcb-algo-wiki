@@ -9,6 +9,7 @@ SVG rendering can be reused unchanged.
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,6 +38,8 @@ from .floating_placer import (
 from .node_planner import NodePlan, plan_node_positions
 from .skeleton_router import RouteOutcome, SkeletonReport, route_skeleton
 from .uv_adhesion import UvAdhesionReport, adhere_uv_components
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -161,12 +164,21 @@ def solve_layout_v2(
     options: OrchestratorV2Options | None = None,
 ) -> OrchestratorV2Result:
     options = options or OrchestratorV2Options()
+    t_compile = time.perf_counter()
     artifact = compile_layout(str(yaml_path))
+    compile_wall = time.perf_counter() - t_compile
+    logger.info(
+        "compile done: wall=%.2fs components=%d edges=%d",
+        compile_wall,
+        len(artifact.components),
+        len(artifact.edges),
+    )
 
     board_w = float(artifact.board.get("width", 40.0))
     board_h = float(artifact.board.get("height", 100.0))
 
     # ---- Phase A: skeleton routing -----------------------------------------
+    logger.info("phase A start")
     t0 = time.perf_counter()
     plan = plan_node_positions(
         artifact, board_width_mm=board_w, board_height_mm=board_h
@@ -182,6 +194,13 @@ def solve_layout_v2(
         rip_up_rounds=options.rip_up_rounds,
     )
     phase_a_wall = time.perf_counter() - t0
+    phase_a_ok, phase_a_total = skeleton.success_rate()
+    logger.info(
+        "phase A done: wall=%.2fs routed=%d/%d",
+        phase_a_wall,
+        phase_a_ok,
+        phase_a_total,
+    )
 
     # ---- Length compensation: M7 hairpin meander on under-length routes ---
     skeleton = _apply_length_compensation(yaml_path, artifact, skeleton)
@@ -190,6 +209,7 @@ def solve_layout_v2(
     skeleton = _chamfer_skeleton_routes(skeleton, options.grid_step_um)
 
     # ---- Phase B: UV adhesion ---------------------------------------------
+    logger.info("phase B start")
     t1 = time.perf_counter()
     adhesion = adhere_uv_components(
         artifact,
@@ -204,8 +224,15 @@ def solve_layout_v2(
         skeleton=skeleton,
         options=options,
     )
+    logger.info(
+        "phase B done: wall=%.2fs uv=%d/%d",
+        phase_b_wall,
+        len(adhesion.placements),
+        len(artifact.uv_components),
+    )
 
     # ---- Phase C: floating placer + A* on flexible_path edges ------------
+    logger.info("phase C start")
     t2 = time.perf_counter()
     board_w = float(artifact.board.get("width", 40.0))
     board_h = float(artifact.board.get("height", 100.0))
@@ -239,6 +266,12 @@ def solve_layout_v2(
             floating_placements=floating_placements,
         )
     phase_c_wall = time.perf_counter() - t2
+    logger.info(
+        "phase C done: wall=%.2fs flex_routed=%d flex_failed=%d",
+        phase_c_wall,
+        len(flex_routed),
+        len(flex_failed),
+    )
 
     # Refresh wall in the final GeometryIR.
     geometry = _with_wall_seconds(geometry, phase_a_wall + phase_b_wall + phase_c_wall)
