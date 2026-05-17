@@ -141,15 +141,6 @@ def _validate_edge_endpoint(
             raise ValueError(
                 f"edge {edge_id!r} references unresolved endpoint {endpoint_id!r}"
             ) from exc
-        if endpoint_id.endswith("_split_pad"):
-            graph.nodes.append(
-                TopologyNode(
-                    id=endpoint_id,
-                    kind="t_junction",
-                    label=endpoint_id,
-                )
-            )
-            return endpoint_id
         raise ValueError(
             f"edge {edge_id!r} references unresolved endpoint {endpoint_id!r}"
         ) from exc

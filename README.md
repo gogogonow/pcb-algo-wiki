@@ -165,11 +165,12 @@ edges:
     geometry:   { bend_style: mitered_45 }
 
 # 自由长度 RF 段（rf_constrained_free，v6 D3 触发点）
-  IC1_pin1_seg2_to_R2:
+  IC1_pin1_seg2:
     type: microstrip
     net: RF_NET_1
     routing_class: rf_constrained
-    connections: [IC1_pin1_seg2_end_split_pad, R2.PIN_2]
+    # 新语义：微带线与器件端点直连，不引入冗余 *_split_pad 节点
+    connections: [IC1_pin1_seg1_universal_node, C7.PIN_1]
     geometry: { bend_style: mitered_45 }
 ```
 
@@ -246,11 +247,11 @@ topology_viz rf_layout_simplified.yaml
 schema_check rf_layout_simplified.yaml
 # 预期:
 # project: PA_Module_Simplified
-# components: 15
+# components: 18
 # footprints: 5
 # nodes: 8
-# terminals: 10
-# edges: 22
+# terminals: 9
+# edges: 23
 
 # 一键验证 M1 质量门
 ./scripts/verify_m1.sh
@@ -259,10 +260,10 @@ schema_check rf_layout_simplified.yaml
 frontend_compile rf_layout_simplified.yaml
 # 输出: out/PA_Module_Simplified.frontend.json
 # 预期 stdout:
-# fixed_pads: 9
+# fixed_pads: 8
 # uv_components: 9
-# obstacles: 7
-# edges: locked=15 free=7 flex=0 other=0
+# obstacles: 6
+# edges: locked=14 free=3 flex=6 other=0
 # nodes: t_combiner_junction=2 t_junction=4 universal_junction=2
 # lint: repairs=3 warnings=2 errors=0
 
@@ -274,11 +275,11 @@ solver_ir rf_layout_simplified.yaml
 # 输出: out/PA_Module_Simplified.solver.json
 # 预期 stdout:
 # project: PA_Module_Simplified
-# board: 40.0 x 100.0
+# board: 40.0 x 85.0
 # clearance: 0.15
-# terminals: 10
-# edges: 22
-# uv_resolutions: unique=9 ambiguous=0 missing=0
+# terminals: 9
+# edges: 23
+# uv_resolutions: unique=7 ambiguous=0 missing=2
 # junction_templates: nodes=2 branches=6
 
 # 一键验证 M3 质量门（含 verify_m2 全部步骤 + solver_ir 烟测）

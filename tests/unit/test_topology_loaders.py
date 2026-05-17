@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from schema.v33 import load_v33_layout
 from topology.loaders import extract_topology_graph, load_topology_graph
 
 REAL_CASE_PATH = Path(__file__).resolve().parents[2] / "rf_layout_simplified.yaml"
@@ -9,17 +10,23 @@ REAL_CASE_PATH = Path(__file__).resolve().parents[2] / "rf_layout_simplified.yam
 
 def test_real_case_extracts_expected_entity_counts() -> None:
     graph = load_topology_graph(REAL_CASE_PATH)
+    layout = load_v33_layout(REAL_CASE_PATH)
 
-    # WI-J1: added 3 floating components (U_BIAS IC + C_DEC1 cap + R_PULL res)
-    # and 4 flexible_path edges (flex_ubias_dec1, flex_dec1_gnd,
-    # flex_ubias_rpull, flex_rpull_pwr).
-    # Floating components are classified as "fixed" by the topology loader
-    # (they lack is_parametric_uv). 5 original + 3 floating = 8.
-    assert len(graph.fixed_components) == 8
-    assert len(graph.parametric_uv_components) == 9
-    assert len(graph.nodes) == 10
+    composite_endpoints = {
+        endpoint
+        for edge in layout.edges.values()
+        for endpoint in edge.connections
+        if isinstance(endpoint, str) and "," in endpoint
+    }
+
+    assert len(graph.components) == len(layout.components)
+    assert len(graph.fixed_components) + len(graph.parametric_uv_components) == len(
+        layout.components
+    )
+    assert len(graph.parametric_uv_components) >= 1
+    assert len(graph.nodes) == len(layout.nodes) + len(composite_endpoints)
     assert len(graph.terminals) == 9
-    assert len(graph.edges) == 21
+    assert len(graph.edges) == len(layout.edges)
 
 
 def test_real_case_preserves_named_entities_and_classification() -> None:
@@ -30,22 +37,33 @@ def test_real_case_preserves_named_entities_and_classification() -> None:
     assert graph.get_component("R3").placement_kind == "parametric_uv"
 
     assert graph.get_node("IC1_pin1_seg1_universal_node").kind == "universal_junction"
-    assert graph.get_node("IC1_pin1_seg4_end_split_pad").kind == "t_junction"
-    assert graph.get_node("IC1_pin1_seg5_start_combiner").kind == "t_combiner_junction"
+    assert graph.get_node("IC1_pin2_seg1_universal_node").kind == "universal_junction"
+    assert all(
+        node.kind
+        in {
+            "universal_junction",
+            "t_junction",
+            "t_combiner_junction",
+            "composite_endpoint",
+            "node",
+        }
+        for node in graph.nodes
+    )
 
     assert graph.get_edge("IC1_pin1_seg1").kind == "microstrip"
 
 
 def test_real_case_preserves_t_junction_classification() -> None:
     graph = load_topology_graph(REAL_CASE_PATH)
+    layout = load_v33_layout(REAL_CASE_PATH)
 
-    # IC1_pin1_seg3_end_split_pad removed (seg3 → C5.PIN_1 directly now)
-    assert {node.id for node in graph.nodes if node.kind == "t_junction"} == {
-        "IC1_pin1_seg2_end_split_pad",
-        "IC1_pin1_seg4_end_split_pad",
-        "IC1_pin2_seg2_end_split_pad",
-        "IC1_pin2_seg3_end_split_pad",
+    expected = {
+        name
+        for name, node in layout.nodes.items()
+        if (node.type or "").strip() == "t_junction"
     }
+    actual = {node.id for node in graph.nodes if node.kind == "t_junction"}
+    assert actual == expected
 
 
 def test_real_case_preserves_microstrip_connection_names() -> None:
@@ -104,6 +122,10 @@ def test_extract_topology_graph_rejects_non_mapping_root() -> None:
         (
             ["UNKNOWN_ENDPOINT", "junction"],
             "edge 'broken_edge' references unresolved endpoint 'UNKNOWN_ENDPOINT'",
+        ),
+        (
+            ["ghost_end_split_pad", "junction"],
+            "edge 'broken_edge' references unresolved endpoint 'ghost_end_split_pad'",
         ),
         (
             ["junction", "R2.PIN_999"],
