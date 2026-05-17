@@ -5,20 +5,20 @@
     "routed": 17,
     "total": 17,
     "rip_up_rounds": 0,
-    "wall_s": 0.26273871399462223,
+    "wall_s": 0.2660015480360016,
     "max_len_err_pct": 35.56928214313137,
     "failed": []
   },
   "phase_b": {
     "uv_placed": 9,
     "uv_total": 9,
-    "wall_s": 0.0011857320205308497,
+    "wall_s": 0.0013941510114818811,
     "failed": []
   },
   "phase_c": {
-    "flex_routed": 0,
+    "flex_routed": 4,
     "flex_failed": [],
-    "wall_s": 0.056384446972515434
+    "wall_s": 0.535012973996345
   },
-  "wall_total_s": 0.3203088929876685
+  "wall_total_s": 0.8024086730438285
 }

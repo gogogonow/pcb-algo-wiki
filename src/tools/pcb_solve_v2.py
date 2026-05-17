@@ -291,6 +291,109 @@ def _uv_highlight_overlay(
     return "".join(parts)
 
 
+def _phase_c_overlay(
+    geom: GeometryIR,
+    result: OrchestratorV2Result,
+    px_per_mm: float = 6.0,
+    margin_mm: float = 5.0,
+) -> str:
+    """WI-J6 phaseC overlay.
+
+    * Floating-component bbox 用蓝色描边 + 名称标签
+    * Flexible routes 用紫色加粗线
+    * 失败的 flex 边在端点画红色虚线 X 标记
+    """
+    board_h = float(geom.board.height) + 2 * margin_mm
+
+    def _x(mm: float) -> float:
+        return (mm + margin_mm) * px_per_mm
+
+    def _y(mm: float) -> float:
+        return (board_h - (mm + margin_mm)) * px_per_mm
+
+    floating_names = {
+        n
+        for n, c in result.artifact.components.items()
+        if c.placement_kind == "floating"
+    }
+    flex_routed = set(result.phase_c.routed_flex_edges)
+    flex_failed = set(result.phase_c.failed_flex_edges)
+
+    parts: list[str] = ['<g class="phaseC">']
+
+    # 1) Floating component bboxes (blue)
+    for name in floating_names:
+        placement = geom.placements.get(name)
+        if placement is None or not placement.pads:
+            continue
+        xs = [float(p.point.x) for p in placement.pads]
+        ys = [float(p.point.y) for p in placement.pads]
+        bx, by = min(xs) - 0.4, min(ys) - 0.4
+        w = (max(xs) - min(xs)) + 0.8
+        h = (max(ys) - min(ys)) + 0.8
+        parts.append(
+            f'<rect x="{_x(bx):.2f}" y="{_y(by + h):.2f}" '
+            f'width="{w * px_per_mm:.2f}" height="{h * px_per_mm:.2f}" '
+            'fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.5" '
+            'opacity="0.85"/>'
+        )
+        parts.append(
+            f'<text x="{_x(bx):.2f}" y="{_y(by + h) - 2:.2f}" '
+            'font-family="sans-serif" font-size="8" '
+            'fill="#1d4ed8" font-weight="bold">'
+            f"{escape(name)}</text>"
+        )
+        for pad in placement.pads:
+            parts.append(
+                f'<circle cx="{_x(float(pad.point.x)):.2f}" '
+                f'cy="{_y(float(pad.point.y)):.2f}" r="2.2" '
+                'fill="#1d4ed8" opacity="0.9"/>'
+            )
+
+    # 2) Flex routes (purple thick)
+    for eid in flex_routed:
+        route = geom.routes.get(eid)
+        if route is None or len(route.points) < 2:
+            continue
+        pts = " ".join(
+            f"{_x(float(p.x)):.2f},{_y(float(p.y)):.2f}" for p in route.points
+        )
+        parts.append(
+            f'<polyline points="{pts}" fill="none" stroke="#7c3aed" '
+            'stroke-width="2.2" stroke-linecap="round" '
+            'stroke-linejoin="round" opacity="0.95"/>'
+        )
+
+    # 3) Failed flex edges — red dashed X markers at endpoints
+    for eid in flex_failed:
+        edge = result.artifact.edges.get(eid)
+        if edge is None or len(edge.connections) < 2:
+            continue
+        # Try to recover endpoint positions from placements
+        pad_xy: dict[str, tuple[float, float]] = {}
+        for cname, placement in geom.placements.items():
+            for pad in placement.pads:
+                pad_xy[f"{cname}.{pad.pin}"] = (
+                    float(pad.point.x),
+                    float(pad.point.y),
+                )
+        for ep in (edge.connections[0], edge.connections[-1]):
+            xy = pad_xy.get(ep)
+            if xy is None:
+                continue
+            cx, cy = _x(xy[0]), _y(xy[1])
+            parts.append(
+                f'<g stroke="#dc2626" stroke-width="2" stroke-dasharray="3,2">'
+                f'<line x1="{cx - 5:.2f}" y1="{cy - 5:.2f}" '
+                f'x2="{cx + 5:.2f}" y2="{cy + 5:.2f}"/>'
+                f'<line x1="{cx - 5:.2f}" y1="{cy + 5:.2f}" '
+                f'x2="{cx + 5:.2f}" y2="{cy - 5:.2f}"/></g>'
+            )
+
+    parts.append("</g>")
+    return "".join(parts)
+
+
 def _pin_label_text(pin: str) -> str:
     if pin.startswith("P") and pin[1:].isdigit():
         return f"PIN_{pin[1:]}"
@@ -2396,7 +2499,14 @@ def _persist_phase_artefacts(
             f"Flex routing — {flex_ok} routed / {flex_failed} failed",
             "#1d4ed8",
         ),
+        overlay=_pin_label_overlay(
+            result.geometry,
+            skip_components=frozenset(result.artifact.uv_components.keys()),
+        )
+        + _phase_b_rlc_overlay(result.geometry, result, layout)
+        + _phase_c_overlay(result.geometry, result),
         layout=layout,
+        show_pad_labels=False,
     )
     artefacts["phaseC_svg"] = phase_c_svg
 
