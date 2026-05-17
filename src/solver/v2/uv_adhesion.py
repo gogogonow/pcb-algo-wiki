@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 
 from frontend.models import ComponentExpansion, FrontendArtifact
 from schema.geometry_ir import ComponentPlacement, PinPlacement
-from schema.v6_ir import Point, V6Topology
+from schema.v6_ir import Point
 from solver.units import MM_TO_UM
 
 from .skeleton_router import SkeletonReport
@@ -225,7 +225,7 @@ def _is_pin_microstrip_endpoint(
     part_id: str,
     anchor_pin_name: str,
     skel: SkeletonReport,
-    topo: V6Topology,
+    artifact: FrontendArtifact,
 ) -> bool:
     """WI-I1: detect whether a pin is the endpoint of a constrained microstrip
     (not a virtual stub). When a microstrip edge terminates directly at a
@@ -234,7 +234,7 @@ def _is_pin_microstrip_endpoint(
 
     Criteria:
     1. pin_id exists in final_endpoint_um (has routed coordinate)
-    2. Topology has an edge with pin_id in connections
+    2. Artifact has an edge with pin_id in connections
     3. That edge is a microstrip with constraints (width/target_length)
 
     Returns:
@@ -247,7 +247,7 @@ def _is_pin_microstrip_endpoint(
 
     # 2. Find all edges connected to this pin
     connected_edges = []
-    for edge_id, edge_def in topo.edges.items():
+    for edge_id, edge_def in artifact.edges.items():
         if pin_id in edge_def.connections:
             connected_edges.append((edge_id, edge_def))
 
@@ -257,15 +257,12 @@ def _is_pin_microstrip_endpoint(
     # 3. Check if any connected edge is a constrained microstrip
     for edge_id, edge_def in connected_edges:
         # Must be microstrip
-        if edge_def.type != "microstrip":
+        if edge_def.edge_type != "microstrip":
             continue
 
         # Constrained edges (width/target_length) are main microstrips,
         # not virtual stubs (which have no constraints)
-        if edge_def.constraint and (
-            edge_def.constraint.width is not None
-            or edge_def.constraint.target_length is not None
-        ):
+        if edge_def.width is not None or edge_def.target_length is not None:
             return True
 
     return False
@@ -498,6 +495,62 @@ def _legacy_anchor_placement(
     else:
         anchor_xy = seed_anchor_mm.get(uv_name, (0.0, 0.0))
 
+    # WI-I2: Check if this pin is a microstrip endpoint (not virtual stub).
+    # If so, use precise pin positioning: PIN center = route endpoint.
+    if anchor_um is not None and _is_pin_microstrip_endpoint(
+        pin_id=anchor_endpoint,
+        part_id=uv_name,
+        anchor_pin_name=anchor_pin,
+        skel=skeleton,
+        artifact=artifact,
+    ):
+        # Derive rotation first (needed for coordinate transform)
+        rotation = _derive_rotation(uv, anchor_pin, anchor_um, other_pin, other_um)
+        if rotation is None and uv.uv_meta.reference_net:
+            host_angle = _host_edge_tangent(
+                anchor_endpoint,
+                skeleton,
+                edges_by_net,
+                uv.uv_meta.reference_net,
+                artifact,
+                anchor_xy_mm=anchor_xy,
+            )
+            if host_angle is not None:
+                rotation = host_angle + 90.0
+        if rotation is None:
+            rotation = float(seed_rotation_deg.get(uv_name, 0.0))
+        rotation = _quantize_rotation(rotation)
+
+        # Precise positioning: pin_world = route_endpoint, then back-compute
+        # component center by subtracting rotated local pin offset.
+        pin_world_x, pin_world_y = anchor_xy
+        local_x, local_y = _local_pin_offset(uv, anchor_pin)
+        cos_r = math.cos(math.radians(rotation))
+        sin_r = math.sin(math.radians(rotation))
+        rotated_offset_x = local_x * cos_r - local_y * sin_r
+        rotated_offset_y = local_x * sin_r + local_y * cos_r
+
+        placement_x = pin_world_x - rotated_offset_x
+        placement_y = pin_world_y - rotated_offset_y
+
+        # Compute all pad placements
+        pad_placements = []
+        for pad in uv.pads:
+            lx, ly = _local_pin_offset(uv, pad.pin)
+            ppx = placement_x + cos_r * lx - sin_r * ly
+            ppy = placement_y + sin_r * lx + cos_r * ly
+            pad_placements.append(
+                PinPlacement(pin=pad.pin, point=Point(x=ppx, y=ppy))
+            )
+
+        return ComponentPlacement(
+            component=uv_name,
+            anchor=Point(x=placement_x, y=placement_y),
+            rotation_deg=rotation,
+            pads=tuple(pad_placements),
+        )
+
+    # Legacy path: anchor is component center, apply edge_align_shift.
     rotation = _derive_rotation(uv, anchor_pin, anchor_um, other_pin, other_um)
     if rotation is None and uv.uv_meta.reference_net:
         # Derive perpendicular rotation from host edge direction (WI-F3:
