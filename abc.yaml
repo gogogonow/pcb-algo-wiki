@@ -2115,3 +2115,1042 @@ components:
     pin_nets:
       PIN_1: NET_0038
     properties: {}
+  COMP_0050:
+    footprint_ref: FP_0002
+    placement:
+      x: 3.79
+      y: 103
+      rotation: 0
+      is_floating: false
+    pin_nets:
+      PIN_1: NET_0003
+    properties:
+      COMPONENT_HIGH_MAX: 9999998mm
+  COMP_0051:
+    footprint_ref: FP_0002
+    placement:
+      x: 40.0
+      y: 103
+      rotation: 0
+      is_floating: false
+    pin_nets:
+      PIN_1: NET_0004
+    properties:
+      COMPONENT_HIGH_MAX: 9999998mm
+  COMP_0052:
+    footprint_ref: FP_0001
+    placement:
+      x: 5.29
+      y: 124
+      rotation: 0
+      is_floating: false
+    pin_nets:
+      PIN_1: NET_0039
+    properties: {}
+  COMP_0053:
+    footprint_ref: FP_0001
+    placement:
+      x: 40.0
+      y: 121
+      rotation: 0
+      is_floating: false
+    pin_nets:
+      PIN_1: NET_0040
+    properties: {}
+  COMP_0054:
+    footprint_ref: FP_0001
+    placement:
+      x: 40.0
+      y: 127
+      rotation: 0
+      is_floating: false
+    pin_nets:
+      PIN_1: NET_0040
+    properties: {}
+  COMP_0055:
+    footprint_ref: FP_0001
+    placement:
+      x: 40.0
+      y: 137
+      rotation: 0
+      is_floating: false
+    pin_nets:
+      PIN_1: NET_0041
+    properties:
+      Value: '*'
+  COMP_0056:
+    footprint_ref: FP_0001
+    placement:
+      x: 40.0
+      y: 139
+      rotation: 0
+      is_floating: false
+    pin_nets:
+      PIN_1: NET_0042
+    properties:
+      Value: '*'
+  COMP_0057:
+    footprint_ref: FP_0001
+    placement:
+      x: 17.1
+      y: 171
+      rotation: 0
+      is_floating: false
+    pin_nets:
+      PIN_1: NET_0043
+    properties: {}
+  COMP_0058:
+    footprint_ref: FP_0001
+    placement:
+      x: 25.6
+      y: 164
+      rotation: 0
+      is_floating: false
+    pin_nets:
+      PIN_1: NET_0044
+    properties: {}
+  COMP_0059:
+    footprint_ref: FP_0001
+    placement:
+      x: 40.0
+      y: 170
+      rotation: 0
+      is_floating: false
+    pin_nets:
+      PIN_1: NET_0045
+    properties: {}
+  COMP_0060:
+    footprint_ref: FP_0009
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      COMPONENT_HIGH_MAX: 4.1mm
+    pin_nets:
+      PIN_1: NET_0008
+      PIN_2: NET_0008
+  COMP_0061:
+    footprint_ref: FP_0009
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      COMPONENT_HIGH_MAX: 4.1mm
+    pin_nets:
+      PIN_1: NET_0008
+      PIN_2: NET_0008
+  COMP_0062:
+    footprint_ref: FP_0009
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      COMPONENT_HIGH_MAX: 4.1mm
+    pin_nets:
+      PIN_1: NET_0008
+      PIN_2: NET_0008
+  COMP_0063:
+    footprint_ref: FP_0009
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      COMPONENT_HIGH_MAX: 4.1mm
+    pin_nets:
+      PIN_1: NET_0008
+      PIN_2: NET_0008
+  COMP_0064:
+    footprint_ref: FP_0009
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties: {}
+    pin_nets:
+      PIN_1: NET_0008
+      PIN_2: NET_0008
+  COMP_0065:
+    footprint_ref: FP_0010
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: '*'
+      COMPONENT_HIGH_MAX: 4.1mm
+    pin_nets:
+      PIN_1: NET_0008
+      PIN_2: NET_0008
+      PIN_3: NET_0008
+  COMP_0066:
+    footprint_ref: FP_0010
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: '*'
+      COMPONENT_HIGH_MAX: 4.1mm
+    pin_nets:
+      PIN_1: NET_0008
+      PIN_2: NET_0008
+      PIN_3: NET_0008
+  COMP_0067:
+    footprint_ref: FP_0010
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: '*'
+      COMPONENT_HIGH_MAX: 4mm
+    pin_nets:
+      PIN_1: NET_0008
+      PIN_2: NET_0008
+      PIN_3: NET_0008
+  COMP_0068:
+    footprint_ref: FP_0010
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: '*'
+      COMPONENT_HIGH_MAX: 4mm
+    pin_nets:
+      PIN_1: NET_0008
+      PIN_2: NET_0008
+      PIN_3: NET_0008
+  COMP_0069:
+    footprint_ref: FP_0010
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: '*'
+      COMPONENT_HIGH_MAX: 4mm
+    pin_nets:
+      PIN_1: NET_0008
+      PIN_2: NET_0008
+      PIN_3: NET_0008
+  COMP_0070:
+    footprint_ref: FP_0005
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      COMPONENT_HIGH_MAX: 2.5mm
+    pin_nets:
+      PIN_1: NET_0012
+      PIN_2: NET_0008
+      PIN_3: NET_0008
+      PIN_4: NET_0008
+      PIN_5: NET_0008
+      PIN_6: NET_0046
+      PIN_7: NET_0008
+  COMP_0071:
+    footprint_ref: FP_0005
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      COMPONENT_HIGH_MAX: 2.5mm
+    pin_nets:
+      PIN_1: NET_0047
+      PIN_2: NET_0008
+      PIN_3: NET_0008
+      PIN_4: NET_0008
+      PIN_5: NET_0008
+      PIN_6: NET_0048
+      PIN_7: NET_0008
+  COMP_0072:
+    footprint_ref: FP_0011
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: '*'
+    pin_nets:
+      PIN_1: NET_0008
+      PIN_2: NET_0008
+      PIN_3: NET_0008
+      PIN_4: NET_0008
+      PIN_5: NET_0008
+      PIN_6: NET_0008
+      PIN_7: NET_0008
+      PIN_8: NET_0008
+  COMP_0073:
+    footprint_ref: FP_0011
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: '*'
+    pin_nets:
+      PIN_1: NET_0008
+      PIN_2: NET_0008
+      PIN_3: NET_0008
+      PIN_4: NET_0008
+      PIN_5: NET_0008
+      PIN_6: NET_0008
+      PIN_7: NET_0008
+      PIN_8: NET_0008
+  COMP_0074:
+    footprint_ref: FP_0001
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: '*'
+    pin_nets:
+      PIN_1: NET_0049
+  COMP_0075:
+    footprint_ref: FP_0001
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: '*'
+    pin_nets:
+      PIN_1: NET_0050
+  COMP_0076:
+    footprint_ref: FP_0008
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: '10'
+      COMPONENT_HIGH_MAX: 4.1mm
+    pin_nets: {}
+  COMP_0077:
+    footprint_ref: FP_0039
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: '*'
+    pin_nets: {}
+  COMP_0078:
+    footprint_ref: FP_0039
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: '*'
+    pin_nets: {}
+  COMP_0079:
+    footprint_ref: FP_0039
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: '*'
+    pin_nets: {}
+  COMP_0080:
+    footprint_ref: FP_0039
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: '*'
+    pin_nets: {}
+  COMP_0081:
+    footprint_ref: FP_0012
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      COMPONENT_HIGH_MAX: 1mm
+    pin_nets:
+      PIN_1: NET_0008
+      PIN_2: NET_0051
+      PIN_3: NET_0008
+      PIN_4: NET_0008
+      PIN_5: NET_0052
+      PIN_6: NET_0008
+      PIN_7: NET_0008
+  COMP_0082:
+    footprint_ref: FP_0012
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      COMPONENT_HIGH_MAX: 1mm
+    pin_nets:
+      PIN_1: NET_0008
+      PIN_2: NET_0053
+      PIN_3: NET_0008
+      PIN_4: NET_0008
+      PIN_5: NET_0054
+      PIN_6: NET_0008
+      PIN_7: NET_0008
+  COMP_0083:
+    footprint_ref: FP_0013
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      COMPONENT_HIGH_MAX: 1mm
+    pin_nets:
+      PIN_1: NET_0055
+      PIN_2: NET_0008
+      PIN_3: NET_0056
+      PIN_4: NET_0031
+      PIN_5: NET_0008
+      PIN_6: NET_0030
+      PIN_7: NET_0008
+  COMP_0084:
+    footprint_ref: FP_0014
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      COMPONENT_HIGH_MAX: 0.8mm
+    pin_nets:
+      PIN_1: NET_0057
+      PIN_2: NET_0036
+      PIN_3: NET_0058
+      PIN_4: NET_0059
+      PIN_5: NET_0015
+      PIN_6: NET_0008
+      PIN_7: NET_0034
+      PIN_8: NET_0035
+      PIN_9: NET_0037
+  COMP_0085:
+    footprint_ref: FP_0040
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      COMPONENT_HIGH_MAX: 0.5127mm
+    pin_nets: {}
+  COMP_0086:
+    footprint_ref: FP_0015
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      COMPONENT_HIGH_MAX: 1mm
+    pin_nets:
+      PIN_1: NET_0060
+      PIN_2: NET_0008
+      PIN_3: NET_0061
+      PIN_4: NET_0062
+      PIN_5: NET_0008
+      PIN_6: NET_0063
+  COMP_0087:
+    footprint_ref: FP_0016
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      COMPONENT_HIGH_MAX: 9999998mm
+    pin_nets:
+      PIN_1: NET_0064
+      PIN_2: NET_0008
+  COMP_0088:
+    footprint_ref: FP_0017
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      COMPONENT_HIGH_MAX: 7.75mm
+    pin_nets:
+      PIN_1: NET_0018
+      PIN_2: NET_0065
+      PIN_3: NET_0008
+  COMP_0089:
+    footprint_ref: FP_0018
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      COMPONENT_HIGH_MAX: 1.8mm
+    pin_nets:
+      PIN_1: NET_0047
+      PIN_2: NET_0066
+      PIN_3: NET_0019
+      PIN_4: NET_0067
+      PIN_5: NET_0008
+  COMP_0090:
+    footprint_ref: FP_0018
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      COMPONENT_HIGH_MAX: 1.8mm
+    pin_nets:
+      PIN_1: NET_0068
+      PIN_2: NET_0069
+      PIN_3: NET_0070
+      PIN_4: NET_0071
+      PIN_5: NET_0008
+  COMP_0091:
+    footprint_ref: FP_0019
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 6.8pF
+    pin_nets:
+      PIN_1: NET_0032
+      PIN_2: NET_0008
+  COMP_0092:
+    footprint_ref: FP_0019
+    placement:
+      type: parametric_uv
+      anchor_pin: PIN_1
+      reference_net: PAGRID_PA1_07
+      origin:
+        offset_u: null
+        offset_v: auto
+      relative_rotation: null
+    properties:
+      Value: 6.8pF
+    pin_nets:
+      PIN_1: NET_0014
+      PIN_2: NET_0008
+  COMP_0093:
+    footprint_ref: FP_0019
+    placement:
+      type: parametric_uv
+      anchor_pin: PIN_1
+      reference_net: PAGRID_PA1_08
+      origin:
+        offset_u: null
+        offset_v: auto
+      relative_rotation: null
+    properties:
+      Value: 6.8pF
+    pin_nets:
+      PIN_1: NET_0017
+      PIN_2: NET_0008
+  COMP_0094:
+    footprint_ref: FP_0019
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 6.8pF
+    pin_nets:
+      PIN_1: NET_0033
+      PIN_2: NET_0008
+  COMP_0095:
+    footprint_ref: FP_0019
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 15pF
+    pin_nets:
+      PIN_1: NET_0036
+      PIN_2: NET_0008
+  COMP_0096:
+    footprint_ref: FP_0019
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 15pF
+    pin_nets:
+      PIN_1: NET_0035
+      PIN_2: NET_0008
+  COMP_0097:
+    footprint_ref: FP_0019
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 15pF
+    pin_nets:
+      PIN_1: NET_0037
+      PIN_2: NET_0008
+  COMP_0098:
+    footprint_ref: FP_0019
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 15pF
+    pin_nets:
+      PIN_1: NET_0034
+      PIN_2: NET_0008
+  COMP_0099:
+    footprint_ref: FP_0019
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 15pF
+      COMPONENT_HIGH_MAX: 0.55mm
+    pin_nets:
+      PIN_1: NET_0008
+      PIN_2: NET_0072
+  COMP_0100:
+    footprint_ref: FP_0019
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 15pF
+      COMPONENT_HIGH_MAX: 0.55mm
+    pin_nets:
+      PIN_1: NET_0049
+      PIN_2: NET_0008
+  COMP_0101:
+    footprint_ref: FP_0019
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 15pF
+      COMPONENT_HIGH_MAX: 0.55mm
+    pin_nets:
+      PIN_1: NET_0041
+      PIN_2: NET_0008
+  COMP_0102:
+    footprint_ref: FP_0019
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 15pF
+      COMPONENT_HIGH_MAX: 0.55mm
+    pin_nets:
+      PIN_1: NET_0008
+      PIN_2: NET_0072
+  COMP_0103:
+    footprint_ref: FP_0019
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 1nF
+    pin_nets:
+      PIN_1: NET_0073
+      PIN_2: NET_0008
+  COMP_0104:
+    footprint_ref: FP_0019
+    placement:
+      type: parametric_uv
+      anchor_pin: PIN_1
+      reference_net: PAGRID_PA1_06_PA
+      origin:
+        offset_u: null
+        offset_v: auto
+      relative_rotation: null
+    properties:
+      Value: 1nF
+    pin_nets:
+      PIN_1: NET_0015
+      PIN_2: NET_0008
+  COMP_0105:
+    footprint_ref: FP_0020
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 100nF
+      COMPONENT_HIGH_MAX: 0.6mm
+    pin_nets:
+      PIN_1: NET_0050
+      PIN_2: NET_0008
+  COMP_0106:
+    footprint_ref: FP_0020
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 100nF
+      COMPONENT_HIGH_MAX: 0.6mm
+    pin_nets:
+      PIN_1: NET_0049
+      PIN_2: NET_0008
+  COMP_0107:
+    footprint_ref: FP_0020
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 100nF
+      COMPONENT_HIGH_MAX: 0.6mm
+    pin_nets:
+      PIN_1: NET_0041
+      PIN_2: NET_0008
+  COMP_0108:
+    footprint_ref: FP_0020
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 100nF
+      COMPONENT_HIGH_MAX: 0.6mm
+    pin_nets:
+      PIN_1: NET_0042
+      PIN_2: NET_0008
+  COMP_0109:
+    footprint_ref: FP_0021
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 1.5pF
+    pin_nets:
+      PIN_1: NET_0008
+      PIN_2: NET_0047
+  COMP_0110:
+    footprint_ref: FP_0022
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 4.7uF
+      COMPONENT_HIGH_MAX: 2.7mm
+    pin_nets:
+      PIN_1: NET_0030
+      PIN_2: NET_0008
+  COMP_0111:
+    footprint_ref: FP_0022
+    placement:
+      type: parametric_uv
+      anchor_pin: PIN_1
+      reference_net: PWR_70V_PA1_1
+      origin:
+        offset_u: null
+        offset_v: auto
+      relative_rotation: null
+    properties:
+      Value: 4.7uF
+      COMPONENT_HIGH_MAX: 2.7mm
+    pin_nets:
+      PIN_1: NET_0003
+      PIN_2: NET_0008
+  COMP_0112:
+    footprint_ref: FP_0022
+    placement:
+      type: parametric_uv
+      anchor_pin: PIN_2
+      reference_net: PWR_70V_PA1_2
+      origin:
+        offset_u: null
+        offset_v: auto
+      relative_rotation: null
+    properties:
+      Value: 4.7uF
+      COMPONENT_HIGH_MAX: 2.7mm
+    pin_nets:
+      PIN_1: NET_0008
+      PIN_2: NET_0004
+  COMP_0113:
+    footprint_ref: FP_0022
+    placement:
+      type: parametric_uv
+      anchor_pin: PIN_2
+      reference_net: PWR_70V_PA1_2
+      origin:
+        offset_u: null
+        offset_v: auto
+      relative_rotation: null
+    properties:
+      Value: 4.7uF
+      COMPONENT_HIGH_MAX: 2.7mm
+    pin_nets:
+      PIN_1: NET_0008
+      PIN_2: NET_0004
+  COMP_0114:
+    footprint_ref: FP_0023
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      COMPONENT_HIGH_MAX: 8.3mm
+    pin_nets:
+      PIN_1: NET_0064
+      PIN_2: NET_0065
+      PIN_3: NET_0008
+      PIN_4: NET_0008
+      PIN_5: NET_0008
+      PIN_6: NET_0008
+      PIN_7: NET_0008
+      PIN_8: NET_0008
+      PIN_9: NET_0008
+      PIN_10: NET_0008
+      PIN_11: NET_0008
+      PIN_12: NET_0008
+      PIN_13: NET_0008
+      PIN_14: NET_0008
+      PIN_15: NET_0008
+      PIN_16: NET_0008
+      PIN_17: NET_0008
+      PIN_18: NET_0008
+      PIN_19: NET_0008
+      PIN_20: NET_0008
+      PIN_21: NET_0008
+      PIN_22: NET_0008
+      PIN_23: NET_0008
+      PIN_24: NET_0008
+      PIN_25: NET_0008
+      PIN_26: NET_0008
+      PIN_27: NET_0008
+      PIN_28: NET_0008
+      PIN_29: NET_0008
+      PIN_30: NET_0008
+      PIN_31: NET_0008
+      PIN_32: NET_0008
+      PIN_33: NET_0008
+      PIN_34: NET_0008
+      PIN_35: NET_0008
+      PIN_36: NET_0008
+  COMP_0115:
+    footprint_ref: FP_0024
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 3.9nH
+    pin_nets:
+      PIN_1: NET_0052
+      PIN_2: NET_0074
+  COMP_0116:
+    footprint_ref: FP_0024
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 3.9nH
+    pin_nets:
+      PIN_1: NET_0052
+      PIN_2: NET_0023
+  COMP_0117:
+    footprint_ref: FP_0024
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 3.9nH
+    pin_nets:
+      PIN_1: NET_0074
+      PIN_2: NET_0075
+  COMP_0118:
+    footprint_ref: FP_0024
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 10nH
+    pin_nets:
+      PIN_1: NET_0076
+      PIN_2: NET_0077
+  COMP_0119:
+    footprint_ref: FP_0024
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 10nH
+    pin_nets:
+      PIN_1: NET_0054
+      PIN_2: NET_0076
+  COMP_0120:
+    footprint_ref: FP_0024
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 10nH
+    pin_nets:
+      PIN_1: NET_0054
+      PIN_2: NET_0029
+  COMP_0121:
+    footprint_ref: FP_0025
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 5.6nH
+      COMPONENT_HIGH_MAX: 0.66mm
+    pin_nets:
+      PIN_1: NET_0078
+      PIN_2: NET_0079
+  COMP_0122:
+    footprint_ref: FP_0026
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 3.9nH
+      COMPONENT_HIGH_MAX: 1.24mm
+    pin_nets:
+      PIN_1: NET_0080
+      PIN_2: NET_0081
+  COMP_0123:
+    footprint_ref: FP_0026
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      Value: 3.9nH
+      COMPONENT_HIGH_MAX: 1.24mm
+    pin_nets:
+      PIN_1: NET_0030
+      PIN_2: NET_0080
+  COMP_0124:
+    footprint_ref: FP_0027
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      COMPONENT_HIGH_MAX: 3.55mm
+    pin_nets:
+      PIN_1: NET_0008
+  COMP_0125:
+    footprint_ref: FP_0027
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      COMPONENT_HIGH_MAX: 3.55mm
+    pin_nets:
+      PIN_1: NET_0008
+  COMP_0126:
+    footprint_ref: FP_0027
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      COMPONENT_HIGH_MAX: 3.55mm
+    pin_nets:
+      PIN_1: NET_0008
+  COMP_0127:
+    footprint_ref: FP_0028
+    placement:
+      x: null
+      y: null
+      rotation: 0
+      is_floating: true
+    properties:
+      COMPONENT_HIGH_MAX: 1.1mm
+    pin_nets:
+      PIN_1: NET_0025
+      PIN_2: NET_0082
+      PIN_3: NET_0083
+      PIN_4: NET_0073
+      PIN_5: NET_0008
+      PIN_6: NET_0026
