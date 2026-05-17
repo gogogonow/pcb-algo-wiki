@@ -22,7 +22,7 @@ def test_node_labels_use_short_id():
     )
     svg = render_geometry_svg(ir)
     # Node circle still rendered (radius 1.5)
-    assert '<circle cx=' in svg and 'r="1.5"' in svg
+    assert "<circle cx=" in svg and 'r="1.5"' in svg
     # Node label no longer rendered
     assert ">p2s2_sp<" not in svg
     assert "IC1_pin2_seg2_end_split_pad" not in svg

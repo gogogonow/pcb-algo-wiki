@@ -60,6 +60,7 @@ def _render_pads(
     *,
     x_fn,  # type: ignore[no-untyped-def]
     y_fn,  # type: ignore[no-untyped-def]
+    show_pin_labels: bool = True,
 ) -> tuple[list[str], int]:
     """Render every pad of every placed component as an SVG polygon.
 
@@ -117,18 +118,19 @@ def _render_pads(
             )
             polygon_count += 1
             # Visible pin number label centred at pad world position.
-            pin_name = pad_placement.pin
-            pin_label = escape(
-                f"PIN_{pin_name[1:]}"
-                if pin_name.startswith("P") and pin_name[1:].isdigit()
-                else pin_name
-            )
-            parts.append(
-                f'<text x="{x_fn(wx):.2f}" y="{y_fn(wy) + 2:.2f}" '
-                f'font-family="sans-serif" font-size="{_PIN_LABEL_FONT_SIZE}" text-anchor="middle" '
-                f'font-weight="bold" fill="#1e293b" opacity="0.9">'
-                f"{pin_label}</text>"
-            )
+            if show_pin_labels:
+                pin_name = pad_placement.pin
+                pin_label = escape(
+                    f"PIN_{pin_name[1:]}"
+                    if pin_name.startswith("P") and pin_name[1:].isdigit()
+                    else pin_name
+                )
+                parts.append(
+                    f'<text x="{x_fn(wx):.2f}" y="{y_fn(wy) + 2:.2f}" '
+                    f'font-family="sans-serif" font-size="{_PIN_LABEL_FONT_SIZE}" text-anchor="middle" '
+                    f'font-weight="bold" fill="#1e293b" opacity="0.9">'
+                    f"{pin_label}</text>"
+                )
     return parts, polygon_count
 
 
@@ -186,6 +188,7 @@ def render_full_layout(
     lvs: LvsReport | None = None,
     layout: V33Layout | None = None,
     show_pads: bool = True,
+    show_pad_labels: bool = True,  # WI-I7: control PIN label rendering
     px_per_mm: float = 6.0,
     margin_mm: float = 5.0,
 ) -> str:
@@ -206,7 +209,9 @@ def render_full_layout(
     bbox_parts: list[str] = []
     bbox_count = 0
     if layout is not None and show_pads:
-        pad_parts, pad_polygon_count = _render_pads(layout, geom, x_fn=_x, y_fn=_y)
+        pad_parts, pad_polygon_count = _render_pads(
+            layout, geom, x_fn=_x, y_fn=_y, show_pin_labels=show_pad_labels
+        )
         bbox_parts, bbox_count = _render_component_bboxes(
             layout, geom, x_fn=_x, y_fn=_y
         )

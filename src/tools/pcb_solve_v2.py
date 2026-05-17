@@ -220,15 +220,8 @@ def _phase_b_rlc_overlay(
             ]
             cls = "prea-gnd-pin" if pad.pin in gnd_pins else "prea-rlc-pad"
             parts.append(_emit_polygon(cls, pad_pts, f"{comp_id}.{pad.pin}"))
-            # WI-F2: render PIN short label on top of pad polygon so users can
-            # tell PIN_1 from PIN_2 (the base _pin_label_overlay skips UVs to
-            # avoid being covered by the bbox).
-            pin_label_text = _prea_short_name(f"{comp_id}.{pad.pin}")
-            parts.append(
-                f'<text class="phb-pin-label" x="{_x(pcx):.2f}" '
-                f'y="{_y(pcy) - 3:.2f}" text-anchor="middle">'
-                f"{escape(pin_label_text)}</text>"
-            )
+            # WI-I7: RLC pin labels removed per user request
+            # (only show component name, not individual pin numbers like C2.1, C2.2)
             if pad.pin in gnd_pins:
                 parts.append(
                     f'<text class="phb-net-label" x="{_x(pcx)+3:.2f}" '
@@ -318,6 +311,8 @@ def _pin_label_overlay(
     WI-F2: ``skip_components`` lets callers exclude UV/RLC components whose
     pad labels are rendered by ``_phase_b_rlc_overlay`` on top of the bbox /
     pad polygons (otherwise the bbox covers these labels).
+
+    WI-I7: Skip RLC components (C*, R*, L*) - only show PIN labels for IC/connector.
     """
     board_h = float(geom.board.height) + 2 * margin_mm
 
@@ -330,6 +325,9 @@ def _pin_label_overlay(
     parts: list[str] = []
     for comp_name, placement in geom.placements.items():
         if comp_name in skip_components:
+            continue
+        # WI-I7: Skip RLC components - only show PIN labels for IC/connector
+        if comp_name and comp_name[0] in ("C", "R", "L"):
             continue
         for pad in placement.pads:
             px = float(pad.point.x)
@@ -383,6 +381,11 @@ def _phase_a_diag_overlay(
             key = (round(xy[0], 2), round(xy[1], 2))
             if key in drawn_node_positions:
                 continue
+            # WI-I7: Skip RLC PIN labels (e.g., C2.1, R3.2) - only show IC/connector endpoints
+            if "." in node_id:
+                comp_id = node_id.split(".")[0]
+                if comp_id and comp_id[0] in ("C", "R", "L"):
+                    continue
             drawn_node_positions.add(key)
             label = _prea_short_name(node_id)
             parts.append(
@@ -517,10 +520,14 @@ def _render_svg(
     banner: str = "",
     overlay: str = "",
     layout: V33Layout | None = None,
+    show_pads: bool = True,
+    show_pad_labels: bool = True,  # WI-I7: control PIN label rendering
 ) -> None:
     """Write a rendered SVG to *path*, injecting an optional phase banner and overlay."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    svg = render_full_layout(geom, layout=layout)
+    svg = render_full_layout(
+        geom, layout=layout, show_pads=show_pads, show_pad_labels=show_pad_labels
+    )
     if overlay:
         svg = svg.replace("</svg>", overlay + "</svg>")
     if banner:
@@ -2375,6 +2382,7 @@ def _persist_phase_artefacts(
         + _phase_a_diag_overlay(result, geom_b)
         + _phase_b_rlc_overlay(geom_b, result, layout),
         layout=layout,
+        show_pad_labels=False,  # WI-I7: disable pad labels (use _pin_label_overlay instead)
     )
     artefacts["phaseB_svg"] = phase_b_svg
 
