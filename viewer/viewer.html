@@ -30,12 +30,11 @@
   #project-name { color: #888; margin-left: 8px; font-size: 11px; }
 
   #main {
-    display: flex; flex-direction: row;
+    display: grid; grid-template-columns: 200px 1fr 260px;
     width: 100%; height: calc(100% - 48px);
   }
 
   #filter-panel {
-    width: 200px; flex-shrink: 0;
     background: #181818; border-right: 1px solid #2a2a2a;
     padding: 10px 8px; overflow-y: auto;
   }
@@ -45,12 +44,11 @@
   .filter-item label { cursor: pointer; color: #bbb; user-select: none; }
 
   #canvas-container {
-    flex: 1 1 auto; overflow: hidden; position: relative; background: #111;
+    overflow: hidden; position: relative; background: #111;
   }
   #canvas-container canvas { display: block; }
 
   #prop-panel {
-    width: 260px; flex-shrink: 0;
     background: #181818; border-left: 1px solid #2a2a2a;
     padding: 10px 10px; overflow-y: auto;
   }
