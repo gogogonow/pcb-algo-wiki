@@ -127,6 +127,72 @@ def _build_phase_b_geom(result: OrchestratorV2Result) -> GeometryIR:
     )
 
 
+def _make_viewer_components(artifact: "FrontendArtifact") -> list[dict]:
+    """Convert FrontendArtifact components to viewer.json component list."""
+    KIND_MAP = {"parametric_uv": "uv"}
+    result_list = []
+    for ref, comp in artifact.components.items():
+        if comp.bbox is not None:
+            x_mm = round((comp.bbox.min_x + comp.bbox.max_x) / 2.0, 4)
+            y_mm = round((comp.bbox.min_y + comp.bbox.max_y) / 2.0, 4)
+            w_mm = round(comp.bbox.max_x - comp.bbox.min_x, 4)
+            h_mm = round(comp.bbox.max_y - comp.bbox.min_y, 4)
+        else:
+            x_mm, y_mm, w_mm, h_mm = 0.0, 0.0, 1.0, 1.0
+        kind = KIND_MAP.get(comp.placement_kind, comp.placement_kind)
+        pads = [
+            {"pin": p.pin, "x_mm": round(p.abs_x, 4), "y_mm": round(p.abs_y, 4)}
+            for p in comp.pads
+            if p.abs_x is not None and p.abs_y is not None
+        ]
+        result_list.append(
+            {
+                "ref": ref,
+                "x_mm": x_mm,
+                "y_mm": y_mm,
+                "w_mm": w_mm,
+                "h_mm": h_mm,
+                "rotation_deg": 0.0,
+                "kind": kind,
+                "pads": pads,
+            }
+        )
+    return result_list
+
+
+def _collect_skeleton_routes(
+    skeleton: "SkeletonReport",
+    artifact: "FrontendArtifact",
+) -> list[dict]:
+    """Convert SkeletonReport routes (µm) to viewer.json route list (mm)."""
+    UM_TO_MM = 1.0 / 1000.0
+    routes = []
+    for edge_id, r in skeleton.routes.items():
+        edge = artifact.edges.get(edge_id)
+        width_mm = round(float(edge.width), 4) if (edge and edge.width) else 0.0
+        target_mm = round(float(r.target_mm), 4) if r.target_mm is not None else None
+        polyline_mm = [
+            [round(x * UM_TO_MM, 4), round(y * UM_TO_MM, 4)]
+            for x, y in r.polyline_um
+        ]
+        routes.append(
+            {
+                "edge_id": edge_id,
+                "polyline_mm": polyline_mm,
+                "width_mm": width_mm,
+                "success": r.success,
+                "length_mm": round(r.length_mm, 4),
+                "target_mm": target_mm,
+                "length_err_pct": round(r.length_err_pct, 2)
+                if r.length_err_pct is not None
+                else None,
+                "failure_reason": r.failure_reason,
+                "rip_up_round": r.rip_up_round,
+            }
+        )
+    return routes
+
+
 def _make_partial_result(
     artifact: FrontendArtifact,
     plan: Any,
