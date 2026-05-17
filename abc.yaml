@@ -1,0 +1,1090 @@
+metadata:
+  project_name: DEMO_PROJECT
+  version: 1.0.0
+  generator: EDA Auto-Layout Parser v3.3
+  description: yml格式参考文档-射频微波版图结构化数据规范 v3.3.md
+global_constraints:
+  routing:
+    default_trace_width: 0.254
+    default_clearance: 0.15
+    via_drill: 0.2
+    via_pad: 0.4
+  stackup:
+    layer_count: 1
+    material: RO4350B
+    board_thickness: 0.8
+  board_outline:
+    type: bounding_box
+    origin:
+      x: 0.0
+      y: 0.0
+    width: 40.0
+    height: 185.0
+  keepout_zones: []
+footprints:
+  FP_0001:
+    description: HOLE24-40_40S
+    dimensions:
+      radius: 2.0
+    pins:
+      PIN_1:
+        local_x: 0
+        local_y: 0
+        pad_geometry:
+          shape: circle
+          radius: 2.0
+  FP_0002:
+    description: HOLE40-60_60S
+    dimensions:
+      radius: 3.0
+    pins:
+      PIN_1:
+        local_x: 0
+        local_y: 0
+        pad_geometry:
+          shape: circle
+          radius: 3.0
+  FP_0003:
+    description: 4-Pin RF Transistor Package
+    dimensions:
+      width: 12.03
+      length: 15.43
+      height: 2.29
+    pins:
+      PIN_1:
+        local_x: 2.88
+        local_y: -5.0
+        local_orientation: -90
+        pad_geometry:
+          shape: rect
+          width: 3.84
+          length: 3.71
+      PIN_2:
+        local_x: -2.88
+        local_y: -5.0
+        local_orientation: -90
+        pad_geometry:
+          shape: rect
+          width: 3.84
+          length: 3.71
+      PIN_3:
+        local_x: -2.88
+        local_y: 5.0
+        local_orientation: 90
+        pad_geometry:
+          shape: rect
+          width: 3.84
+          length: 3.71
+      PIN_4:
+        local_x: 2.88
+        local_y: 5.0
+        local_orientation: 90
+        pad_geometry:
+          shape: rect
+          width: 3.84
+          length: 3.71
+  FP_0004:
+    description: 3-Pin RF Transistor Package
+    dimensions:
+      width: 1.0
+      length: 1.85
+      height: 0.9
+    pins:
+      PIN_1:
+        local_x: -0.7
+        local_y: 0
+        local_orientation: 180
+        pad_geometry:
+          shape: rect
+          width: 0.97
+          length: 0.91
+      PIN_2:
+        local_x: 0.7
+        local_y: 0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.97
+          length: 0.91
+  FP_0005:
+    description: 3-Pin RF Transistor Package
+    dimensions:
+      width: 5.5
+      length: 5.3
+      height: 2.5
+    pins:
+      PIN_1:
+        local_x: -2.25
+        local_y: 2.5
+        local_orientation: 90
+        pad_geometry:
+          shape: rect
+          width: 0.97
+          length: 0.97
+      PIN_2:
+        local_x: 0
+        local_y: 2.5
+        local_orientation: 90
+        pad_geometry:
+          shape: rect
+          width: 0.97
+          length: 0.97
+      PIN_3:
+        local_x: 2.25
+        local_y: 2.5
+        local_orientation: 90
+        pad_geometry:
+          shape: rect
+          width: 0.97
+          length: 0.97
+      PIN_4:
+        local_x: -2.25
+        local_y: -2.5
+        local_orientation: -90
+        pad_geometry:
+          shape: rect
+          width: 0.97
+          length: 0.97
+      PIN_5:
+        local_x: 0
+        local_y: -2.5
+        local_orientation: -90
+        pad_geometry:
+          shape: rect
+          width: 0.97
+          length: 0.97
+      PIN_6:
+        local_x: 2.25
+        local_y: -2.5
+        local_orientation: -90
+        pad_geometry:
+          shape: rect
+          width: 0.97
+          length: 0.97
+      PIN_7:
+        local_x: 0.0
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 3.55
+          length: 5.15
+  FP_0006:
+    description: Auto-generated inferred footprint for SC0603B
+    dimensions:
+      width: 0.95
+      length: 1.75
+      height: 0.95
+    pins:
+      PIN_1:
+        local_x: -0.685
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.19
+          length: 0.91
+      PIN_2:
+        local_x: 0.685
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.19
+          length: 0.91
+  FP_0007:
+    description: Auto-generated inferred footprint for SC0805B
+    dimensions:
+      width: 1.45
+      length: 2.21
+      height: 1.45
+    pins:
+      PIN_1:
+        local_x: -0.82
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.42
+          length: 1.14
+      PIN_2:
+        local_x: 0.82
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.42
+          length: 1.14
+  FP_0008:
+    description: Auto-generated inferred footprint for SR0603B
+    dimensions:
+      width: 0.9
+      length: 1.8
+      height: 0.6
+    pins:
+      PIN_1:
+        local_x: -0.73
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.09
+          length: 0.86
+      PIN_2:
+        local_x: 0.73
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.09
+          length: 0.86
+  FP_0009:
+    description: Auto-generated inferred footprint for COM2-F-L
+    dimensions:
+      width: 1.8
+      length: 5.75
+      height: 4.1
+    pins:
+      PIN_1:
+        local_x: -2.175
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.75
+          length: 1.47
+      PIN_2:
+        local_x: -0.18
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.75
+          length: 1.47
+  FP_0010:
+    description: Auto-generated inferred footprint for COM3-F
+    dimensions:
+      width: 1.75
+      length: 5.75
+      height: 1.4
+    pins:
+      PIN_1:
+        local_x: -1.735
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.75
+          length: 1.47
+      PIN_2:
+        local_x: 0.25
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.75
+          length: 1.47
+      PIN_3:
+        local_x: 2.235
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.75
+          length: 1.47
+  FP_0011:
+    description: Auto-generated inferred footprint for HOLE197-8STAR-A
+    dimensions:
+      width: 9.76
+      length: 9.76
+      height: 0.0
+    pins:
+      PIN_1:
+        local_x: -3.88
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 0.56
+      PIN_2:
+        local_x: -2.75
+        local_y: -2.75
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 0.56
+      PIN_3:
+        local_x: 0.0
+        local_y: -3.9
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 0.56
+      PIN_4:
+        local_x: 2.75
+        local_y: -2.75
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 0.56
+      PIN_5:
+        local_x: 3.88
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 0.56
+      PIN_6:
+        local_x: 2.75
+        local_y: 2.75
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 0.56
+      PIN_7:
+        local_x: 0.0
+        local_y: 3.9
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 0.56
+      PIN_8:
+        local_x: -2.75
+        local_y: 2.75
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 0.56
+  FP_0012:
+    description: Auto-generated inferred footprint for MLF6-130-0405L
+    dimensions:
+      width: 4.65
+      length: 4.15
+      height: 1.0
+    pins:
+      PIN_1:
+        local_x: -1.3
+        local_y: -2.15
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.91
+          length: 0.76
+      PIN_2:
+        local_x: 0.0
+        local_y: -2.15
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.91
+          length: 0.76
+      PIN_3:
+        local_x: 1.3
+        local_y: -2.15
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.91
+          length: 0.76
+      PIN_4:
+        local_x: 1.3
+        local_y: 2.15
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.91
+          length: 0.76
+      PIN_5:
+        local_x: 0.0
+        local_y: 2.15
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.91
+          length: 0.76
+      PIN_6:
+        local_x: -1.3
+        local_y: 2.15
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.91
+          length: 0.76
+      PIN_7:
+        local_x: 0.0
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 2.57
+          length: 2.95
+  FP_0013:
+    description: Auto-generated inferred footprint for MLF6A-160-0707L
+    dimensions:
+      width: 7.15
+      length: 6.65
+      height: 1.0
+    pins:
+      PIN_1:
+        local_x: -1.1
+        local_y: -3.15
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.37
+          length: 0.97
+      PIN_2:
+        local_x: 0.0
+        local_y: -3.15
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.37
+          length: 0.97
+      PIN_3:
+        local_x: 1.1
+        local_y: -3.15
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.37
+          length: 0.97
+      PIN_4:
+        local_x: 1.1
+        local_y: 3.15
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.37
+          length: 0.97
+      PIN_5:
+        local_x: 0.0
+        local_y: 3.15
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.37
+          length: 0.97
+      PIN_6:
+        local_x: -1.1
+        local_y: 3.15
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.37
+          length: 0.97
+      PIN_7:
+        local_x: 0.0
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 5.49
+          length: 3.76
+  FP_0014:
+    description: Auto-generated inferred footprint for MLF8AT-050-0202L
+    dimensions:
+      width: 2.1
+      length: 2.1
+      height: 0.0
+    pins:
+      PIN_1:
+        local_x: -0.75
+        local_y: -1.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.71
+          length: 0.41
+      PIN_2:
+        local_x: -0.25
+        local_y: -1.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.71
+          length: 0.41
+      PIN_3:
+        local_x: 0.25
+        local_y: -1.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.71
+          length: 0.41
+      PIN_4:
+        local_x: 0.75
+        local_y: -1.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.71
+          length: 0.41
+      PIN_5:
+        local_x: 0.75
+        local_y: 1.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.71
+          length: 0.41
+      PIN_6:
+        local_x: 0.25
+        local_y: 1.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.71
+          length: 0.41
+      PIN_7:
+        local_x: -0.25
+        local_y: 1.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.71
+          length: 0.41
+      PIN_8:
+        local_x: -0.75
+        local_y: 1.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.71
+          length: 0.41
+      PIN_9:
+        local_x: 0.0
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.91
+          length: 1.75
+  FP_0015:
+    description: Auto-generated inferred footprint for MRT-LDB21
+    dimensions:
+      width: 0.0
+      length: 0.0
+      height: 0.0
+    pins:
+      PIN_1:
+        local_x: -0.65
+        local_y: -0.8
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.07
+          length: 0.51
+      PIN_2:
+        local_x: 0
+        local_y: -0.8
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.07
+          length: 0.51
+      PIN_3:
+        local_x: 0.65
+        local_y: -0.8
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.07
+          length: 0.51
+      PIN_4:
+        local_x: 0.65
+        local_y: 0.8
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.07
+          length: 0.51
+      PIN_5:
+        local_x: 0
+        local_y: 0.8
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.07
+          length: 0.51
+      PIN_6:
+        local_x: -0.65
+        local_y: 0.8
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.07
+          length: 0.51
+  FP_0016:
+    description: Auto-generated inferred footprint for RCOX-MBX-TF-E
+    dimensions:
+      width: 6.0
+      length: 6.0
+      height: 4.3
+    pins:
+      PIN_1:
+        local_x: 0.0
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 0.89
+      PIN_2:
+        local_x: 0.0
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: annular_sector
+          inner_radius: 2.12
+          outer_radius: 3.25
+          start_angle: 30
+          end_angle: 330
+  FP_0017:
+    description: Auto-generated inferred footprint for RF3-HW-47030513
+    dimensions:
+      width: 25.6
+      length: 22.35
+      height: 7.75
+    pins:
+      PIN_1:
+        local_x: -9.1
+        local_y: 5.4
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 1.21
+      PIN_2:
+        local_x: 9.1
+        local_y: 5.4
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 1.21
+      PIN_3:
+        local_x: 0.0
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 7
+  FP_0018:
+    description: Auto-generated inferred footprint for RF5-ANA-X3C19F1
+    dimensions:
+      width: 3.43
+      length: 5.33
+      height: 1.2
+    pins:
+      PIN_1:
+        local_x: -2.55
+        local_y: 1.68
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.68
+          length: 1.68
+      PIN_2:
+        local_x: 2.55
+        local_y: 1.68
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.68
+          length: 1.68
+      PIN_3:
+        local_x: 2.55
+        local_y: -1.68
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.68
+          length: 1.68
+      PIN_4:
+        local_x: -2.55
+        local_y: -1.68
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.68
+          length: 1.68
+      PIN_5:
+        local_x: 0.0
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 4.85
+          length: 5.33
+  FP_0019:
+    description: Auto-generated inferred footprint for SC0402-PA
+    dimensions:
+      width: 0.66
+      length: 1.47
+      height: 0.55
+    pins:
+      PIN_1:
+        local_x: -0.4
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.66
+          length: 0.66
+      PIN_2:
+        local_x: 0.4
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.66
+          length: 0.66
+  FP_0020:
+    description: Auto-generated inferred footprint for SC0402-PB
+    dimensions:
+      width: 0.66
+      length: 1.47
+      height: 0.55
+    pins:
+      PIN_1:
+        local_x: -0.4
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.66
+          length: 0.66
+      PIN_2:
+        local_x: 0.4
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.66
+          length: 0.66
+  FP_0021:
+    description: Auto-generated inferred footprint for SC0402-PC
+    dimensions:
+      width: 0.66
+      length: 1.47
+      height: 0.55
+    pins:
+      PIN_1:
+        local_x: -0.4
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.66
+          length: 0.66
+      PIN_2:
+        local_x: 0.4
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.66
+          length: 0.66
+  FP_0022:
+    description: Auto-generated inferred footprint for SC1210-TD
+    dimensions:
+      width: 2.7
+      length: 3.5
+      height: 2.7
+    pins:
+      PIN_1:
+        local_x: -1.325
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 2.57
+          length: 1.45
+      PIN_2:
+        local_x: 1.325
+        local_y: 0.0
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 2.57
+          length: 1.45
+  FP_0023:
+    description: Auto-generated inferred footprint for SFLT36-1717
+    dimensions:
+      width: 16.9
+      length: 16.9
+      height: 8.3
+    pins:
+      PIN_1:
+        local_x: -3.75
+        local_y: 3.5
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 1.13
+      PIN_2:
+        local_x: 3.75
+        local_y: 3.5
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 1.13
+      PIN_3:
+        local_x: -5.4
+        local_y: -7.45
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.75
+          length: 2.0
+      PIN_4:
+        local_x: -2.55
+        local_y: -7.45
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.75
+          length: 2.0
+      PIN_5:
+        local_x: 0.3
+        local_y: -7.45
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.75
+          length: 2.0
+      PIN_6:
+        local_x: 3.15
+        local_y: -7.45
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.75
+          length: 2.0
+      PIN_7:
+        local_x: 5.88
+        local_y: -7.45
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 0.75
+          length: 2.0
+      PIN_8:
+        local_x: -6.95
+        local_y: -5.68
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.5
+          length: 1.5
+      PIN_9:
+        local_x: -4.6
+        local_y: -5.68
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 0.5
+      PIN_10:
+        local_x: -2.25
+        local_y: -5.68
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.5
+          length: 1.5
+      PIN_11:
+        local_x: 0
+        local_y: -5.68
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.5
+          length: 1.5
+      PIN_12:
+        local_x: 2.25
+        local_y: -5.68
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.5
+          length: 1.5
+      PIN_13:
+        local_x: 4.6
+        local_y: -5.68
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 0.5
+      PIN_14:
+        local_x: 6.95
+        local_y: -5.68
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.5
+          length: 1.5
+      PIN_15:
+        local_x: -6.95
+        local_y: -3.4
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.5
+          length: 1.5
+      PIN_16:
+        local_x: -4.6
+        local_y: -3.4
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.5
+          length: 1.5
+      PIN_17:
+        local_x: -2.25
+        local_y: -3.4
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.5
+          length: 1.5
+      PIN_18:
+        local_x: 0
+        local_y: -3.4
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.5
+          length: 1.5
+      PIN_19:
+        local_x: 2.25
+        local_y: -3.4
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.5
+          length: 1.5
+      PIN_20:
+        local_x: 4.6
+        local_y: -3.4
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.5
+          length: 1.5
+      PIN_21:
+        local_x: 6.95
+        local_y: -3.4
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.5
+          length: 1.5
+      PIN_22:
+        local_x: -6.95
+        local_y: -1.1
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.5
+          length: 1.5
+      PIN_23:
+        local_x: -4.6
+        local_y: -1.1
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.5
+          length: 1.5
+      PIN_24:
+        local_x: -2.25
+        local_y: -1.1
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.5
+          length: 1.5
+      PIN_25:
+        local_x: 0
+        local_y: -1.1
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.5
+          length: 1.5
+      PIN_26:
+        local_x: 2.25
+        local_y: -1.1
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.5
+          length: 1.5
+      PIN_27:
+        local_x: 4.6
+        local_y: -1.1
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 0.5
+      PIN_28:
+        local_x: 6.95
+        local_y: -1.1
+        local_orientation: 0
+        pad_geometry:
+          shape: rect
+          width: 1.5
+          length: 1.5
+      PIN_29:
+        local_x: -5.65
+        local_y: 0.91
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 0.5
+      PIN_30:
+        local_x: -2.25
+        local_y: 0.91
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 0.5
+      PIN_31:
+        local_x: 2.25
+        local_y: 0.91
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 0.5
+      PIN_32:
+        local_x: 5.55
+        local_y: 0.91
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 0.5
+      PIN_33:
+        local_x: -5.65
+        local_y: 6.15
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 0.5
+      PIN_34:
+        local_x: -2.25
+        local_y: 6.15
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 0.5
+      PIN_35:
+        local_x: 2.25
+        local_y: 6.15
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 0.5
+      PIN_36:
+        local_x: 5.55
+        local_y: 6.15
+        local_orientation: 0
+        pad_geometry:
+          shape: circle
+          radius: 0.5
