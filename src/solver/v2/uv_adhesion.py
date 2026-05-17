@@ -566,7 +566,9 @@ def _legacy_anchor_placement(
             anchor_um = precise_um
             anchor_xy = (anchor_um[0] / MM_TO_UM, anchor_um[1] / MM_TO_UM)
 
-            # Derive rotation first (needed for coordinate transform)
+            # Derive rotation first (needed for coordinate transform).
+            # For series RLCs on microstrip endpoints: align ALONG the microstrip
+            # (not perpendicular like shunt RLCs).
             rotation = _derive_rotation(uv, anchor_pin, anchor_um, other_pin, other_um)
             if rotation is None and uv.uv_meta.reference_net:
                 host_angle = _host_edge_tangent(
@@ -578,7 +580,8 @@ def _legacy_anchor_placement(
                     anchor_xy_mm=anchor_xy,
                 )
                 if host_angle is not None:
-                    rotation = host_angle + 90.0
+                    # Series component: align along microstrip (no +90)
+                    rotation = host_angle
             if rotation is None:
                 rotation = float(seed_rotation_deg.get(uv_name, 0.0))
             rotation = _quantize_rotation(rotation)
