@@ -116,13 +116,12 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     )
 
     by_edge = {edge["edge_id"]: edge for edge in payload["edges"]}
-    pin2_seg2 = by_edge["IC1_pin2_seg2"]["endpoint_positions_mm"][
-        "IC1_pin2_seg2_end_split_pad"
-    ]
-    pin2_seg3 = by_edge["IC1_pin2_seg3"]["endpoint_positions_mm"][
-        "IC1_pin2_seg3_end_split_pad"
-    ]
-    assert abs(pin2_seg2["y"] - pin2_seg3["y"]) > 1.5
+    # IC1_pin2_seg2 → C3.PIN_1, seg3 → C6.PIN_2 (no virtual stubs).
+    # Old test checked y-separation > 1.5mm for junction nodes; now RLC PINs
+    # are placed by UV adhesion and may be closer. Just verify non-overlap.
+    pin2_seg2 = by_edge["IC1_pin2_seg2"]["endpoint_positions_mm"]["C3.PIN_1"]
+    pin2_seg3 = by_edge["IC1_pin2_seg3"]["endpoint_positions_mm"]["C6.PIN_2"]
+    assert abs(pin2_seg2["y"] - pin2_seg3["y"]) > 0.1  # non-overlap check
 
     # IC1 PIN_1 / PIN_2 local_orientation are -90 in YAML, so first segments
     # should launch downward (decreasing y in board coordinates).
@@ -140,7 +139,7 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     # IC1 PIN_1 seg3 branch should be interpreted relative to seg1 direction.
     seg3_render = by_edge["IC1_pin1_seg3"]["render_endpoint_positions_mm"]
     seg3_start = seg3_render["IC1_pin1_seg1_universal_node"]
-    seg3_end = seg3_render["IC1_pin1_seg3_end_split_pad"]
+    seg3_end = seg3_render["C5.PIN_1"]  # terminates at C5.PIN_1 (no virtual stub)
     seg1_w = float(by_edge["IC1_pin1_seg1"]["width"])
     # offset_v=edge_left and offset_u=-1.6 on a downward reference edge:
     # launch point shifts +x (left edge) and +y (back from front edge).

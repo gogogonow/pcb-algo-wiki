@@ -2,7 +2,6 @@
 测试 uv_adhesion 的精确pin定位功能（WI-I）
 """
 
-import pytest
 from frontend.models import FrontendArtifact, TriagedEdge
 from solver.v2.uv_adhesion import _is_pin_microstrip_endpoint
 from solver.v2.skeleton_router import SkeletonReport

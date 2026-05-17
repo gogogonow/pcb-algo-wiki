@@ -268,6 +268,48 @@ def _is_pin_microstrip_endpoint(
     return False
 
 
+def _extract_microstrip_endpoint_um(
+    pin_id: str,
+    skel: SkeletonReport,
+    artifact: FrontendArtifact,
+) -> tuple[int, int] | None:
+    """WI-I2: extract the precise endpoint coordinate from a routed microstrip
+    edge that terminates at the given pin. Returns the actual polyline endpoint
+    (post-meander, post-chamfer) rather than the stale final_endpoint_um.
+
+    Returns:
+        (x_um, y_um) if found, else None
+    """
+    # Find the constrained microstrip edge connected to this pin
+    for edge_id, edge_def in artifact.edges.items():
+        if pin_id not in edge_def.connections:
+            continue
+        if edge_def.edge_type != "microstrip":
+            continue
+        if edge_def.width is None and edge_def.target_length is None:
+            continue  # Skip virtual stubs
+
+        # Found a constrained microstrip; get its routed polyline
+        route = skel.routes.get(edge_id)
+        if route is None or not route.success:
+            continue
+        if len(route.polyline_um) < 1:
+            continue
+
+        # Determine which end of the polyline is the pin
+        edge_conn = edge_def.connections
+        if len(edge_conn) < 2:
+            continue
+        # If pin is the second connection (target), use last point
+        if edge_conn[-1] == pin_id:
+            return route.polyline_um[-1]
+        # If pin is the first connection (source), use first point
+        if edge_conn[0] == pin_id:
+            return route.polyline_um[0]
+
+    return None
+
+
 def _place_uv(
     uv_name: str,
     uv: ComponentExpansion,
@@ -297,16 +339,18 @@ def _place_uv(
         return _materialise_from_slot(uv, cand)
 
     # 2. Fallback: legacy anchor-pin-on-routed-endpoint derivation.
-    legacy = _legacy_anchor_placement(
+    legacy, is_precise = _legacy_anchor_placement(
         uv_name, uv, artifact, skeleton, edges_by_net, seed_anchor_mm, seed_rotation_deg
     )
     if legacy is None:
         return None
     # WI-F4: legacy path is obstacle-blind; nudge along host trace tangent
     # if rendered footprint bbox overlaps an existing obstacle.
-    legacy = _nudge_clear_of_obstacles(
-        legacy, uv, artifact, skeleton, edges_by_net, obstacles
-    )
+    # WI-I: Skip nudging for precise positioning (anchor_pin is microstrip endpoint).
+    if not is_precise:
+        legacy = _nudge_clear_of_obstacles(
+            legacy, uv, artifact, skeleton, edges_by_net, obstacles
+        )
     return legacy
 
 
@@ -467,9 +511,17 @@ def _legacy_anchor_placement(
     edges_by_net: dict[str, list[str]],
     seed_anchor_mm: dict[str, tuple[float, float]],
     seed_rotation_deg: dict[str, float],
-) -> ComponentPlacement | None:
+) -> tuple[ComponentPlacement | None, bool]:
+    """
+    Place a UV component using the legacy anchor-pin-on-endpoint approach.
+
+    Returns:
+        (placement, is_precise): placement result and whether it used precise positioning.
+        is_precise=True means the component's anchor pin is a microstrip endpoint and
+        must NOT be nudged by obstacle avoidance.
+    """
     if uv.uv_meta is None:
-        return None
+        return (None, False)
     anchor_pin = uv.uv_meta.anchor_pin
     anchor_endpoint = f"{uv_name}.{anchor_pin}"
     anchor_um = _lookup_endpoint_um(skeleton.final_endpoint_um, anchor_endpoint)
@@ -497,58 +549,71 @@ def _legacy_anchor_placement(
 
     # WI-I2: Check if this pin is a microstrip endpoint (not virtual stub).
     # If so, use precise pin positioning: PIN center = route endpoint.
-    if anchor_um is not None and _is_pin_microstrip_endpoint(
+    is_endpoint = _is_pin_microstrip_endpoint(
         pin_id=anchor_endpoint,
         part_id=uv_name,
         anchor_pin_name=anchor_pin,
         skel=skeleton,
         artifact=artifact,
-    ):
-        # Derive rotation first (needed for coordinate transform)
-        rotation = _derive_rotation(uv, anchor_pin, anchor_um, other_pin, other_um)
-        if rotation is None and uv.uv_meta.reference_net:
-            host_angle = _host_edge_tangent(
-                anchor_endpoint,
-                skeleton,
-                edges_by_net,
-                uv.uv_meta.reference_net,
-                artifact,
-                anchor_xy_mm=anchor_xy,
-            )
-            if host_angle is not None:
-                rotation = host_angle + 90.0
-        if rotation is None:
-            rotation = float(seed_rotation_deg.get(uv_name, 0.0))
-        rotation = _quantize_rotation(rotation)
-
-        # Precise positioning: pin_world = route_endpoint, then back-compute
-        # component center by subtracting rotated local pin offset.
-        pin_world_x, pin_world_y = anchor_xy
-        local_x, local_y = _local_pin_offset(uv, anchor_pin)
-        cos_r = math.cos(math.radians(rotation))
-        sin_r = math.sin(math.radians(rotation))
-        rotated_offset_x = local_x * cos_r - local_y * sin_r
-        rotated_offset_y = local_x * sin_r + local_y * cos_r
-
-        placement_x = pin_world_x - rotated_offset_x
-        placement_y = pin_world_y - rotated_offset_y
-
-        # Compute all pad placements
-        pad_placements = []
-        for pad in uv.pads:
-            lx, ly = _local_pin_offset(uv, pad.pin)
-            ppx = placement_x + cos_r * lx - sin_r * ly
-            ppy = placement_y + sin_r * lx + cos_r * ly
-            pad_placements.append(
-                PinPlacement(pin=pad.pin, point=Point(x=ppx, y=ppy))
-            )
-
-        return ComponentPlacement(
-            component=uv_name,
-            anchor=Point(x=placement_x, y=placement_y),
-            rotation_deg=rotation,
-            pads=tuple(pad_placements),
+    )
+    if anchor_um is not None and is_endpoint:
+        # Extract precise endpoint from routed polyline (post-meander/chamfer)
+        precise_um = _extract_microstrip_endpoint_um(
+            anchor_endpoint, skeleton, artifact
         )
+        if precise_um is not None:
+            # Override anchor_um with precise coordinate from polyline
+            anchor_um = precise_um
+            anchor_xy = (anchor_um[0] / MM_TO_UM, anchor_um[1] / MM_TO_UM)
+
+            # Derive rotation first (needed for coordinate transform)
+            rotation = _derive_rotation(uv, anchor_pin, anchor_um, other_pin, other_um)
+            if rotation is None and uv.uv_meta.reference_net:
+                host_angle = _host_edge_tangent(
+                    anchor_endpoint,
+                    skeleton,
+                    edges_by_net,
+                    uv.uv_meta.reference_net,
+                    artifact,
+                    anchor_xy_mm=anchor_xy,
+                )
+                if host_angle is not None:
+                    rotation = host_angle + 90.0
+            if rotation is None:
+                rotation = float(seed_rotation_deg.get(uv_name, 0.0))
+            rotation = _quantize_rotation(rotation)
+
+            # Precise positioning: pin_world = route_endpoint, then back-compute
+            # component center by subtracting rotated local pin offset.
+            pin_world_x, pin_world_y = anchor_xy
+            local_x, local_y = _local_pin_offset(uv, anchor_pin)
+            cos_r = math.cos(math.radians(rotation))
+            sin_r = math.sin(math.radians(rotation))
+            rotated_offset_x = local_x * cos_r - local_y * sin_r
+            rotated_offset_y = local_x * sin_r + local_y * cos_r
+
+            placement_x = pin_world_x - rotated_offset_x
+            placement_y = pin_world_y - rotated_offset_y
+
+            # Compute all pad placements
+            pad_placements = []
+            for pad in uv.pads:
+                lx, ly = _local_pin_offset(uv, pad.pin)
+                ppx = placement_x + cos_r * lx - sin_r * ly
+                ppy = placement_y + sin_r * lx + cos_r * ly
+                pad_placements.append(
+                    PinPlacement(pin=pad.pin, point=Point(x=ppx, y=ppy))
+                )
+
+            return (
+                ComponentPlacement(
+                    component=uv_name,
+                    anchor=Point(x=placement_x, y=placement_y),
+                    rotation_deg=rotation,
+                    pads=tuple(pad_placements),
+                ),
+                True,  # is_precise=True, skip obstacle nudging
+            )
 
     # Legacy path: anchor is component center, apply edge_align_shift.
     rotation = _derive_rotation(uv, anchor_pin, anchor_um, other_pin, other_um)
@@ -573,7 +638,7 @@ def _legacy_anchor_placement(
     sin_t = math.sin(math.radians(rotation))
     anchor_pad = next((p for p in uv.pads if p.pin == anchor_pin), None)
     if anchor_pad is None:
-        return None
+        return (None, False)
     local_x, local_y = _local_pin_offset(uv, anchor_pin)
     # WI-G2: shift anchor pin off trace centerline so pad outer edge sits
     # on trace edge. Look up the host edge width on reference_net.
@@ -599,11 +664,14 @@ def _legacy_anchor_placement(
         ppy = placement_y + sin_t * lx + cos_t * ly
         pad_placements.append(PinPlacement(pin=pad.pin, point=Point(x=ppx, y=ppy)))
 
-    return ComponentPlacement(
-        component=uv_name,
-        anchor=Point(x=placement_x, y=placement_y),
-        rotation_deg=rotation,
-        pads=tuple(pad_placements),
+    return (
+        ComponentPlacement(
+            component=uv_name,
+            anchor=Point(x=placement_x, y=placement_y),
+            rotation_deg=rotation,
+            pads=tuple(pad_placements),
+        ),
+        False,  # is_precise=False, allow obstacle nudging
     )
 
 

@@ -2,23 +2,23 @@
   "project": "PA_Module_Simplified",
   "status": "OPTIMAL",
   "phase_a": {
-    "routed": 21,
-    "total": 21,
+    "routed": 17,
+    "total": 17,
     "rip_up_rounds": 0,
-    "wall_s": 0.2756310210097581,
+    "wall_s": 0.27153650601394475,
     "max_len_err_pct": 35.56928214313137,
     "failed": []
   },
   "phase_b": {
     "uv_placed": 9,
     "uv_total": 9,
-    "wall_s": 0.0013337839918676764,
+    "wall_s": 0.00130715302657336,
     "failed": []
   },
   "phase_c": {
     "flex_routed": 0,
     "flex_failed": [],
-    "wall_s": 0.06056094201630913
+    "wall_s": 0.056967283017002046
   },
-  "wall_total_s": 0.3375257470179349
+  "wall_total_s": 0.32981094205752015
 }

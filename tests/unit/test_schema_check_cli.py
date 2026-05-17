@@ -19,7 +19,7 @@ def test_main_reports_real_case_counts(capsys) -> None:
     assert "footprints: 5" in captured.out
     assert "nodes: 8" in captured.out
     assert "terminals: 9" in captured.out
-    assert "edges: 21" in captured.out
+    assert "edges: 17" in captured.out
 
 
 def test_module_invocation_reports_real_case_counts() -> None:
@@ -39,7 +39,7 @@ def test_module_invocation_reports_real_case_counts() -> None:
         "footprints: 5\n"
         "nodes: 8\n"
         "terminals: 9\n"
-        "edges: 21\n"
+        "edges: 17\n"
     )
 
 

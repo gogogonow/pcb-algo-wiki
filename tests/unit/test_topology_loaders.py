@@ -12,9 +12,10 @@ def test_real_case_extracts_expected_entity_counts() -> None:
 
     assert len(graph.fixed_components) == 5
     assert len(graph.parametric_uv_components) == 9
-    assert len(graph.nodes) == 11
+    # Removed IC1_pin1_seg3_end_split_pad (now IC1_pin1_seg3 → C5.PIN_1 directly)
+    assert len(graph.nodes) == 10
     assert len(graph.terminals) == 9
-    assert len(graph.edges) == 21
+    assert len(graph.edges) == 17
 
 
 def test_real_case_preserves_named_entities_and_classification() -> None:
@@ -34,9 +35,9 @@ def test_real_case_preserves_named_entities_and_classification() -> None:
 def test_real_case_preserves_t_junction_classification() -> None:
     graph = load_topology_graph(REAL_CASE_PATH)
 
+    # IC1_pin1_seg3_end_split_pad removed (seg3 → C5.PIN_1 directly now)
     assert {node.id for node in graph.nodes if node.kind == "t_junction"} == {
         "IC1_pin1_seg2_end_split_pad",
-        "IC1_pin1_seg3_end_split_pad",
         "IC1_pin1_seg4_end_split_pad",
         "IC1_pin2_seg2_end_split_pad",
         "IC1_pin2_seg3_end_split_pad",
@@ -50,9 +51,10 @@ def test_real_case_preserves_microstrip_connection_names() -> None:
     assert edge.source == "IC1.PIN_1"
     assert edge.target == "IC1_pin1_seg1_universal_node"
 
-    branch_edge = graph.get_edge("IC1_pin1_seg3_to_C5")
-    assert branch_edge.source == "IC1_pin1_seg3_end_split_pad"
-    assert branch_edge.target == "C5.PIN_1"
+    # IC1_pin1_seg3_to_C5 removed; IC1_pin1_seg2 now terminates at C7.PIN_1 directly
+    branch_edge = graph.get_edge("IC1_pin1_seg2")
+    assert branch_edge.source == "IC1_pin1_seg1_universal_node"
+    assert branch_edge.target == "C7.PIN_1"
 
 
 def test_real_case_resolves_every_edge_endpoint() -> None:

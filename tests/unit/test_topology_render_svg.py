@@ -53,7 +53,7 @@ def test_real_case_render_includes_all_edges_in_deterministic_order() -> None:
     root = ET.fromstring(first_svg)
     edge_elements = _elements_with_class(root, "topology-edge")
 
-    assert len(edge_elements) == 21
+    assert len(edge_elements) == 17
     assert [element.attrib["data-edge-id"] for element in edge_elements] == sorted(
         edge.id for edge in graph.edges
     )

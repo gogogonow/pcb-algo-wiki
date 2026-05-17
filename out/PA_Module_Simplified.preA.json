@@ -43,11 +43,11 @@
       "routing_class": "rf_constrained_locked",
       "connections": [
         "IC1_pin1_seg1_universal_node",
-        "IC1_pin1_seg2_end_split_pad"
+        "C7.PIN_1"
       ],
       "connections_short": [
         "p1s1_u",
-        "p1s2_sp"
+        "C7.1"
       ],
       "width": 1.88,
       "target_length": 1.29,
@@ -57,52 +57,15 @@
           "y": 24.25,
           "kind": "node"
         },
-        "IC1_pin1_seg2_end_split_pad": {
-          "x": 18.07,
-          "y": 27.86,
-          "kind": "node"
+        "C7.PIN_1": {
+          "x": 15.818849978198168,
+          "y": 25.230015670322132,
+          "kind": "virtual_rlc_pin"
         }
       },
       "render_endpoint_positions_mm": {
         "IC1_pin1_seg1_universal_node": {
           "x": 16.78,
-          "y": 27.86
-        },
-        "IC1_pin1_seg2_end_split_pad": {
-          "x": 18.07,
-          "y": 27.86
-        }
-      }
-    },
-    {
-      "edge_id": "IC1_pin1_seg2_to_C7",
-      "edge_short": "p1s2->C7",
-      "routing_class": "rf_constrained_free",
-      "connections": [
-        "IC1_pin1_seg2_end_split_pad",
-        "C7.PIN_1"
-      ],
-      "connections_short": [
-        "p1s2_sp",
-        "C7.1"
-      ],
-      "width": null,
-      "target_length": null,
-      "endpoint_positions_mm": {
-        "IC1_pin1_seg2_end_split_pad": {
-          "x": 18.07,
-          "y": 27.86,
-          "kind": "node"
-        },
-        "C7.PIN_1": {
-          "x": 18.07,
-          "y": 27.86,
-          "kind": "virtual_rlc_pin"
-        }
-      },
-      "render_endpoint_positions_mm": {
-        "IC1_pin1_seg2_end_split_pad": {
-          "x": 18.07,
           "y": 27.86
         },
         "C7.PIN_1": {
@@ -117,11 +80,11 @@
       "routing_class": "rf_constrained_locked",
       "connections": [
         "IC1_pin1_seg1_universal_node",
-        "IC1_pin1_seg3_end_split_pad"
+        "C5.PIN_1"
       ],
       "connections_short": [
         "p1s1_u",
-        "p1s3_sp"
+        "C5.1"
       ],
       "width": 1.27,
       "target_length": 1.47,
@@ -131,52 +94,15 @@
           "y": 24.25,
           "kind": "node"
         },
-        "IC1_pin1_seg3_end_split_pad": {
-          "x": 18.25,
-          "y": 25.85,
-          "kind": "other"
+        "C5.PIN_1": {
+          "x": 16.300412499623878,
+          "y": 24.89607339431138,
+          "kind": "virtual_rlc_pin"
         }
       },
       "render_endpoint_positions_mm": {
         "IC1_pin1_seg1_universal_node": {
           "x": 16.78,
-          "y": 25.85
-        },
-        "IC1_pin1_seg3_end_split_pad": {
-          "x": 18.25,
-          "y": 25.85
-        }
-      }
-    },
-    {
-      "edge_id": "IC1_pin1_seg3_to_C5",
-      "edge_short": "p1s3->C5",
-      "routing_class": "rf_constrained_free",
-      "connections": [
-        "IC1_pin1_seg3_end_split_pad",
-        "C5.PIN_1"
-      ],
-      "connections_short": [
-        "p1s3_sp",
-        "C5.1"
-      ],
-      "width": null,
-      "target_length": null,
-      "endpoint_positions_mm": {
-        "IC1_pin1_seg3_end_split_pad": {
-          "x": 18.25,
-          "y": 25.85,
-          "kind": "other"
-        },
-        "C5.PIN_1": {
-          "x": 18.25,
-          "y": 25.85,
-          "kind": "virtual_rlc_pin"
-        }
-      },
-      "render_endpoint_positions_mm": {
-        "IC1_pin1_seg3_end_split_pad": {
-          "x": 18.25,
           "y": 25.85
         },
         "C5.PIN_1": {
@@ -413,11 +339,11 @@
       "routing_class": "rf_constrained_locked",
       "connections": [
         "IC1_pin2_seg1_universal_node",
-        "IC1_pin2_seg2_end_split_pad"
+        "C3.PIN_1"
       ],
       "connections_short": [
         "p2s1_u",
-        "p2s2_sp"
+        "C3.1"
       ],
       "width": 1.88,
       "target_length": 1.29,
@@ -427,52 +353,15 @@
           "y": 24.25,
           "kind": "node"
         },
-        "IC1_pin2_seg2_end_split_pad": {
-          "x": 5.979999999999999,
-          "y": 27.86,
-          "kind": "node"
+        "C3.PIN_1": {
+          "x": 8.35835866389544,
+          "y": 25.210038649178227,
+          "kind": "virtual_rlc_pin"
         }
       },
       "render_endpoint_positions_mm": {
         "IC1_pin2_seg1_universal_node": {
           "x": 7.269999999999999,
-          "y": 27.86
-        },
-        "IC1_pin2_seg2_end_split_pad": {
-          "x": 5.979999999999999,
-          "y": 27.86
-        }
-      }
-    },
-    {
-      "edge_id": "IC1_pin2_seg2_to_C3",
-      "edge_short": "p2s2->C3",
-      "routing_class": "rf_constrained_free",
-      "connections": [
-        "IC1_pin2_seg2_end_split_pad",
-        "C3.PIN_1"
-      ],
-      "connections_short": [
-        "p2s2_sp",
-        "C3.1"
-      ],
-      "width": null,
-      "target_length": null,
-      "endpoint_positions_mm": {
-        "IC1_pin2_seg2_end_split_pad": {
-          "x": 5.979999999999999,
-          "y": 27.86,
-          "kind": "node"
-        },
-        "C3.PIN_1": {
-          "x": 5.979999999999999,
-          "y": 27.86,
-          "kind": "virtual_rlc_pin"
-        }
-      },
-      "render_endpoint_positions_mm": {
-        "IC1_pin2_seg2_end_split_pad": {
-          "x": 5.979999999999999,
           "y": 27.86
         },
         "C3.PIN_1": {
@@ -487,11 +376,11 @@
       "routing_class": "rf_constrained_locked",
       "connections": [
         "IC1_pin2_seg1_universal_node",
-        "IC1_pin2_seg3_end_split_pad"
+        "C6.PIN_2"
       ],
       "connections_short": [
         "p2s1_u",
-        "p2s3_sp"
+        "C6.2"
       ],
       "width": 1.27,
       "target_length": 1.47,
@@ -501,52 +390,15 @@
           "y": 24.25,
           "kind": "node"
         },
-        "IC1_pin2_seg3_end_split_pad": {
-          "x": 5.799999999999999,
-          "y": 25.74,
-          "kind": "node"
+        "C6.PIN_2": {
+          "x": 7.872345925036198,
+          "y": 24.83713583967721,
+          "kind": "virtual_rlc_pin"
         }
       },
       "render_endpoint_positions_mm": {
         "IC1_pin2_seg1_universal_node": {
           "x": 7.269999999999999,
-          "y": 25.74
-        },
-        "IC1_pin2_seg3_end_split_pad": {
-          "x": 5.799999999999999,
-          "y": 25.74
-        }
-      }
-    },
-    {
-      "edge_id": "IC1_pin2_seg3_to_C6",
-      "edge_short": "p2s3->C6",
-      "routing_class": "rf_constrained_free",
-      "connections": [
-        "IC1_pin2_seg3_end_split_pad",
-        "C6.PIN_2"
-      ],
-      "connections_short": [
-        "p2s3_sp",
-        "C6.2"
-      ],
-      "width": null,
-      "target_length": null,
-      "endpoint_positions_mm": {
-        "IC1_pin2_seg3_end_split_pad": {
-          "x": 5.799999999999999,
-          "y": 25.74,
-          "kind": "node"
-        },
-        "C6.PIN_2": {
-          "x": 5.799999999999999,
-          "y": 25.74,
-          "kind": "virtual_rlc_pin"
-        }
-      },
-      "render_endpoint_positions_mm": {
-        "IC1_pin2_seg3_end_split_pad": {
-          "x": 5.799999999999999,
           "y": 25.74
         },
         "C6.PIN_2": {
@@ -822,14 +674,6 @@
       "mode": "strict_junction_rule",
       "connections": [
         "IC1_pin1_seg1_universal_node",
-        "IC1_pin1_seg2_end_split_pad"
-      ]
-    },
-    {
-      "edge_id": "IC1_pin1_seg2_to_C7",
-      "mode": "relaxed",
-      "connections": [
-        "IC1_pin1_seg2_end_split_pad",
         "C7.PIN_1"
       ]
     },
@@ -838,14 +682,6 @@
       "mode": "strict_junction_rule",
       "connections": [
         "IC1_pin1_seg1_universal_node",
-        "IC1_pin1_seg3_end_split_pad"
-      ]
-    },
-    {
-      "edge_id": "IC1_pin1_seg3_to_C5",
-      "mode": "relaxed",
-      "connections": [
-        "IC1_pin1_seg3_end_split_pad",
         "C5.PIN_1"
       ]
     },
@@ -894,14 +730,6 @@
       "mode": "strict_junction_rule",
       "connections": [
         "IC1_pin2_seg1_universal_node",
-        "IC1_pin2_seg2_end_split_pad"
-      ]
-    },
-    {
-      "edge_id": "IC1_pin2_seg2_to_C3",
-      "mode": "relaxed",
-      "connections": [
-        "IC1_pin2_seg2_end_split_pad",
         "C3.PIN_1"
       ]
     },
@@ -910,14 +738,6 @@
       "mode": "strict_junction_rule",
       "connections": [
         "IC1_pin2_seg1_universal_node",
-        "IC1_pin2_seg3_end_split_pad"
-      ]
-    },
-    {
-      "edge_id": "IC1_pin2_seg3_to_C6",
-      "mode": "relaxed",
-      "connections": [
-        "IC1_pin2_seg3_end_split_pad",
         "C6.PIN_2"
       ]
     },

@@ -52,7 +52,7 @@ def test_load_v33_layout_parses_real_case_with_expected_counts() -> None:
     assert len(layout.footprints) == 5
     assert len(layout.nodes) == 8
     assert len(layout.terminals) == 9
-    assert len(layout.edges) == 21
+    assert len(layout.edges) == 17
 
 
 def test_load_v33_layout_preserves_unknown_fields_on_nested_models() -> None:
