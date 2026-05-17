@@ -268,7 +268,7 @@ def _emit_viewer_bundle(
     for eid in result.phase_c.failed_flex_edges:
         flex_routes.append(
             {"edge_id": eid, "polyline_mm": [], "width_mm": 0.0,
-             "routing_class": "flex", "success": False}
+             "routing_class": result.artifact.edges[eid].routing_class, "success": False}
         )
 
     # --- Assemble bundle ---
