@@ -40,7 +40,9 @@ def test_phase_summary_contains_quality_metrics() -> None:
     )
     result = OrchestratorV2Result(
         artifact=artifact,
-        phase_a=PhaseAResult(skeleton=SkeletonReport(), plan=NodePlan(), wall_seconds=0.1),
+        phase_a=PhaseAResult(
+            skeleton=SkeletonReport(), plan=NodePlan(), wall_seconds=0.1
+        ),
         phase_b=PhaseBResult(adhesion=UvAdhesionReport(), wall_seconds=0.2),
         phase_c=PhaseCResult(
             routed_flex_edges=["e1"],

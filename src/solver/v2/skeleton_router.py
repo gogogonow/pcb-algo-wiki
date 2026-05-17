@@ -407,6 +407,8 @@ def route_skeleton(
 
     report = SkeletonReport()
     pending = list(routes_plan)
+    route_plan_by_id = {p.edge_id: p for p in routes_plan}
+    endpoint_to_route_ids = _build_endpoint_to_route_ids(routes_plan)
     seen_ripup = 0
     failed_edges: dict[str, int] = {}  # edge_id -> attempts
     clearance_um = int(clearance_mm * MM_TO_UM)
@@ -461,29 +463,17 @@ def route_skeleton(
                     ignore.append(tag)
             for comp_name in ep_components:
                 ignore.append(f"footprint:{comp_name}")
-            # Also ignore any sibling routes that share an endpoint OR share
-            # a fixed-component anchor with this edge (multiple microstrip
-            # segs fan out from the same IC pad / IC component).
-            for sibling_id, outcome in report.routes.items():
-                if sibling_id == ep.edge_id or not outcome.success:
+            # Also ignore any sibling routes that share an endpoint.
+            sibling_ids = endpoint_to_route_ids.get(ep.start_endpoint, set()).union(
+                endpoint_to_route_ids.get(ep.goal_endpoint, set())
+            )
+            for sibling_id in sibling_ids:
+                if sibling_id == ep.edge_id:
                     continue
-                sibling = next(
-                    (p for p in routes_plan if p.edge_id == sibling_id), None
-                )
-                if sibling is None:
+                outcome = report.routes.get(sibling_id)
+                if outcome is None or not outcome.success:
                     continue
-                shared_endpoint = (
-                    sibling.start_endpoint == ep.start_endpoint
-                    or sibling.goal_endpoint == ep.start_endpoint
-                    or sibling.start_endpoint == ep.goal_endpoint
-                    or sibling.goal_endpoint == ep.goal_endpoint
-                )
-                # Only ignore siblings that share the *same pin* — siblings
-                # ending on different pins of the same IC must still avoid
-                # each other geometrically (otherwise diagonal A* paths can
-                # cut through orthogonal buses on a different pin).
-                if shared_endpoint:
-                    ignore.append(f"route:{sibling_id}")
+                ignore.append(f"route:{sibling_id}")
             ignore_tuple = tuple(ignore)
             # Forced escape stubs: IC pins exit along local_orientation;
             # board-frame terminals exit inward along the normal. The A*
@@ -612,9 +602,7 @@ def route_skeleton(
                     if neighbour:
                         grid.remove_routed(f"route:{neighbour}")
                         # Move ripped neighbour back to the pending queue.
-                        ripped = next(
-                            (x for x in routes_plan if x.edge_id == neighbour), None
-                        )
+                        ripped = route_plan_by_id.get(neighbour)
                         report.routes.pop(neighbour, None)
                         if ripped:
                             next_pending.append(ripped)
@@ -653,6 +641,20 @@ def route_skeleton(
         report.rip_up_rounds,
     )
     return report
+
+
+def _build_endpoint_to_route_ids(
+    routes_plan: list[EdgeRoutingPlan],
+) -> dict[str, set[str]]:
+    endpoint_to_route_ids: dict[str, set[str]] = {}
+    for route_plan in routes_plan:
+        endpoint_to_route_ids.setdefault(route_plan.start_endpoint, set()).add(
+            route_plan.edge_id
+        )
+        endpoint_to_route_ids.setdefault(route_plan.goal_endpoint, set()).add(
+            route_plan.edge_id
+        )
+    return endpoint_to_route_ids
 
 
 def _pick_neighbour_to_rip(

@@ -86,19 +86,7 @@ def place_floating_components(
         clearance=cfg.clearance_mm,
     )
 
-    # Build "connected pairs" — components linked by a flex edge are allowed
-    # to share body bbox space (their pads must touch).  We only penalise body
-    # overlap for *unrelated* component pairs.
-    connected_pairs: set[frozenset[str]] = set()
-    for edge in artifact.edges.values():
-        comps = []
-        for ep in edge.connections or ():
-            if "." in ep:
-                comps.append(ep.split(".", 1)[0])
-        for i in range(len(comps)):
-            for j in range(i + 1, len(comps)):
-                if comps[i] != comps[j]:
-                    connected_pairs.add(frozenset({comps[i], comps[j]}))
+    connected_pairs = _build_connected_pairs(artifact)
 
     # Initialise each floating component at the centroid of its connected
     # non-floating endpoints (with a small deterministic jitter to break
@@ -165,57 +153,24 @@ def place_floating_components(
         y0 = min(max(y0, h / 2 + cfg.margin_mm), board_h - h / 2 - cfg.margin_mm)
         state[name] = FloatingPlacement(x=x0, y=y0, rotation=0)
 
-    def energy(s: dict[str, FloatingPlacement]) -> float:
-        e = 0.0
-        bboxes = [_bbox_for(artifact, n, p) for n, p in s.items()]
-        body_bboxes = [(n, _body_bbox_for(artifact, n, p)) for n, p in s.items()]
-        for bb in bboxes:
-            e += cfg.boundary_weight * _out_of_board_sq(
-                bb, board_w, board_h, cfg.margin_mm
-            )
-            for ob in obstacles:
-                e += cfg.overlap_weight * _bbox_overlap_linear(bb, ob)
-        for i in range(len(bboxes)):
-            for j in range(i + 1, len(bboxes)):
-                e += cfg.overlap_weight * _bbox_overlap_linear(bboxes[i], bboxes[j])
-        # Body-vs-body overlap (uses full footprint envelope so large IC
-        # bodies prevent small caps being placed *on top of* them).  Skip
-        # connected pairs — their pads must touch.
-        for i in range(len(body_bboxes)):
-            for j in range(i + 1, len(body_bboxes)):
-                ni, nj = body_bboxes[i][0], body_bboxes[j][0]
-                if frozenset({ni, nj}) in connected_pairs:
-                    continue
-                e += cfg.body_overlap_weight * _bbox_overlap_area_sq(
-                    body_bboxes[i][1], body_bboxes[j][1]
-                )
-        # Floating body vs fixed-component body bbox (use comp.bbox if known)
-        for name, bb_body in body_bboxes:
-            for fixed_name, fixed in artifact.components.items():
-                if fixed.placement_kind != "fixed" or fixed.bbox is None:
-                    continue
-                if frozenset({name, fixed_name}) in connected_pairs:
-                    continue
-                fixed_bb = (
-                    fixed.bbox.min_x,
-                    fixed.bbox.min_y,
-                    fixed.bbox.max_x,
-                    fixed.bbox.max_y,
-                )
-                e += cfg.body_overlap_weight * _bbox_overlap_area_sq(bb_body, fixed_bb)
-        e += cfg.hpwl_weight * _hpwl_energy(artifact, s, skeleton, adhesion)
-        e += cfg.routability_weight * _routability_cost(
-            artifact, s, skeleton, adhesion, obstacles
-        )
-        e += cfg.rf_bus_cross_weight * _rf_bus_cross_cost(
-            artifact, s, skeleton, adhesion
-        )
-        e += cfg.airwire_cross_weight * _airwire_cross_cost(
-            artifact, s, skeleton, adhesion
-        )
-        return e
-
-    cur_e = energy(state)
+    cur_static = _static_energy_full(
+        artifact=artifact,
+        state=state,
+        obstacles=obstacles,
+        board_w=board_w,
+        board_h=board_h,
+        cfg=cfg,
+        connected_pairs=connected_pairs,
+    )
+    cur_dynamic = _dynamic_energy(
+        artifact=artifact,
+        state=state,
+        skeleton=skeleton,
+        adhesion=adhesion,
+        obstacles=obstacles,
+        cfg=cfg,
+    )
+    cur_e = cur_static + cur_dynamic
     best_state, best_e = dict(state), cur_e
     T = cfg.temperature_init
 
@@ -231,10 +186,31 @@ def place_floating_components(
             dx = rng.uniform(-cfg.step_mm, cfg.step_mm)
             dy = rng.uniform(-cfg.step_mm, cfg.step_mm)
             new_p = FloatingPlacement(old.x + dx, old.y + dy, old.rotation)
+        delta_static = _static_delta_for_move(
+            artifact=artifact,
+            state=state,
+            moved_name=name,
+            new_place=new_p,
+            obstacles=obstacles,
+            board_w=board_w,
+            board_h=board_h,
+            cfg=cfg,
+            connected_pairs=connected_pairs,
+        )
         state[name] = new_p
-        new_e = energy(state)
+        new_dynamic = _dynamic_energy(
+            artifact=artifact,
+            state=state,
+            skeleton=skeleton,
+            adhesion=adhesion,
+            obstacles=obstacles,
+            cfg=cfg,
+        )
+        new_e = cur_static + delta_static + new_dynamic
         if new_e < cur_e or rng.random() < math.exp(-(new_e - cur_e) / max(T, 1e-6)):
             cur_e = new_e
+            cur_static += delta_static
+            cur_dynamic = new_dynamic
             if cur_e < best_e:
                 best_state, best_e = dict(state), cur_e
         else:
@@ -242,6 +218,188 @@ def place_floating_components(
         T *= cfg.cooling
 
     return best_state
+
+
+def _build_connected_pairs(artifact: FrontendArtifact) -> set[frozenset[str]]:
+    connected_pairs: set[frozenset[str]] = set()
+    for edge in artifact.edges.values():
+        comps = []
+        for ep in edge.connections or ():
+            if "." in ep:
+                comps.append(ep.split(".", 1)[0])
+        for i in range(len(comps)):
+            for j in range(i + 1, len(comps)):
+                if comps[i] != comps[j]:
+                    connected_pairs.add(frozenset({comps[i], comps[j]}))
+    return connected_pairs
+
+
+def _component_static_term(
+    *,
+    artifact: FrontendArtifact,
+    name: str,
+    place: FloatingPlacement,
+    obstacles: list[tuple[float, float, float, float]],
+    board_w: float,
+    board_h: float,
+    cfg: FloatingPlacerConfig,
+    connected_pairs: set[frozenset[str]],
+) -> float:
+    bb = _bbox_for(artifact, name, place)
+    body_bb = _body_bbox_for(artifact, name, place)
+    term = cfg.boundary_weight * _out_of_board_sq(bb, board_w, board_h, cfg.margin_mm)
+    for ob in obstacles:
+        term += cfg.overlap_weight * _bbox_overlap_linear(bb, ob)
+    for fixed_name, fixed in artifact.components.items():
+        if fixed.placement_kind != "fixed" or fixed.bbox is None:
+            continue
+        if frozenset({name, fixed_name}) in connected_pairs:
+            continue
+        fixed_bb = (
+            fixed.bbox.min_x,
+            fixed.bbox.min_y,
+            fixed.bbox.max_x,
+            fixed.bbox.max_y,
+        )
+        term += cfg.body_overlap_weight * _bbox_overlap_area_sq(body_bb, fixed_bb)
+    return term
+
+
+def _pair_static_term(
+    *,
+    artifact: FrontendArtifact,
+    name_a: str,
+    place_a: FloatingPlacement,
+    name_b: str,
+    place_b: FloatingPlacement,
+    cfg: FloatingPlacerConfig,
+    connected_pairs: set[frozenset[str]],
+) -> float:
+    bb_a = _bbox_for(artifact, name_a, place_a)
+    bb_b = _bbox_for(artifact, name_b, place_b)
+    body_a = _body_bbox_for(artifact, name_a, place_a)
+    body_b = _body_bbox_for(artifact, name_b, place_b)
+    term = cfg.overlap_weight * _bbox_overlap_linear(bb_a, bb_b)
+    if frozenset({name_a, name_b}) not in connected_pairs:
+        term += cfg.body_overlap_weight * _bbox_overlap_area_sq(body_a, body_b)
+    return term
+
+
+def _static_energy_full(
+    *,
+    artifact: FrontendArtifact,
+    state: dict[str, FloatingPlacement],
+    obstacles: list[tuple[float, float, float, float]],
+    board_w: float,
+    board_h: float,
+    cfg: FloatingPlacerConfig,
+    connected_pairs: set[frozenset[str]],
+) -> float:
+    names = list(state.keys())
+    total = 0.0
+    for name in names:
+        total += _component_static_term(
+            artifact=artifact,
+            name=name,
+            place=state[name],
+            obstacles=obstacles,
+            board_w=board_w,
+            board_h=board_h,
+            cfg=cfg,
+            connected_pairs=connected_pairs,
+        )
+    for i in range(len(names)):
+        for j in range(i + 1, len(names)):
+            total += _pair_static_term(
+                artifact=artifact,
+                name_a=names[i],
+                place_a=state[names[i]],
+                name_b=names[j],
+                place_b=state[names[j]],
+                cfg=cfg,
+                connected_pairs=connected_pairs,
+            )
+    return total
+
+
+def _static_delta_for_move(
+    *,
+    artifact: FrontendArtifact,
+    state: dict[str, FloatingPlacement],
+    moved_name: str,
+    new_place: FloatingPlacement,
+    obstacles: list[tuple[float, float, float, float]],
+    board_w: float,
+    board_h: float,
+    cfg: FloatingPlacerConfig,
+    connected_pairs: set[frozenset[str]],
+) -> float:
+    old_place = state[moved_name]
+    old_term = _component_static_term(
+        artifact=artifact,
+        name=moved_name,
+        place=old_place,
+        obstacles=obstacles,
+        board_w=board_w,
+        board_h=board_h,
+        cfg=cfg,
+        connected_pairs=connected_pairs,
+    )
+    new_term = _component_static_term(
+        artifact=artifact,
+        name=moved_name,
+        place=new_place,
+        obstacles=obstacles,
+        board_w=board_w,
+        board_h=board_h,
+        cfg=cfg,
+        connected_pairs=connected_pairs,
+    )
+    for other_name, other_place in state.items():
+        if other_name == moved_name:
+            continue
+        old_term += _pair_static_term(
+            artifact=artifact,
+            name_a=moved_name,
+            place_a=old_place,
+            name_b=other_name,
+            place_b=other_place,
+            cfg=cfg,
+            connected_pairs=connected_pairs,
+        )
+        new_term += _pair_static_term(
+            artifact=artifact,
+            name_a=moved_name,
+            place_a=new_place,
+            name_b=other_name,
+            place_b=other_place,
+            cfg=cfg,
+            connected_pairs=connected_pairs,
+        )
+    return new_term - old_term
+
+
+def _dynamic_energy(
+    *,
+    artifact: FrontendArtifact,
+    state: dict[str, FloatingPlacement],
+    skeleton: SkeletonReport,
+    adhesion: UvAdhesionReport,
+    obstacles: list[tuple[float, float, float, float]],
+    cfg: FloatingPlacerConfig,
+) -> float:
+    e = 0.0
+    e += cfg.hpwl_weight * _hpwl_energy(artifact, state, skeleton, adhesion)
+    e += cfg.routability_weight * _routability_cost(
+        artifact, state, skeleton, adhesion, obstacles
+    )
+    e += cfg.rf_bus_cross_weight * _rf_bus_cross_cost(
+        artifact, state, skeleton, adhesion
+    )
+    e += cfg.airwire_cross_weight * _airwire_cross_cost(
+        artifact, state, skeleton, adhesion
+    )
+    return e
 
 
 # ----------------------------------------------------------------------

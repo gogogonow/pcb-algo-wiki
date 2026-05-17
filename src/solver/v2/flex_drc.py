@@ -63,6 +63,7 @@ def validate_flex_routes(
     obstacle_entries: Iterable[ObstacleEntry] = (),
     endpoint_pin_ids: Mapping[str, tuple[str, str]] | None = None,
     clearance_mm: float = 0.05,
+    use_spatial_index: bool = True,
 ) -> DrcReport:
     report = DrcReport()
     legacy_obs: list[tuple[float, float, float, float]] = list(obstacle_bboxes)
@@ -117,43 +118,64 @@ def validate_flex_routes(
             effective_entries.append(entry.bbox)
 
         all_eff = effective_legacy + effective_entries
-        hit = _polyline_hits_obstacle(route, all_eff, clearance_mm)
+        obs_index = _build_bbox_bucket_index(all_eff) if use_spatial_index else None
+        hit = _polyline_hits_obstacle(route, all_eff, clearance_mm, obs_index)
         if not hit and sibling_pad_bboxes:
-            hit = _polyline_hits_obstacle(route, sibling_pad_bboxes, 0.0)
+            sibling_index = (
+                _build_bbox_bucket_index(sibling_pad_bboxes)
+                if use_spatial_index
+                else None
+            )
+            hit = _polyline_hits_obstacle(route, sibling_pad_bboxes, 0.0, sibling_index)
         if hit:
             report.violations.append(
                 DrcViolation(eid, "overlap", "segment bbox intersects obstacle")
             )
 
     # 2. polyline ↔ polyline crossings (flex vs flex / flex vs other)
-    all_segs: list[tuple[str, tuple[float, float], tuple[float, float]]] = []
+    all_segs: list[
+        tuple[
+            str,
+            tuple[float, float],
+            tuple[float, float],
+            tuple[float, float, float, float],
+        ]
+    ] = []
     for eid, route in flex_items:
         for a, b in _segments(route):
-            all_segs.append((eid, a, b))
+            all_segs.append((eid, a, b, _segment_bbox(a, b)))
     for eid, route in other_routes.items():
         for a, b in _segments(route):
-            all_segs.append((eid, a, b))
+            all_segs.append((eid, a, b, _segment_bbox(a, b)))
 
     crossed: set[str] = set()
-    for i in range(len(all_segs)):
-        eid_a, a1, a2 = all_segs[i]
-        for j in range(i + 1, len(all_segs)):
-            eid_b, b1, b2 = all_segs[j]
-            if eid_a == eid_b:
-                continue
-            if _segments_share_endpoint(a1, a2, b1, b2):
-                continue
-            if _segments_cross(a1, a2, b1, b2):
-                if eid_a in flex_routes and eid_a not in crossed:
-                    report.violations.append(
-                        DrcViolation(eid_a, "crossing", f"crosses {eid_b}")
-                    )
-                    crossed.add(eid_a)
-                if eid_b in flex_routes and eid_b not in crossed:
-                    report.violations.append(
-                        DrcViolation(eid_b, "crossing", f"crosses {eid_a}")
-                    )
-                    crossed.add(eid_b)
+    if use_spatial_index:
+        candidate_pairs = _segment_candidate_pairs(all_segs)
+    else:
+        candidate_pairs = {
+            (i, j) for i in range(len(all_segs)) for j in range(i + 1, len(all_segs))
+        }
+
+    for i, j in sorted(candidate_pairs):
+        eid_a, a1, a2, bb_a = all_segs[i]
+        eid_b, b1, b2, bb_b = all_segs[j]
+        if eid_a == eid_b:
+            continue
+        if not _bbox_strict_overlap(bb_a, bb_b):
+            continue
+        if _segments_share_endpoint(a1, a2, b1, b2):
+            continue
+        if _segments_cross(a1, a2, b1, b2):
+            if eid_a in flex_routes and eid_a not in crossed:
+                report.violations.append(
+                    DrcViolation(eid_a, "crossing", f"crosses {eid_b}")
+                )
+                crossed.add(eid_a)
+            if eid_b in flex_routes and eid_b not in crossed:
+                report.violations.append(
+                    DrcViolation(eid_b, "crossing", f"crosses {eid_a}")
+                )
+                crossed.add(eid_b)
     return report
 
 
@@ -173,6 +195,7 @@ def _polyline_hits_obstacle(
     route: RoutePolyline,
     obstacles: list[tuple[float, float, float, float]],
     clearance_mm: float,
+    obstacle_index: dict[tuple[int, int], list[int]] | None = None,
 ) -> bool:
     half = float(route.width) / 2.0 + clearance_mm
     for (x1, y1), (x2, y2) in _segments(route):
@@ -182,10 +205,81 @@ def _polyline_hits_obstacle(
             max(x1, x2) + half,
             max(y1, y2) + half,
         )
-        for ob in obstacles:
+        if obstacle_index is None:
+            candidates = range(len(obstacles))
+        else:
+            candidates = _bbox_candidates(seg_bb, obstacle_index)
+        for idx in candidates:
+            ob = obstacles[idx]
             if _bbox_strict_overlap(seg_bb, ob):
                 return True
     return False
+
+
+def _segment_bbox(
+    a: tuple[float, float], b: tuple[float, float]
+) -> tuple[float, float, float, float]:
+    return (min(a[0], b[0]), min(a[1], b[1]), max(a[0], b[0]), max(a[1], b[1]))
+
+
+def _build_bbox_bucket_index(
+    bboxes: list[tuple[float, float, float, float]], bucket_mm: float = 2.0
+) -> dict[tuple[int, int], list[int]]:
+    index: dict[tuple[int, int], list[int]] = {}
+    for idx, bb in enumerate(bboxes):
+        for key in _bbox_bucket_keys(bb, bucket_mm):
+            index.setdefault(key, []).append(idx)
+    return index
+
+
+def _bbox_bucket_keys(
+    bb: tuple[float, float, float, float], bucket_mm: float
+) -> list[tuple[int, int]]:
+    x0 = int(bb[0] // bucket_mm)
+    x1 = int(bb[2] // bucket_mm)
+    y0 = int(bb[1] // bucket_mm)
+    y1 = int(bb[3] // bucket_mm)
+    return [(bx, by) for bx in range(x0, x1 + 1) for by in range(y0, y1 + 1)]
+
+
+def _bbox_candidates(
+    bb: tuple[float, float, float, float],
+    index: dict[tuple[int, int], list[int]],
+    bucket_mm: float = 2.0,
+) -> set[int]:
+    out: set[int] = set()
+    for key in _bbox_bucket_keys(bb, bucket_mm):
+        out.update(index.get(key, ()))
+    return out
+
+
+def _segment_candidate_pairs(
+    segments: list[
+        tuple[
+            str,
+            tuple[float, float],
+            tuple[float, float],
+            tuple[float, float, float, float],
+        ]
+    ],
+    bucket_mm: float = 2.0,
+) -> set[tuple[int, int]]:
+    index: dict[tuple[int, int], list[int]] = {}
+    for idx, (_, _, _, bb) in enumerate(segments):
+        for key in _bbox_bucket_keys(bb, bucket_mm):
+            index.setdefault(key, []).append(idx)
+    out: set[tuple[int, int]] = set()
+    for bucket_items in index.values():
+        n = len(bucket_items)
+        for i in range(n):
+            for j in range(i + 1, n):
+                a = bucket_items[i]
+                b = bucket_items[j]
+                if a < b:
+                    out.add((a, b))
+                else:
+                    out.add((b, a))
+    return out
 
 
 def _segments(
