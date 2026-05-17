@@ -271,7 +271,11 @@ def _collect_static_obstacles(
     for route in skeleton.routes.values():
         if not route.success or len(route.polyline_um) < 2:
             continue
-        pad = 0.5 + clearance  # 兜底半线宽 + clearance
+        # Use the real route half-width from the artifact edge definition so
+        # that wide RF routes (e.g. 3.6 mm) create a correctly-sized obstacle.
+        artifact_edge = artifact.edges.get(route.edge_id)
+        half_w = float(artifact_edge.width or 0.5) / 2.0 if artifact_edge else 0.5
+        pad = half_w + clearance
         pts_mm = [(um_to_mm(x), um_to_mm(y)) for x, y in route.polyline_um]
         for (x1, y1), (x2, y2) in zip(pts_mm, pts_mm[1:]):
             obs.append(

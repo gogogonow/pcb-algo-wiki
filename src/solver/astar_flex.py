@@ -34,7 +34,7 @@ class AstarConfig:
     grid_step_um: int = 200  # 0.2 mm; PA board is 40×100 mm => 200×500 cells
     turn_cost: float = 0.5
     near_rf_cost: float = 0.3
-    rf_inflate_um: int = 100  # extra padding around RF inflated bbox
+    rf_inflate_um: int = 0  # extra padding around RF route buffers (0 = DRC-exact)
 
 
 @dataclass
@@ -55,6 +55,40 @@ def _cells_in_bbox(
     return out
 
 
+def _cells_in_segment_buffer(
+    x1: int, y1: int, x2: int, y2: int, infl: int, step: int
+) -> list[tuple[int, int]]:
+    """Return grid cells whose centres fall within *infl* of the segment (x1,y1)→(x2,y2).
+
+    Unlike the axis-aligned bounding-box approach this correctly handles
+    diagonal segments: it first computes the AABB of the fattened segment then
+    filters each cell by perpendicular (point-to-segment) distance.  This
+    avoids false obstacles in the "corner triangles" of diagonal routes.
+    """
+    bx_lo = min(x1, x2) - infl
+    by_lo = min(y1, y2) - infl
+    bx_hi = max(x1, x2) + infl
+    by_hi = max(y1, y2) + infl
+    infl_sq = infl * infl
+    dx, dy = x2 - x1, y2 - y1
+    len_sq = dx * dx + dy * dy
+    out: list[tuple[int, int]] = []
+    for ix in range(bx_lo // step, bx_hi // step + 1):
+        for iy in range(by_lo // step, by_hi // step + 1):
+            cx = ix * step + step // 2
+            cy = iy * step + step // 2
+            if len_sq == 0:
+                dist_sq = (cx - x1) ** 2 + (cy - y1) ** 2
+            else:
+                t = max(0.0, min(1.0, ((cx - x1) * dx + (cy - y1) * dy) / len_sq))
+                px = int(x1 + t * dx)
+                py = int(y1 + t * dy)
+                dist_sq = (cx - px) ** 2 + (cy - py) ** 2
+            if dist_sq <= infl_sq:
+                out.append((ix, iy))
+    return out
+
+
 def _build_grid(
     *,
     ir: SolverIR,
@@ -62,8 +96,28 @@ def _build_grid(
     geom: GeometryIR,
     cfg: AstarConfig,
     skip_edge_id: str,
+    skip_comp_names: frozenset[str] | None = None,
+    routed_flex_ids: frozenset[str] | None = None,
+    endpoint_locs_um: tuple[tuple[int, int], ...] = (),
 ) -> tuple[set[tuple[int, int]], set[tuple[int, int]], int, int, int, int]:
-    """Return (obstacles, near_rf, ix0, iy0, ix1, iy1) in cell-grid units."""
+    """Return (obstacles, near_rf, ix0, iy0, ix1, iy1) in cell-grid units.
+
+    ``skip_comp_names`` lists component IDs whose pad envelopes and footprint
+    bboxes are excluded from the obstacle grid.  Pass the components that
+    contain the routing endpoints so the A* can exit/enter their pads without
+    being trapped by the 0.6 mm pad-buffer halo.
+
+    ``routed_flex_ids`` lists flex-edge IDs that have already been successfully
+    routed.  Those polylines (present in ``geom.routes``) are treated as hard
+    obstacles so subsequent flex routes don't cross them.  Unrouted seed entries
+    (2-point placeholders) are always skipped.
+
+    ``endpoint_locs_um`` lists (x_um, y_um) locations of the current flex
+    edge's endpoints in microns.  Route obstacle cells within the pad_buffer_um
+    radius of these points are removed from the obstacle set so that the A*
+    path can reach/leave pads that sit on or very close to an existing RF route
+    (e.g. a power-bus test-point pad that coincides with the bus start point).
+    """
     bx0 = mm_to_um(float(ir.board.origin.x))
     by0 = mm_to_um(float(ir.board.origin.y))
     bx1 = bx0 + mm_to_um(float(ir.board.width))
@@ -72,11 +126,15 @@ def _build_grid(
     ix0, iy0 = bx0 // step, by0 // step
     ix1, iy1 = bx1 // step, by1 // step
 
+    _skip = skip_comp_names or frozenset()
+
     obstacles: set[tuple[int, int]] = set()
     near_rf: set[tuple[int, int]] = set()
 
     # Footprint bboxes from FrontendArtifact.
-    for comp in artifact.components.values():
+    for comp_name, comp in artifact.components.items():
+        if comp_name in _skip:
+            continue
         if comp.bbox is None:
             continue
         bx_lo = mm_to_um(float(comp.bbox.min_x))
@@ -89,7 +147,9 @@ def _build_grid(
     # Pad envelopes from GeometryIR placements (UV-adhered + floating components
     # have no FrontendArtifact bbox, so we derive bbox from pad points + buffer).
     pad_buffer_um = mm_to_um(0.6)
-    for placement in geom.placements.values():
+    for comp_name, placement in geom.placements.items():
+        if comp_name in _skip:
+            continue
         if not placement.pads:
             continue
         xs = [mm_to_um(float(p.point.x)) for p in placement.pads]
@@ -101,31 +161,64 @@ def _build_grid(
         for cell in _cells_in_bbox(bx_lo, by_lo, bx_hi, by_hi, step):
             obstacles.add(cell)
 
-    # Inflated RF route bboxes.
+    # Inflated RF route obstacles — computed per-segment so that L/V-shaped
+    # routes don't produce false obstacles in their concave interior.
+    # Already-routed flex paths (in routed_flex_ids) are also included so that
+    # subsequent flex routes don't cross them.  Unrouted flex seeds are skipped.
+    _routed_flex = routed_flex_ids or frozenset()
     clearance_um = mm_to_um(float(ir.clearance))
+    # Compute set of (x_um, y_um) route endpoint locations that coincide with
+    # the current flex edge's endpoints (within pad_buffer).  Routes that start
+    # or end within this proximity share the same pad and should not be treated
+    # as obstacles at that shared endpoint location.
+    _ep_locs_um = endpoint_locs_um or ()
+    ep_coincidence_radius = mm_to_um(0.6)
+    ep_coincidence_sq = ep_coincidence_radius * ep_coincidence_radius
+
     for edge_id, route in geom.routes.items():
         if edge_id == skip_edge_id:
             continue
         if route.routing_class is RoutingClass.FLEXIBLE_PATH:
-            continue
+            if edge_id not in _routed_flex:
+                continue  # unrouted seed — skip
         half_w = mm_to_um(float(route.width)) // 2
         infl = half_w + clearance_um + cfg.rf_inflate_um
-        xs = [mm_to_um(float(p.x)) for p in route.points]
-        ys = [mm_to_um(float(p.y)) for p in route.points]
-        bx_lo = min(xs) - infl
-        by_lo = min(ys) - infl
-        bx_hi = max(xs) + infl
-        by_hi = max(ys) + infl
-        for cell in _cells_in_bbox(bx_lo, by_lo, bx_hi, by_hi, step):
-            obstacles.add(cell)
-        # Mark a second ring as "near RF" for soft cost.
-        near_lo_x = bx_lo - cfg.grid_step_um
-        near_lo_y = by_lo - cfg.grid_step_um
-        near_hi_x = bx_hi + cfg.grid_step_um
-        near_hi_y = by_hi + cfg.grid_step_um
-        for cell in _cells_in_bbox(near_lo_x, near_lo_y, near_hi_x, near_hi_y, step):
-            if cell not in obstacles:
-                near_rf.add(cell)
+        pts = [(mm_to_um(float(p.x)), mm_to_um(float(p.y))) for p in route.points]
+
+        # Check whether any of this route's endpoints coincide with a flex endpoint.
+        # If so, the route shares the pad — skip its obstacle within that radius.
+        coincident_eps: list[tuple[int, int]] = []
+        for rx, ry in (pts[0], pts[-1]):
+            for ex, ey in _ep_locs_um:
+                if (rx - ex) ** 2 + (ry - ey) ** 2 <= ep_coincidence_sq:
+                    coincident_eps.append((ex, ey))
+                    break
+
+        for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
+            seg_cells = _cells_in_segment_buffer(x1, y1, x2, y2, infl, step)
+            for cell in seg_cells:
+                # Skip cells that are within pad_buffer of a coincident endpoint
+                # (the pad is shared; no DRC violation connecting there).
+                if coincident_eps:
+                    cx = cell[0] * step + step // 2
+                    cy = cell[1] * step + step // 2
+                    skip_cell = False
+                    for ex, ey in coincident_eps:
+                        if (cx - ex) ** 2 + (cy - ey) ** 2 <= ep_coincidence_sq:
+                            skip_cell = True
+                            break
+                    if skip_cell:
+                        continue
+                obstacles.add(cell)
+            # Mark a one-cell ring as "near RF" for soft cost using bbox.
+            near_infl = infl + step
+            bx_lo = min(x1, x2) - near_infl
+            by_lo = min(y1, y2) - near_infl
+            bx_hi = max(x1, x2) + near_infl
+            by_hi = max(y1, y2) + near_infl
+            for cell in _cells_in_bbox(bx_lo, by_lo, bx_hi, by_hi, step):
+                if cell not in obstacles:
+                    near_rf.add(cell)
 
     return obstacles, near_rf, ix0, iy0, ix1, iy1
 
@@ -149,12 +242,15 @@ def _astar_path(
         return [start]
 
     # Allow start/goal even if they fall on a footprint cell (endpoints sit on
-    # device pads by construction). Also free a 3x3 neighbourhood so the path
-    # can actually exit the pad's own bbox.
+    # device pads by construction). Free a wider neighbourhood so the path
+    # can actually exit/enter the pad's own bbox + any adjacent obstacle halo.
+    # Radius of 3 cells (0.6 mm at 200 µm grid) matches the pad_buffer_um
+    # used in _build_grid.
     free = set()
+    _free_radius = 3
     for ax, ay in (start, goal):
-        for dx in (-1, 0, 1):
-            for dy in (-1, 0, 1):
+        for dx in range(-_free_radius, _free_radius + 1):
+            for dy in range(-_free_radius, _free_radius + 1):
                 free.add((ax + dx, ay + dy))
     obstacles = obstacles - free
 
@@ -256,8 +352,40 @@ def route_flexible_paths(
             continue
         start_pt = original.points[0]
         end_pt = original.points[-1]
+        # Skip obstacle halos for endpoint components so the path can
+        # exit/enter their pads (0.6 mm halo > ±1-cell freeing radius).
+        edge_ir = ir.edges.get(edge_id)
+        skip_comps: frozenset[str] = frozenset()
+        if edge_ir is not None:
+            skip_comps = frozenset(
+                ep.split(".")[0] for ep in edge_ir.endpoints if "." in ep
+            )
+        # Build obstacles from current_geom (updated with already-routed flex
+        # paths as hard obstacles to prevent route-route crossings).
+        current_geom = GeometryIR(
+            project=geom.project,
+            board=geom.board,
+            placements=geom.placements,
+            routes=new_routes,
+            nodes=geom.nodes,
+            solve_status=geom.solve_status,
+            solve_wall_seconds=geom.solve_wall_seconds,
+            objective_value=geom.objective_value,
+        )
+        # Endpoint locations in µm for obstacle clearing near terminal pads.
+        ep_locs = (
+            (mm_to_um(float(start_pt.x)), mm_to_um(float(start_pt.y))),
+            (mm_to_um(float(end_pt.x)), mm_to_um(float(end_pt.y))),
+        )
         obstacles, near_rf, ix0, iy0, ix1, iy1 = _build_grid(
-            ir=ir, artifact=artifact, geom=geom, cfg=cfg, skip_edge_id=edge_id
+            ir=ir,
+            artifact=artifact,
+            geom=current_geom,
+            cfg=cfg,
+            skip_edge_id=edge_id,
+            skip_comp_names=skip_comps,
+            routed_flex_ids=frozenset(report.routed_edges),
+            endpoint_locs_um=ep_locs,
         )
         start_cell = _xy_to_cell(
             mm_to_um(float(start_pt.x)), mm_to_um(float(start_pt.y)), cfg.grid_step_um

@@ -23,11 +23,29 @@
     <line class="topology-edge" data-edge-id="PWR_VDD_bus" data-kind="microstrip" x1="282.0" y1="405.0" x2="324.4" y2="283.0" />
     <line class="topology-edge" data-edge-id="R3_to_combiner" data-kind="microstrip" x1="200.0" y1="452.0" x2="450.0" y2="768.0" />
     <line class="topology-edge" data-edge-id="RF_INPUT_to_IC1" data-kind="microstrip" x1="422.0" y1="505.0" x2="324.4" y2="227.0" />
+    <line class="topology-edge" data-edge-id="flex_dec1_gnd" data-kind="signal" x1="168.0" y1="120.0" x2="140.0" y2="228.0" />
+    <line class="topology-edge" data-edge-id="flex_dec2_gnd" data-kind="signal" x1="308.0" y1="120.0" x2="140.0" y2="228.0" />
+    <line class="topology-edge" data-edge-id="flex_rpull_pwr" data-kind="signal" x1="448.0" y1="120.0" x2="282.0" y2="405.0" />
+    <line class="topology-edge" data-edge-id="flex_ubias_ctrl_b" data-kind="signal" x1="168.0" y1="210.0" x2="252.0" y2="120.0" />
+    <line class="topology-edge" data-edge-id="flex_ubias_dec1" data-kind="signal" x1="112.0" y1="210.0" x2="112.0" y2="120.0" />
+    <line class="topology-edge" data-edge-id="flex_ubias_rpull" data-kind="signal" x1="140.0" y1="192.0" x2="392.0" y2="120.0" />
   </g>
   <g id="topology-fixed-components" class="topology-fixed-components">
+    <g class="topology-component topology-fixed-component" data-component-id="C_DEC1">
+      <rect class="topology-fixed-component-shape" x="112.0" y="102.0" width="56" height="36" rx="6" />
+      <text class="topology-label" x="140.0" y="154.0" text-anchor="middle">C_DEC1</text>
+    </g>
+    <g class="topology-component topology-fixed-component" data-component-id="C_DEC2">
+      <rect class="topology-fixed-component-shape" x="252.0" y="102.0" width="56" height="36" rx="6" />
+      <text class="topology-label" x="280.0" y="154.0" text-anchor="middle">C_DEC2</text>
+    </g>
     <g class="topology-component topology-fixed-component" data-component-id="IC1">
       <rect class="topology-fixed-component-shape" x="241.4" y="237.0" width="56" height="36" rx="6" />
       <text class="topology-label" x="269.4" y="289.0" text-anchor="middle">IC1</text>
+    </g>
+    <g class="topology-component topology-fixed-component" data-component-id="R_PULL">
+      <rect class="topology-fixed-component-shape" x="392.0" y="102.0" width="56" height="36" rx="6" />
+      <text class="topology-label" x="420.0" y="154.0" text-anchor="middle">R_PULL</text>
     </g>
     <g class="topology-component topology-fixed-component" data-component-id="TP2">
       <rect class="topology-fixed-component-shape" x="282.0" y="387.0" width="56" height="36" rx="6" />
@@ -44,6 +62,10 @@
     <g class="topology-component topology-fixed-component" data-component-id="TP5">
       <rect class="topology-fixed-component-shape" x="464.0" y="62.0" width="56" height="36" rx="6" />
       <text class="topology-label" x="492.0" y="114.0" text-anchor="middle">TP5</text>
+    </g>
+    <g class="topology-component topology-fixed-component" data-component-id="U_BIAS">
+      <rect class="topology-fixed-component-shape" x="112.0" y="192.0" width="56" height="36" rx="6" />
+      <text class="topology-label" x="140.0" y="244.0" text-anchor="middle">U_BIAS</text>
     </g>
   </g>
   <g id="topology-uv-components" class="topology-uv-components">
