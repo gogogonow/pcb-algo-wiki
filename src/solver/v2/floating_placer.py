@@ -48,6 +48,8 @@ class FloatingPlacerConfig:
     hpwl_weight: float = 20.0
     routability_weight: float = 50.0
     escape_alignment_weight: float = 1.0
+    rf_bus_cross_weight: float = 50.0
+    airwire_cross_weight: float = 5.0
     clearance_mm: float = 0.3
     margin_mm: float = 0.5  # 与板框、其他障碍的最小距离裕量
     seed: int = 0xC0FFEE
@@ -578,3 +580,169 @@ def _escape_alignment_penalty(
                 if dot < 0:
                     penalty += -dot
     return penalty
+
+
+# ----------------------------------------------------------------------
+# Geometric crossing helpers (Task 1 — segment intersection primitive)
+# ----------------------------------------------------------------------
+
+
+def _ccw(ax: float, ay: float, bx: float, by: float, cx: float, cy: float) -> float:
+    """Cross product (b-a) × (c-a); >0 ccw, <0 cw, =0 collinear."""
+    return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+
+
+def _on_segment(
+    ax: float, ay: float, bx: float, by: float, cx: float, cy: float
+) -> bool:
+    """Is C on segment AB (assuming collinear)?"""
+    return (min(ax, bx) - 1e-9 <= cx <= max(ax, bx) + 1e-9) and (
+        min(ay, by) - 1e-9 <= cy <= max(ay, by) + 1e-9
+    )
+
+
+def _segments_intersect(
+    a1: tuple[float, float],
+    a2: tuple[float, float],
+    b1: tuple[float, float],
+    b2: tuple[float, float],
+    *,
+    ignore_shared_endpoints: bool = True,
+) -> bool:
+    """Standard CCW-based segment intersection.
+
+    ``ignore_shared_endpoints=True``: if the two segments share an exact
+    endpoint (within 1e-7), they are treated as non-intersecting (legal in
+    PCB topology — pins of the same net touching is fine).  Collinear
+    overlap (more than just a shared endpoint) still counts as intersection.
+    """
+    EPS = 1e-7
+    if ignore_shared_endpoints:
+        shared = 0
+        for p in (a1, a2):
+            for q in (b1, b2):
+                if abs(p[0] - q[0]) < EPS and abs(p[1] - q[1]) < EPS:
+                    shared += 1
+        if shared >= 1:
+            # Allow exactly one shared endpoint as a no-cross "touch".
+            # Two shared endpoints means the segments are identical — count
+            # as intersection (it's a degenerate overlap).
+            if shared == 1:
+                return False
+
+    d1 = _ccw(b1[0], b1[1], b2[0], b2[1], a1[0], a1[1])
+    d2 = _ccw(b1[0], b1[1], b2[0], b2[1], a2[0], a2[1])
+    d3 = _ccw(a1[0], a1[1], a2[0], a2[1], b1[0], b1[1])
+    d4 = _ccw(a1[0], a1[1], a2[0], a2[1], b2[0], b2[1])
+    if ((d1 > 0 and d2 < 0) or (d1 < 0 and d2 > 0)) and (
+        (d3 > 0 and d4 < 0) or (d3 < 0 and d4 > 0)
+    ):
+        return True
+    # Collinear cases — overlap counts.
+    if abs(d1) < 1e-12 and _on_segment(b1[0], b1[1], b2[0], b2[1], a1[0], a1[1]):
+        return True
+    if abs(d2) < 1e-12 and _on_segment(b1[0], b1[1], b2[0], b2[1], a2[0], a2[1]):
+        return True
+    if abs(d3) < 1e-12 and _on_segment(a1[0], a1[1], a2[0], a2[1], b1[0], b1[1]):
+        return True
+    if abs(d4) < 1e-12 and _on_segment(a1[0], a1[1], a2[0], a2[1], b2[0], b2[1]):
+        return True
+    return False
+
+
+def _floating_endpoint_xy(
+    artifact: FrontendArtifact,
+    state: dict[str, FloatingPlacement],
+    skeleton: SkeletonReport,
+    adhesion: UvAdhesionReport,
+    ep: str,
+) -> tuple[float, float] | None:
+    """Resolve endpoint XY for crossing-cost terms.  For a floating pin,
+    use the rotated pin position; for fixed/adhered, use the resolved pad
+    centre."""
+    if "." in ep:
+        comp_id, pin_id = ep.split(".", 1)
+        if comp_id in state:
+            comp = artifact.components.get(comp_id)
+            if comp is not None:
+                xy = _floating_pin_xy(comp, pin_id, state[comp_id])
+                if xy is not None:
+                    return xy
+            return (state[comp_id].x, state[comp_id].y)
+    return _resolve_endpoint(artifact, skeleton, adhesion, ep)
+
+
+def _floating_airwires(
+    artifact: FrontendArtifact,
+    state: dict[str, FloatingPlacement],
+    skeleton: SkeletonReport,
+    adhesion: UvAdhesionReport,
+) -> list[tuple[tuple[float, float], tuple[float, float], str]]:
+    """Return list of ((x1,y1), (x2,y2), edge_id) for every edge with at
+    least one floating endpoint, using current SA state."""
+    floating_names = set(state.keys())
+    out: list[tuple[tuple[float, float], tuple[float, float], str]] = []
+    for edge in artifact.edges.values():
+        conns = edge.connections or ()
+        if not any(ep.split(".", 1)[0] in floating_names for ep in conns if "." in ep):
+            continue
+        pts: list[tuple[float, float]] = []
+        for ep in conns:
+            xy = _floating_endpoint_xy(artifact, state, skeleton, adhesion, ep)
+            if xy is not None:
+                pts.append(xy)
+        for p1, p2 in zip(pts, pts[1:]):
+            if math.hypot(p2[0] - p1[0], p2[1] - p1[1]) < 1e-6:
+                continue
+            out.append((p1, p2, edge.name))
+    return out
+
+
+def _rf_bus_cross_cost(
+    artifact: FrontendArtifact,
+    state: dict[str, FloatingPlacement],
+    skeleton: SkeletonReport,
+    adhesion: UvAdhesionReport,
+) -> float:
+    """Count crossings between each floating-airwire and every locked RF
+    route segment.  ``skeleton.routes`` are the already-routed RF traces
+    (rf_constrained_locked etc.)."""
+    airwires = _floating_airwires(artifact, state, skeleton, adhesion)
+    if not airwires:
+        return 0.0
+    rf_segments: list[tuple[tuple[float, float], tuple[float, float]]] = []
+    for route in skeleton.routes.values():
+        if not route.success or len(route.polyline_um) < 2:
+            continue
+        pts = [(um_to_mm(x), um_to_mm(y)) for x, y in route.polyline_um]
+        for p1, p2 in zip(pts, pts[1:]):
+            rf_segments.append((p1, p2))
+    if not rf_segments:
+        return 0.0
+    cost = 0.0
+    for a1, a2, _eid in airwires:
+        for b1, b2 in rf_segments:
+            if _segments_intersect(a1, a2, b1, b2):
+                cost += 1.0
+    return cost
+
+
+def _airwire_cross_cost(
+    artifact: FrontendArtifact,
+    state: dict[str, FloatingPlacement],
+    skeleton: SkeletonReport,
+    adhesion: UvAdhesionReport,
+) -> float:
+    """Count pairwise crossings between distinct floating airwires."""
+    airwires = _floating_airwires(artifact, state, skeleton, adhesion)
+    n = len(airwires)
+    if n < 2:
+        return 0.0
+    cost = 0.0
+    for i in range(n):
+        a1, a2, _eid_i = airwires[i]
+        for j in range(i + 1, n):
+            b1, b2, _eid_j = airwires[j]
+            if _segments_intersect(a1, a2, b1, b2):
+                cost += 1.0
+    return cost
