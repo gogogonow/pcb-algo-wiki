@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 
 from frontend.models import ComponentExpansion, FrontendArtifact
 from schema.geometry_ir import ComponentPlacement, PinPlacement
-from schema.v6_ir import Point
+from schema.v6_ir import Point, V6Topology
 from solver.units import MM_TO_UM
 
 from .skeleton_router import SkeletonReport
@@ -218,6 +218,57 @@ def _infer_anchor_from_virtual_stub(
         if len(route.polyline_um) == 1:
             return route.polyline_um[0]
     return None
+
+
+def _is_pin_microstrip_endpoint(
+    pin_id: str,
+    part_id: str,
+    anchor_pin_name: str,
+    skel: SkeletonReport,
+    topo: V6Topology,
+) -> bool:
+    """WI-I1: detect whether a pin is the endpoint of a constrained microstrip
+    (not a virtual stub). When a microstrip edge terminates directly at a
+    component PIN (e.g., seg2 → C7.PIN_1), that pin should be precisely
+    positioned at the route endpoint coordinate.
+
+    Criteria:
+    1. pin_id exists in final_endpoint_um (has routed coordinate)
+    2. Topology has an edge with pin_id in connections
+    3. That edge is a microstrip with constraints (width/target_length)
+
+    Returns:
+        True if pin is a microstrip endpoint → use precise pin positioning
+        False otherwise → use legacy geometric transform
+    """
+    # 1. Check pin_id in final_endpoint_um
+    if pin_id not in skel.final_endpoint_um:
+        return False
+
+    # 2. Find all edges connected to this pin
+    connected_edges = []
+    for edge_id, edge_def in topo.edges.items():
+        if pin_id in edge_def.connections:
+            connected_edges.append((edge_id, edge_def))
+
+    if not connected_edges:
+        return False
+
+    # 3. Check if any connected edge is a constrained microstrip
+    for edge_id, edge_def in connected_edges:
+        # Must be microstrip
+        if edge_def.type != "microstrip":
+            continue
+
+        # Constrained edges (width/target_length) are main microstrips,
+        # not virtual stubs (which have no constraints)
+        if edge_def.constraint and (
+            edge_def.constraint.width is not None
+            or edge_def.constraint.target_length is not None
+        ):
+            return True
+
+    return False
 
 
 def _place_uv(
