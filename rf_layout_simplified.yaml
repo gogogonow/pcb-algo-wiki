@@ -392,15 +392,6 @@ nodes:    #承载微带线连接点信息
         origin:
           offset_u: align_left    #align_left表示IC1_pin1_seg4与IC1_pin1_seg1左边对齐
           offset_v: edge_front    #edge_front表示IC1_pin1_seg4与IC1_pin1_seg1前向边相连
-  IC1_pin1_seg2_end_split_pad:
-    type: t_junction
-    description: 微带线末端一分二焊盘
-  IC1_pin1_seg4_end_split_pad:
-    type: t_junction
-    description: 微带线末端一分二焊盘
-  IC1_pin1_seg5_start_combiner:
-    type: t_combiner_junction    #t_combiner_junction表示微带线多个分叉合并汇聚到一个的节点
-    description: 两个输出口汇聚的节点
   IC1_pin2_seg1_universal_node:
     type: universal_junction
     semantic_intent:
@@ -424,15 +415,6 @@ nodes:    #承载微带线连接点信息
         origin:
           offset_u: align_center
           offset_v: edge_front
-  IC1_pin2_seg2_end_split_pad:
-    type: t_junction
-    description: 微带线末端一分二焊盘
-  IC1_pin2_seg3_end_split_pad:
-    type: t_junction
-    description: 微带线末端一分二焊盘
-  IC1_pin2_seg5_start_combiner:
-    type: t_combiner_junction
-    description: 两个输出口汇聚的节点
 terminals:
   TP2.PIN_1:
     type: pad
@@ -496,32 +478,18 @@ edges:
     routing_class: rf_constrained
     connections:
     - IC1_pin1_seg1_universal_node
-    - IC1_pin1_seg4_end_split_pad    #表示一个微带线端点连接C和R
+    - C1.PIN_1,R1.PIN_1    #表示一个微带线端点连接C和R
     constraint:
       width: 1.6
       target_length: 4.67
     geometry:
       bend_style: mitered_45
-  IC1_pin1_seg4_to_C1R1:
-    type: microstrip
-    net: RF_NET_1
-    routing_class: rf_constrained
-    connections:
-    - IC1_pin1_seg4_end_split_pad
-    - C1.PIN_1,R1.PIN_1    #表示一个微带线端点连接C和R
-  C1R1_to_combiner:
-    type: microstrip
-    net: RF_NET_3
-    routing_class: rf_constrained
-    connections:
-    - C1.PIN_2,R1.PIN_2    #表示C和R连接到同一个端点
-    - IC1_pin1_seg5_start_combiner
   IC1_pin1_seg5:
     type: microstrip
     net: RF_NET_3
     routing_class: rf_constrained
     connections:
-    - IC1_pin1_seg5_start_combiner
+    - C1.PIN_2,R1.PIN_2    #表示C和R连接到同一个端点
     - C2.PIN_1
     constraint:
       width: 1.1
@@ -588,19 +556,12 @@ edges:
       target_length: 4.67
     geometry:
       bend_style: mitered_45
-  R3_to_combiner:
-    type: microstrip
-    net: RF_NET_4
-    routing_class: rf_constrained
-    connections:
-    - R3.PIN_2
-    - IC1_pin2_seg5_start_combiner
   IC1_pin2_seg5:
     type: microstrip
     net: RF_NET_4
     routing_class: rf_constrained
     connections:
-    - IC1_pin2_seg5_start_combiner
+    - R3.PIN_2
     - C4.PIN_1
     constraint:
       width: 1.1
