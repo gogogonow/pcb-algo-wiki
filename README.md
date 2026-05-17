@@ -71,19 +71,54 @@ pcb_solve rf_layout_simplified.yaml
 - `out/PA_Module_Simplified.phaseA.json`
 - `out/PA_Module_Simplified.phaseB.json`
 - `out/PA_Module_Simplified.summary.json`
+- `out/PA_Module_Simplified.viewer.json`  ← 交互式查看器数据包
 - `out/PA_Module_Simplified.preA.svg`
 - `out/PA_Module_Simplified.phaseA.svg`
 - `out/PA_Module_Simplified.phaseB.svg`
 - `out/PA_Module_Simplified.phaseC.svg`
 - `out/PA_Module_Simplified.final.svg`
 
-### 3.4 推荐查看顺序
+### 3.4 分阶段运行（调试用）
 
-1. `out/PA_Module_Simplified.summary.json`
-2. `out/PA_Module_Simplified.phaseA.svg`
-3. `out/PA_Module_Simplified.phaseB.svg`
-4. `out/PA_Module_Simplified.phaseC.svg`
-5. `out/PA_Module_Simplified.final.svg`
+使用 `--stop-after` 可在指定阶段后提前退出，便于逐阶段评估：
+
+```bash
+# 仅运行到 PreA（位置求解）
+pcb_solve rf_layout_simplified.yaml --stop-after preA
+
+# 仅运行到 Phase A（骨架路由）
+pcb_solve rf_layout_simplified.yaml --stop-after phaseA --rip-up-rounds 2
+
+# 仅运行到 Phase B（UV 吸附）
+pcb_solve rf_layout_simplified.yaml --stop-after phaseB
+
+# 完整流程（默认，等价于 --stop-after phaseC）
+pcb_solve rf_layout_simplified.yaml
+```
+
+每个阶段均输出对应的 `.json` / `.svg` 产物和 `viewer.json`，可独立评判。
+
+### 3.5 交互式查看器（推荐）
+
+运行完成后，直接在浏览器打开 `viewer/viewer.html`，点击 **Load JSON ▶** 加载 `out/PA_Module_Simplified.viewer.json`：
+
+| 功能 | 操作 |
+|------|------|
+| 切换阶段 | 顶部 Tab：preA / phaseA / phaseB / phaseC |
+| 缩放 | 鼠标滚轮（以光标为中心） |
+| 平移 | 左键拖拽 |
+| 查看属性 | 点击走线或器件 → 右侧面板显示详情 |
+| Hover 预览 | 悬停走线/器件 → 显示 Net/宽度/型号 |
+| 图层过滤 | 左侧 checkbox：控制走线/UV器件/浮动器件/Pad 等显隐 |
+| 取消选中 | 点击空白区域 |
+
+颜色编码：RF 走线=蓝色 `#4a90d9`、flex 走线=橙色 `#f5a623`、失败走线=红色 `#e74c3c`、preA 连接=灰色虚线。
+
+### 3.6 推荐查看顺序
+
+1. `out/PA_Module_Simplified.summary.json` — 全局统计（路由成功率、DRC 违规数）
+2. `viewer/viewer.html` + `out/PA_Module_Simplified.viewer.json` — **交互式四阶段全览**
+3. `out/PA_Module_Simplified.phaseA.svg` / `phaseC.svg` — 快速静态对比
 
 ---
 
@@ -124,6 +159,8 @@ python3 -m pytest -q
 - `docs/FINAL-YAML-RUNBOOK.md`（最终 YAML 端到端操作手册）
 - `concepts/skeleton-first-router.md`（主线算法细节）
 - `concepts/frontend-compiler-spec.md`（frontend 产物/字段）
+- `docs/superpowers/specs/2026-05-17-pcb-viewer-design.md`（交互式查看器设计规格）
+- `viewer/viewer.html`（交互式 PCB Phase 查看器，PixiJS 8）
 
 ### 历史归档（保留对照）
 
