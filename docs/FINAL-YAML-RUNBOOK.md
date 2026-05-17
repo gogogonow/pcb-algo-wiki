@@ -66,8 +66,8 @@ pcb_solve_v2 rf_layout_simplified.yaml
 - `phase_b.uv_placed / phase_b.uv_total`
 - `phase_c.flex_routed / phase_c.flex_failed`
 - `phase_c.drc_violations`
-- `route_total_length_mm`
-- `route_total_segments`
+- `route_total_length_mm`（仅统计非 flex 总线）
+- `route_total_segments`（仅统计非 flex 总线）
 - `wall_total_s`
 
 ---

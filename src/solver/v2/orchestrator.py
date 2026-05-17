@@ -767,6 +767,8 @@ def phase_summary(result: OrchestratorV2Result) -> dict[str, object]:
     route_total_length_mm = 0.0
     route_total_segments = 0
     for route in result.geometry.routes.values():
+        if route.routing_class is RoutingClass.FLEXIBLE_PATH:
+            continue
         pts = route.points
         route_total_segments += max(0, len(pts) - 1)
         for a, b in zip(pts, pts[1:]):

@@ -23,7 +23,7 @@ def test_phase_summary_contains_quality_metrics() -> None:
     )
     route = RoutePolyline(
         edge_id="e1",
-        routing_class=RoutingClass.FLEXIBLE_PATH,
+        routing_class=RoutingClass.RF_CONSTRAINED_LOCKED,
         width=0.2,
         points=(
             Point(x=0.0, y=0.0),
