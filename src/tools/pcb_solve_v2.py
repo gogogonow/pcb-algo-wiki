@@ -193,6 +193,112 @@ def _collect_skeleton_routes(
     return routes
 
 
+def _emit_viewer_bundle(
+    result: "OrchestratorV2Result",
+    out_dir: Path,
+    *,
+    layout: "V33Layout | None" = None,
+) -> Path:
+    """Emit {project}.viewer.json — single-file bundle for the PixiJS viewer."""
+    _ = layout  # Reserved for future extension
+    project = result.geometry.project
+    board = result.geometry.board
+
+    # --- preA: edge connectivity graph ---
+    skeleton = result.phase_a.skeleton
+    prea_edges = []
+    for edge_id, edge in result.artifact.edges.items():
+        ep_positions: dict[str, dict] = {}
+        for ep in edge.connections:
+            um = skeleton.final_endpoint_um.get(ep)
+            if um is not None:
+                ep_positions[ep] = {
+                    "x": round(um[0] / 1000.0, 4),
+                    "y": round(um[1] / 1000.0, 4),
+                }
+        prea_edges.append(
+            {
+                "edge_id": edge_id,
+                "routing_class": edge.routing_class,
+                "width_mm": round(float(edge.width), 4) if edge.width else None,
+                "target_length_mm": round(float(edge.target_length), 4)
+                if edge.target_length
+                else None,
+                "connections": list(edge.connections),
+                "endpoint_positions_mm": ep_positions,
+            }
+        )
+
+    # --- phaseA / phaseB: skeleton routes ---
+    skeleton_routes = _collect_skeleton_routes(skeleton, result.artifact)
+
+    # --- phaseB: UV placements ---
+    uv_placements = [
+        {
+            "ref": name,
+            "anchor_x_mm": round(float(p.anchor.x), 4),
+            "anchor_y_mm": round(float(p.anchor.y), 4),
+            "rotation_deg": float(p.rotation_deg),
+            "pads": [
+                {"pin": pp.pin, "x_mm": round(float(pp.point.x), 4),
+                 "y_mm": round(float(pp.point.y), 4)}
+                for pp in p.pads
+            ],
+        }
+        for name, p in result.phase_b.adhesion.placements.items()
+    ]
+
+    # --- phaseC: geometry routes (mm) + flex routes ---
+    flex_set = set(result.phase_c.routed_flex_edges)
+    geo_routes = []
+    flex_routes = []
+    for edge_id, rp in result.geometry.routes.items():
+        entry = {
+            "edge_id": edge_id,
+            "polyline_mm": [[round(p.x, 4), round(p.y, 4)] for p in rp.points],
+            "width_mm": round(float(rp.width), 4),
+            "routing_class": rp.routing_class,
+            "success": True,
+        }
+        if edge_id in flex_set:
+            flex_routes.append(entry)
+        else:
+            geo_routes.append(entry)
+    # Failed flex edges (no polyline)
+    for eid in result.phase_c.failed_flex_edges:
+        flex_routes.append(
+            {"edge_id": eid, "polyline_mm": [], "width_mm": 0.0,
+             "routing_class": "flex", "success": False}
+        )
+
+    # --- Assemble bundle ---
+    bundle = {
+        "project": project,
+        "board": {
+            "width_mm": round(float(board.width), 4),
+            "height_mm": round(float(board.height), 4),
+            "origin_x_mm": round(float(board.origin.x), 4),
+            "origin_y_mm": round(float(board.origin.y), 4),
+        },
+        "components": _make_viewer_components(result.artifact),
+        "phases": {
+            "preA": {"edges": prea_edges},
+            "phaseA": {"routes": skeleton_routes},
+            "phaseB": {"routes": skeleton_routes, "uv_placements": uv_placements},
+            "phaseC": {
+                "routes": geo_routes,
+                "uv_placements": uv_placements,
+                "flex_routes": flex_routes,
+            },
+        },
+    }
+
+    out_path = out_dir / f"{project}.viewer.json"
+    out_path.write_text(json.dumps(bundle, indent=2))
+    logger.info("persist viewer bundle: %s", out_path)
+    return out_path
+
+
 def _make_partial_result(
     artifact: FrontendArtifact,
     plan: Any,
@@ -2689,6 +2795,11 @@ def _persist_phase_artefacts(
     artefacts["phaseC_svg"] = phase_c_svg
     logger.info("persist phaseC svg: wall=%.2fs", time.perf_counter() - t_step)
     logger.info("persist artefacts total: wall=%.2fs", time.perf_counter() - t_all)
+
+    t_step = time.perf_counter()
+    viewer_path = _emit_viewer_bundle(result, out_dir, layout=layout)
+    artefacts["viewer_bundle"] = viewer_path
+    logger.info("persist viewer bundle: wall=%.2fs", time.perf_counter() - t_step)
 
     return artefacts
 
