@@ -1,5 +1,7 @@
 # CP-SAT 主求解器模型（M4）
 
+> ⚠️ 文档状态：**历史归档**。当前默认主线不使用 CP-SAT 主求解，保留仅用于回归对照。
+>
 > 输入：M3 `SolverIR` + M2 `FrontendArtifact`
 > 输出：strict `GeometryIR`（端点 / 折线 / pin 位）+ SVG
 > 实现：`src/solver/cpsat.py`、`src/solver/extract.py`、`src/solver/audit.py`

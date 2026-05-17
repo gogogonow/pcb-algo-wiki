@@ -1,6 +1,6 @@
 # UV 解析与 universal_junction 模板（M3 SolverIR）
 
-> Status: M3 实现 ✅
+> ⚠️ 文档状态：历史 M3 设计说明。当前默认流程请结合 `ALGORITHM-OVERVIEW.md` 与 `concepts/skeleton-first-router.md` 阅读。
 > 输入：M2 `FrontendArtifact` + 原始 v3.3 YAML
 > 输出：`SolverIR`（CP-SAT 模型构建器在 M4 直接消费）
 

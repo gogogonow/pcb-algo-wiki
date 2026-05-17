@@ -1,5 +1,7 @@
 # PhaseC 灵活布局布线实现计划 (WI-J)
 
+> ⚠️ 历史归档文档：该计划用于当时迭代记录，当前主线请以 `README.md` / `ALGORITHM-OVERVIEW.md` / `ITERATION-PLAN.md` 为准。
+
 > **面向 AI 代理的工作者：** 必需子技能 superpowers:executing-plans 或 subagent-driven-development。
 > 步骤使用复选框（`- [ ]`）语法跟踪进度。每个任务结尾都要 commit，并在批次结束跑 `./scripts/verify_m1.sh`。
 

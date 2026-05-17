@@ -1,5 +1,7 @@
 # 骨架优先三阶段路由器（Skeleton-First Router, v7）
 
+> ✅ 文档状态：当前主线算法文档（默认入口 `pcb_solve` / `pcb_solve_v2`）。
+>
 > **状态**：M10 系列已交付。替代 v6（CP-SAT 联合 placement+geometry）。
 > **入口**：`pcb_solve`（已切换至 v2）/ `pcb_solve_v2`；旧入口保留为 `pcb_solve_v1`。
 > **回归用例**：`rf_layout_simplified.yaml`。

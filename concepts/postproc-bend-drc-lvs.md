@@ -1,5 +1,7 @@
 # M6 后处理：bend / DRC / 软 LVS
 
+> ⚠️ 文档状态：**历史归档（M6）**。当前主线仍复用其中部分后处理思想，但实现入口已迁移到 v2 编排流程。
+>
 > 模块路径：`src/postproc/{bend,drc,lvs}.py` + `src/output/svg_full.py`
 > CLI：`pcb_solve --bend / --drc-out / --lvs-out / --final-svg`
 

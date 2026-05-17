@@ -1,5 +1,7 @@
 # PreA 位置求解器重构设计规范
 
+> ⚠️ 历史归档文档：该规格用于当时迭代记录，当前主线请以 `README.md` / `ALGORITHM-OVERVIEW.md` / `ITERATION-PLAN.md` 为准。
+
 **日期：** 2026-05-15  
 **状态：** 待审查  
 **文件：** `src/tools/pcb_solve_v2.py`（重点：`_solve_pre_a_positions` 和 `_render_pre_phase_svg`）

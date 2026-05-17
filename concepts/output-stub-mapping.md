@@ -1,5 +1,7 @@
 # Gerber / GDS 输出字段映射（v7 留实现）
 
+> ⚠️ 文档状态：历史规划文档。当前仓库默认交付产物以 JSON/SVG 为主，Gerber/GDS 仍非主线交付。
+>
 > M6 仅提供 `output/gerber_stub.py` 与 `output/gds_stub.py` 占位，
 > 调用即抛 `NotImplementedError("v7")`。本文档锁定 GeometryIR → 二进制
 > 输出格式的字段映射，便于 v7 直接落地。

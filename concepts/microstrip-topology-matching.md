@@ -1,5 +1,7 @@
 # 微带线拓扑与匹配网络自动化综合（v6）
 
+> ⚠️ 文档状态：**历史归档（v6）**。当前默认执行路径以 v2 Skeleton-First 为准。
+>
 > **v6 更新（基于真实案例 `rf_layout_simplified.yaml` 校准）**
 >
 > 本文档原 v4 内容（微带宽度计算、bend_style、stepped_impedance）**完全保留并继续适用**。v6 新增以下两处补充，请配合阅读：

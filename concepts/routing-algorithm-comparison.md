@@ -1,5 +1,7 @@
 # PCB 单层无交叉布线 —— 双求解器实现指南（v6）
 
+> ⚠️ 文档状态：**历史归档**。当前默认流程已切换到 v2 Skeleton-First，不再以 CP-SAT 为主求解。
+>
 > **v6 更新（基于真实案例 `rf_layout_simplified.yaml` 校准）**
 >
 > 本文档原 v4 内容描述 CP-SAT (rf_constrained) + A* (flexible_path) 双求解器实现，**整体算法不变**。v6 对入口规范和分流规则做以下三处增量调整，请阅读时同步带入：

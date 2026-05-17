@@ -1,5 +1,7 @@
 # Floating Placer 交叉惩罚升级设计
 
+> ⚠️ 历史归档文档：该规格用于当时迭代记录，当前主线请以 `README.md` / `ALGORITHM-OVERVIEW.md` / `ITERATION-PLAN.md` 为准。
+
 ## 背景
 
 phaseC flex 路由当前 3/6 通过。剩余 3 条失败 (`flex_ubias_rpull`, `flex_ubias_ctrl_b`,

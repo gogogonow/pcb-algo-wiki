@@ -1,5 +1,7 @@
 # Frontend Compiler 规范（M2）
 
+> ✅ 文档状态：当前有效。适用于默认 v2 主线的输入编译阶段。
+>
 > 落地于 `src/frontend/`，对应 [`ITERATION-PLAN.md`](../ITERATION-PLAN.md) §M2 与 [`ALGORITHM-OVERVIEW.md`](../ALGORITHM-OVERVIEW.md) §2.1 ① Frontend Compiler。
 
 Frontend Compiler 把上游 v3.3 YAML（外部 EDA 接口）容错地编译为 v6 求解器可消费的中间产物 `FrontendArtifact`。本期（M2）不涉及 UV 数学求解、universal_junction 几何方程展开或 CP-SAT 接入 —— 那些由 M3/M4 承担；M2 只交付**结构化前置数据**与**容错 lint**。

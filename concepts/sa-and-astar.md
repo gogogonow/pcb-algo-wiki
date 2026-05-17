@@ -1,5 +1,7 @@
 # M5 — SA 预放置 + A* 灵活段路由 + 三阶段流水线
 
+> ⚠️ 文档状态：**历史归档（M5）**。当前默认流程请参考 `pcb_solve_v2` 与 `concepts/skeleton-first-router.md`。
+>
 > 版本：M5（2024-Q4）
 > 配套代码：`src/solver/sa_floating.py`、`src/solver/astar_flex.py`、`src/solver/orchestrator.py`、`src/tools/pcb_solve.py`
 

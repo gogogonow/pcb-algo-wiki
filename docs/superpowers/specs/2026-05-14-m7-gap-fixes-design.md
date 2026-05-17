@@ -1,5 +1,7 @@
 # M7 GAP修复设计文档
 
+> ⚠️ 历史归档文档：该规格用于当时迭代记录，当前主线请以 `README.md` / `ALGORITHM-OVERVIEW.md` / `ITERATION-PLAN.md` 为准。
+
 **日期**: 2026-05-14  
 **迭代**: M7  
 **触发**: 基于 rf_layout_simplified.yaml 端到端运行结果的GAP分析  

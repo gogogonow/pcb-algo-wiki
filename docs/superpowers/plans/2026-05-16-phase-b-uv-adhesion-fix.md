@@ -1,5 +1,7 @@
 # PhaseB UV 吸附修复 实现计划
 
+> ⚠️ 历史归档文档：该计划用于当时迭代记录，当前主线请以 `README.md` / `ALGORITHM-OVERVIEW.md` / `ITERATION-PLAN.md` 为准。
+
 > **面向 AI 代理的工作者：** 必需子技能：使用 superpowers:subagent-driven-development（推荐）或 superpowers:executing-plans 逐任务实现此计划。步骤使用复选框（`- [ ]`）语法来跟踪进度。
 
 **目标：** 修复 phaseB 中 RLC 吸附到微带线时的四个核心问题：标签不统一、seg1 占用、走线方向不垂直、body 与微带线重叠（非法）。

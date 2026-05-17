@@ -1,5 +1,7 @@
 # PreA 位置求解器重构实现计划
 
+> ⚠️ 历史归档文档：该计划用于当时迭代记录，当前主线请以 `README.md` / `ALGORITHM-OVERVIEW.md` / `ITERATION-PLAN.md` 为准。
+
 > **面向 AI 代理的工作者：** 必需子技能：使用 superpowers:subagent-driven-development（推荐）或 superpowers:executing-plans 逐任务实现此计划。步骤使用复选框（`- [ ]`）语法来跟踪进度。
 
 **目标：** 重构 `_solve_pre_a_positions` 函数（830 行），用 5 个顺序纯函数替代弹簧松弛迭代，修复 IC 前缀硬编码、串联 RLC 方向错误，并清理 yaml 测试案例中无意义的 TP1/R2 数据。
