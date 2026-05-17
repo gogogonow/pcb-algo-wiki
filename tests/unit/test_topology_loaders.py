@@ -179,6 +179,60 @@ def test_load_topology_graph_reads_yaml_as_utf8(
     assert read_kwargs["encoding"] == "utf-8"
 
 
+def test_extract_topology_graph_accepts_null_component_xy() -> None:
+    graph = extract_topology_graph(
+        {
+            "components": {
+                "U1": {
+                    "placement": {"type": "fixed", "x": None, "y": None},
+                    "pin_nets": {"PIN_1": "N1"},
+                }
+            },
+            "nodes": {},
+            "terminals": {},
+            "edges": {},
+        }
+    )
+
+    component = graph.get_component("U1")
+    assert component.position is None
+
+
+def test_extract_topology_graph_supports_multi_endpoint_edge() -> None:
+    graph = extract_topology_graph(
+        {
+            "components": {
+                "U1": {
+                    "placement": {"type": "fixed"},
+                    "pin_nets": {"PIN_1": "BUS"},
+                },
+                "U2": {
+                    "placement": {"type": "fixed"},
+                    "pin_nets": {"PIN_1": "BUS"},
+                },
+                "U3": {
+                    "placement": {"type": "fixed"},
+                    "pin_nets": {"PIN_1": "BUS"},
+                },
+            },
+            "nodes": {},
+            "terminals": {},
+            "edges": {
+                "logical_bus_1": {
+                    "type": "signal",
+                    "connections": ["U1.PIN_1", "U2.PIN_1", "U3.PIN_1"],
+                }
+            },
+        }
+    )
+
+    assert [edge.id for edge in graph.edges] == ["logical_bus_1", "logical_bus_1#2"]
+    assert graph.get_edge("logical_bus_1").source == "U1.PIN_1"
+    assert graph.get_edge("logical_bus_1").target == "U2.PIN_1"
+    assert graph.get_edge("logical_bus_1#2").source == "U1.PIN_1"
+    assert graph.get_edge("logical_bus_1#2").target == "U3.PIN_1"
+
+
 @pytest.mark.parametrize("section_name", ["components", "nodes", "terminals", "edges"])
 def test_extract_topology_graph_rejects_non_mapping_sections(section_name: str) -> None:
     with pytest.raises(

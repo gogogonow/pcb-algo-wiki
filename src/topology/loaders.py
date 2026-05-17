@@ -36,8 +36,10 @@ def extract_topology_graph(data: Mapping[str, object]) -> TopologyGraph:
         placement = _get_nested_mapping(component, component_id, "placement")
         pin_nets = _get_nested_mapping(component, component_id, "pin_nets")
         position = None
-        if "x" in placement and "y" in placement:
-            position = TopologyPoint(x=float(placement["x"]), y=float(placement["y"]))
+        x = placement.get("x")
+        y = placement.get("y")
+        if x is not None and y is not None:
+            position = TopologyPoint(x=float(x), y=float(y))
 
         graph.components.append(
             TopologyComponent(
@@ -71,21 +73,43 @@ def extract_topology_graph(data: Mapping[str, object]) -> TopologyGraph:
 
     for edge_id, edge in _iter_section(data, "edges", "edge"):
         connections = edge.get("connections", [])
-        if len(connections) != 2:
-            raise ValueError(f"edge {edge_id!r} must define exactly two connections")
+        if not isinstance(connections, list):
+            raise ValueError(f"edge {edge_id!r} connections must be a list")
+        if len(connections) < 2:
+            raise ValueError(f"edge {edge_id!r} must define at least two connections")
 
-        source = _validate_edge_endpoint(graph, edge_id, connections[0])
-        target = _validate_edge_endpoint(graph, edge_id, connections[1])
+        resolved = [
+            _validate_edge_endpoint(graph, edge_id, endpoint_id)
+            for endpoint_id in connections
+        ]
 
-        graph.edges.append(
-            TopologyEdge(
-                id=edge_id,
-                source=source,
-                target=target,
-                kind=edge.get("type", "edge"),
-                net=edge.get("net"),
+        if len(resolved) == 2:
+            graph.edges.append(
+                TopologyEdge(
+                    id=edge_id,
+                    source=resolved[0],
+                    target=resolved[1],
+                    kind=edge.get("type", "edge"),
+                    net=edge.get("net"),
+                )
             )
-        )
+            continue
+
+        # Hyper-edge fallback: emit a deterministic fan-out from the first
+        # endpoint. This preserves all logical members in the topology graph
+        # while keeping the existing TopologyEdge(source, target) shape.
+        root = resolved[0]
+        for index, endpoint in enumerate(resolved[1:], start=1):
+            edge_name = edge_id if index == 1 else f"{edge_id}#{index}"
+            graph.edges.append(
+                TopologyEdge(
+                    id=edge_name,
+                    source=root,
+                    target=endpoint,
+                    kind=edge.get("type", "edge"),
+                    net=edge.get("net"),
+                )
+            )
 
     return graph
 
