@@ -433,19 +433,10 @@ edges:
     routing_class: rf_constrained
     connections:
     - IC1_pin1_seg1_universal_node
-    - IC1_pin1_seg2_end_split_pad
+    - C7.PIN_1
     constraint:
       width: 1.88
       target_length: 1.29
-    geometry:
-      bend_style: mitered_45
-  IC1_pin1_seg2_to_C7:
-    type: microstrip
-    net: RF_NET_1
-    routing_class: rf_constrained
-    connections:
-    - IC1_pin1_seg2_end_split_pad
-    - C7.PIN_1
     geometry:
       bend_style: mitered_45
   IC1_pin1_seg3:
@@ -454,19 +445,10 @@ edges:
     routing_class: rf_constrained
     connections:
     - IC1_pin1_seg1_universal_node
-    - IC1_pin1_seg3_end_split_pad
+    - C5.PIN_1
     constraint:
       width: 1.27
       target_length: 1.47
-    geometry:
-      bend_style: mitered_45
-  IC1_pin1_seg3_to_C5:
-    type: microstrip
-    net: RF_NET_1
-    routing_class: rf_constrained
-    connections:
-    - IC1_pin1_seg3_end_split_pad
-    - C5.PIN_1
     geometry:
       bend_style: mitered_45
   IC1_pin1_seg4:
