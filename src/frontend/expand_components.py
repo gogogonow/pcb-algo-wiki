@@ -45,7 +45,63 @@ def expand_component(
     if placement is not None and placement.type == "parametric_uv":
         return _expand_uv(name, component, footprint)
 
+    if (
+        placement is not None
+        and getattr(placement, "is_floating", False) is True
+        and (placement.x is None or placement.y is None)
+    ):
+        return _expand_floating(name, component, footprint)
+
     return _expand_fixed(name, component, footprint)
+
+
+def _expand_floating(
+    name: str,
+    component: Component,
+    footprint: Footprint | None,
+) -> ComponentExpansion:
+    """WI-J2 — Floating component: pads枚举 local 信息但无绝对坐标。
+
+    phaseC 的 floating_placer 会赋予 (x, y, rotation) 并实例化 absolute pads。
+    """
+    pads: list[ExpandedPad] = []
+    pin_items = footprint.pins.items() if footprint is not None else ()
+    for pin_name, pin in pin_items:
+        local_x = float(pin.local_x or 0.0)
+        local_y = float(pin.local_y or 0.0)
+        pad_w = (
+            float(pin.pad_geometry.width)
+            if pin.pad_geometry and pin.pad_geometry.width
+            else None
+        )
+        pad_l = (
+            float(pin.pad_geometry.length)
+            if pin.pad_geometry and pin.pad_geometry.length
+            else None
+        )
+        pads.append(
+            ExpandedPad(
+                component=name,
+                pin=pin_name,
+                abs_x=None,
+                abs_y=None,
+                orientation=None,
+                kind="floating_deferred",
+                local_x=local_x,
+                local_y=local_y,
+                pad_width=pad_w,
+                pad_length=pad_l,
+            )
+        )
+    return ComponentExpansion(
+        name=name,
+        footprint_ref=component.footprint_ref,
+        placement_kind="floating",
+        pads=tuple(pads),
+        bbox=None,
+        uv_meta=None,
+        pin_nets=dict(component.pin_nets or {}),
+    )
 
 
 def _expand_fixed(

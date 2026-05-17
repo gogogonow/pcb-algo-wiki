@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-PadKind = Literal["fixed", "uv_deferred"]
+PadKind = Literal["fixed", "uv_deferred", "floating_deferred"]
 ObstacleKind = Literal["board_outline", "keepout", "footprint_bbox"]
-PlacementKind = Literal["fixed", "parametric_uv", "unknown"]
+PlacementKind = Literal["fixed", "parametric_uv", "floating", "unknown"]
 
 
 @dataclass(frozen=True)

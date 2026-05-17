@@ -108,3 +108,31 @@ def test_rotation_45_uses_affine_math() -> None:
     pad = exp.pads[0]
     assert pad.abs_x == pytest.approx(math.cos(math.radians(45)))
     assert pad.abs_y == pytest.approx(math.sin(math.radians(45)))
+
+
+def test_floating_component_no_xy_yields_floating_kind() -> None:
+    fp = _footprint(2.0, 4.0, {"PIN_1": (1.0, 0.0), "PIN_2": (-1.0, 0.0)})
+    component = Component(
+        footprint_ref="FP",
+        placement=ComponentPlacement(is_floating=True),
+    )
+    exp = expand_component("U_FLT", component, {"FP": fp})
+    assert exp.placement_kind == "floating"
+    assert exp.bbox is None
+    assert len(exp.pads) == 2
+    for pad in exp.pads:
+        assert pad.kind == "floating_deferred"
+        assert pad.abs_x is None and pad.abs_y is None
+        # local 几何信息保留供 phaseC 实例化
+        assert pad.local_x is not None and pad.local_y is not None
+
+
+def test_floating_component_with_xy_still_fixed() -> None:
+    """is_floating=True 但已给 (x,y) 当作 fixed 处理（覆盖式调试场景）。"""
+    fp = _footprint(2.0, 4.0, {"PIN_1": (1.0, 0.0), "PIN_2": (-1.0, 0.0)})
+    component = Component(
+        footprint_ref="FP",
+        placement=ComponentPlacement(x=5.0, y=5.0, is_floating=True),
+    )
+    exp = expand_component("U_FLT2", component, {"FP": fp})
+    assert exp.placement_kind == "fixed"
