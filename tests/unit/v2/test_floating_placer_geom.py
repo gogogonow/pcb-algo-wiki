@@ -14,7 +14,9 @@ def test_parallel_returns_false() -> None:
 def test_shared_endpoint_does_not_count() -> None:
     # Two segments meeting at (1, 0) — legal pin sharing, not a crossing.
     assert (
-        _segments_intersect((0, 0), (1, 0), (1, 0), (2, 1), ignore_shared_endpoints=True)
+        _segments_intersect(
+            (0, 0), (1, 0), (1, 0), (2, 1), ignore_shared_endpoints=True
+        )
         is False
     )
 

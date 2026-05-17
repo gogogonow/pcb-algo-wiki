@@ -38,18 +38,19 @@ class FloatingPlacement:
 
 @dataclass(frozen=True)
 class FloatingPlacerConfig:
-    iterations: int = 6000
+    iterations: int = 8000
     temperature_init: float = 5000.0
     temperature_min: float = 1.0
     cooling: float = 0.9985
     step_mm: float = 1.2
     boundary_weight: float = 400.0
     overlap_weight: float = 2000.0
+    body_overlap_weight: float = 500.0
     hpwl_weight: float = 20.0
     routability_weight: float = 50.0
     escape_alignment_weight: float = 1.0
-    rf_bus_cross_weight: float = 50.0
-    airwire_cross_weight: float = 5.0
+    rf_bus_cross_weight: float = 150.0
+    airwire_cross_weight: float = 20.0
     clearance_mm: float = 0.3
     margin_mm: float = 0.5  # 与板框、其他障碍的最小距离裕量
     seed: int = 0xC0FFEE
@@ -84,6 +85,20 @@ def place_floating_components(
         adhesion=adhesion,
         clearance=cfg.clearance_mm,
     )
+
+    # Build "connected pairs" — components linked by a flex edge are allowed
+    # to share body bbox space (their pads must touch).  We only penalise body
+    # overlap for *unrelated* component pairs.
+    connected_pairs: set[frozenset[str]] = set()
+    for edge in artifact.edges.values():
+        comps = []
+        for ep in edge.connections or ():
+            if "." in ep:
+                comps.append(ep.split(".", 1)[0])
+        for i in range(len(comps)):
+            for j in range(i + 1, len(comps)):
+                if comps[i] != comps[j]:
+                    connected_pairs.add(frozenset({comps[i], comps[j]}))
 
     # Initialise each floating component at the centroid of its connected
     # non-floating endpoints (with a small deterministic jitter to break
@@ -153,15 +168,41 @@ def place_floating_components(
     def energy(s: dict[str, FloatingPlacement]) -> float:
         e = 0.0
         bboxes = [_bbox_for(artifact, n, p) for n, p in s.items()]
+        body_bboxes = [(n, _body_bbox_for(artifact, n, p)) for n, p in s.items()]
         for bb in bboxes:
             e += cfg.boundary_weight * _out_of_board_sq(
                 bb, board_w, board_h, cfg.margin_mm
             )
             for ob in obstacles:
-                e += cfg.overlap_weight * _bbox_overlap_area_sq(bb, ob)
+                e += cfg.overlap_weight * _bbox_overlap_linear(bb, ob)
         for i in range(len(bboxes)):
             for j in range(i + 1, len(bboxes)):
-                e += cfg.overlap_weight * _bbox_overlap_area_sq(bboxes[i], bboxes[j])
+                e += cfg.overlap_weight * _bbox_overlap_linear(bboxes[i], bboxes[j])
+        # Body-vs-body overlap (uses full footprint envelope so large IC
+        # bodies prevent small caps being placed *on top of* them).  Skip
+        # connected pairs — their pads must touch.
+        for i in range(len(body_bboxes)):
+            for j in range(i + 1, len(body_bboxes)):
+                ni, nj = body_bboxes[i][0], body_bboxes[j][0]
+                if frozenset({ni, nj}) in connected_pairs:
+                    continue
+                e += cfg.body_overlap_weight * _bbox_overlap_area_sq(
+                    body_bboxes[i][1], body_bboxes[j][1]
+                )
+        # Floating body vs fixed-component body bbox (use comp.bbox if known)
+        for name, bb_body in body_bboxes:
+            for fixed_name, fixed in artifact.components.items():
+                if fixed.placement_kind != "fixed" or fixed.bbox is None:
+                    continue
+                if frozenset({name, fixed_name}) in connected_pairs:
+                    continue
+                fixed_bb = (
+                    fixed.bbox.min_x,
+                    fixed.bbox.min_y,
+                    fixed.bbox.max_x,
+                    fixed.bbox.max_y,
+                )
+                e += cfg.body_overlap_weight * _bbox_overlap_area_sq(bb_body, fixed_bb)
         e += cfg.hpwl_weight * _hpwl_energy(artifact, s, skeleton, adhesion)
         e += cfg.routability_weight * _routability_cost(
             artifact, s, skeleton, adhesion, obstacles
@@ -266,6 +307,27 @@ def _comp_wh(comp: ComponentExpansion, rotation: int) -> tuple[float, float]:
     return w_local, h_local
 
 
+def _comp_body_wh(comp: ComponentExpansion, rotation: int) -> tuple[float, float]:
+    """Full body (footprint) envelope when known, else fall back to pad envelope."""
+    if comp.footprint_dims_mm is not None:
+        w_body, l_body = comp.footprint_dims_mm
+        w_local, h_local = l_body, w_body
+        if rotation in (90, -90):
+            return h_local, w_local
+        return w_local, h_local
+    return _comp_wh(comp, rotation)
+
+
+def _body_bbox_for(
+    artifact: FrontendArtifact,
+    name: str,
+    place: FloatingPlacement,
+) -> tuple[float, float, float, float]:
+    comp = artifact.components[name]
+    w, h = _comp_body_wh(comp, place.rotation)
+    return (place.x - w / 2, place.y - h / 2, place.x + w / 2, place.y + h / 2)
+
+
 def _bbox_for(
     artifact: FrontendArtifact,
     name: str,
@@ -295,6 +357,25 @@ def _bbox_overlap_area_sq(
     oh = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
     area = ow * oh
     return area * area
+
+
+def _bbox_overlap_linear(
+    a: tuple[float, float, float, float],
+    b: tuple[float, float, float, float],
+) -> float:
+    """Linear-in-area overlap with a fixed offset for any positive overlap.
+
+    Used for pad-vs-pad overlap so that *tiny* overlaps (e.g. 0.02mm strip)
+    still incur a meaningful penalty (squared-area collapses to ~0 there).
+    """
+    ow = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+    oh = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+    area = ow * oh
+    if area <= 0.0:
+        return 0.0
+    # Linear-in-area term — gives clear gradient and dominates the
+    # squared-area term for very small overlaps.
+    return area
 
 
 def _collect_static_obstacles(
