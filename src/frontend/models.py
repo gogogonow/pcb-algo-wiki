@@ -89,6 +89,9 @@ class ComponentExpansion:
     bbox: BBox | None = None
     uv_meta: UvMeta | None = None
     pin_nets: dict[str, str] = field(default_factory=dict)
+    footprint_dims_mm: tuple[float, float] | None = (
+        None  # (width, length) in component-local frame
+    )
 
 
 @dataclass(frozen=True)

@@ -223,33 +223,124 @@ def _build_grid(
     obstacles: set[tuple[int, int]] = set()
     near_rf: set[tuple[int, int]] = set()
 
+    # Endpoint pin ids of current edge — used to exempt their own pads.
+    endpoint_pin_ids: set[str] = set()
+    endpoint_comp_names: set[str] = set()
+    for pin_info in endpoint_pins:
+        # PinEscapeInfo doesn't carry comp/pin id; derive via SolverIR edge endpoints.
+        pass
+    edge_ir = ir.edges.get(skip_edge_id) if skip_edge_id else None
+    if edge_ir is not None:
+        for ep in edge_ir.endpoints:
+            endpoint_pin_ids.add(str(ep))
+            if "." in ep:
+                endpoint_comp_names.add(ep.split(".", 1)[0])
+
+    import math as _math
+
     # Footprint bboxes from FrontendArtifact — ALL components are hard
     # obstacles, including endpoint components.  Pin escape windows below
     # carve back the cells needed for the path to exit / enter pads.
+    # Endpoint pin coordinates in µm — used to skip body bboxes that would
+    # otherwise swallow an endpoint pin (e.g. floating components placed by
+    # the SA placer with overlapping bodies).  Without this, A* would have
+    # its start/goal cell marked as obstacle and immediately fail.
+    endpoint_xys_um: list[tuple[int, int]] = []
+    for pin_info in endpoint_pins:
+        endpoint_xys_um.append(pin_info.pin_xy_um)
+
     for comp_name, comp in artifact.components.items():
-        if comp.bbox is None:
+        bx_lo_mm: float | None = None
+        by_lo_mm: float | None = None
+        bx_hi_mm: float | None = None
+        by_hi_mm: float | None = None
+        if comp.bbox is not None:
+            bx_lo_mm = float(comp.bbox.min_x)
+            by_lo_mm = float(comp.bbox.min_y)
+            bx_hi_mm = float(comp.bbox.max_x)
+            by_hi_mm = float(comp.bbox.max_y)
+        else:
+            placement = geom.placements.get(comp_name)
+            if placement is not None and comp.footprint_dims_mm is not None:
+                w_mm, l_mm = comp.footprint_dims_mm
+                rot = float(placement.rotation_deg)
+                cos_t = round(_math.cos(_math.radians(rot)))
+                if cos_t == 0:
+                    ext_x, ext_y = w_mm, l_mm
+                else:
+                    ext_x, ext_y = l_mm, w_mm
+                cx = float(placement.anchor.x)
+                cy = float(placement.anchor.y)
+                bx_lo_mm = cx - ext_x / 2
+                by_lo_mm = cy - ext_y / 2
+                bx_hi_mm = cx + ext_x / 2
+                by_hi_mm = cy + ext_y / 2
+        if bx_lo_mm is None:
             continue
-        bx_lo = mm_to_um(float(comp.bbox.min_x))
-        by_lo = mm_to_um(float(comp.bbox.min_y))
-        bx_hi = mm_to_um(float(comp.bbox.max_x))
-        by_hi = mm_to_um(float(comp.bbox.max_y))
+        bx_lo = mm_to_um(bx_lo_mm)
+        by_lo = mm_to_um(by_lo_mm or 0.0)
+        bx_hi = mm_to_um(bx_hi_mm or 0.0)
+        by_hi = mm_to_um(by_hi_mm or 0.0)
+        # Skip body bbox if it would swallow either endpoint of the current
+        # flex edge (occurs when a foreign component was placed overlapping
+        # the endpoint component — body bbox here is unsafe).
+        swallows_endpoint = False
+        for ex_um, ey_um in endpoint_xys_um:
+            if bx_lo <= ex_um <= bx_hi and by_lo <= ey_um <= by_hi:
+                if comp_name not in endpoint_comp_names:
+                    swallows_endpoint = True
+                    break
+        if swallows_endpoint:
+            continue
         for cell in _cells_in_bbox(bx_lo, by_lo, bx_hi, by_hi, step):
             obstacles.add(cell)
 
-    # Pad envelopes from GeometryIR placements (UV-adhered + floating components
-    # have no FrontendArtifact bbox, so we derive bbox from pad points + buffer).
-    pad_buffer_um = mm_to_um(0.6)
+    # Per-pad obstacles (each pad is its own bbox, not merged).  This ensures
+    # that pin escape window carving (later) only opens the route's *own*
+    # endpoint pad and not any neighbouring pad of the same component.
+    # Use ``clearance`` as the pad halo (not a fixed 0.6 mm) so neighbouring
+    # pads of small packages remain reachable through the natural gap.
+    pad_buffer_um = mm_to_um(float(ir.clearance))
+    non_endpoint_pad_bboxes: list[tuple[int, int, int, int]] = []
     for comp_name, placement in geom.placements.items():
         if not placement.pads:
             continue
-        xs = [mm_to_um(float(p.point.x)) for p in placement.pads]
-        ys = [mm_to_um(float(p.point.y)) for p in placement.pads]
-        bx_lo = min(xs) - pad_buffer_um
-        by_lo = min(ys) - pad_buffer_um
-        bx_hi = max(xs) + pad_buffer_um
-        by_hi = max(ys) + pad_buffer_um
-        for cell in _cells_in_bbox(bx_lo, by_lo, bx_hi, by_hi, step):
-            obstacles.add(cell)
+        comp_obj = artifact.components.get(comp_name)
+        pad_sizes: dict[str, tuple[float, float]] = {}
+        if comp_obj is not None:
+            for ap in comp_obj.pads:
+                pw = float(ap.pad_width) if ap.pad_width else 0.0
+                pl = float(ap.pad_length) if ap.pad_length else 0.0
+                pad_sizes[ap.pin] = (pw, pl)
+        for pad in placement.pads:
+            pin_id = f"{comp_name}.{pad.pin}"
+            cx_mm = float(pad.point.x)
+            cy_mm = float(pad.point.y)
+            pw, pl = pad_sizes.get(pad.pin, (0.0, 0.0))
+            half_mm = max(pw, pl) / 2.0
+            if half_mm <= 0.0:
+                half_mm = 0.2
+            half_um = mm_to_um(half_mm)
+            cx = mm_to_um(cx_mm)
+            cy = mm_to_um(cy_mm)
+            pbx_lo = cx - half_um - pad_buffer_um
+            pby_lo = cy - half_um - pad_buffer_um
+            pbx_hi = cx + half_um + pad_buffer_um
+            pby_hi = cy + half_um + pad_buffer_um
+            for cell in _cells_in_bbox(pbx_lo, pby_lo, pbx_hi, pby_hi, step):
+                obstacles.add(cell)
+            # Remember non-endpoint pads so we can re-assert them after pin
+            # escape window carving.  Use tight (no-buffer) bbox here so the
+            # re-assertion does not creep into a neighbouring endpoint pin's
+            # legitimate escape window.
+            if pin_id not in endpoint_pin_ids:
+                tight_lo_x = cx - half_um
+                tight_lo_y = cy - half_um
+                tight_hi_x = cx + half_um
+                tight_hi_y = cy + half_um
+                non_endpoint_pad_bboxes.append(
+                    (tight_lo_x, tight_lo_y, tight_hi_x, tight_hi_y)
+                )
 
     # Inflated RF route obstacles — computed per-segment so that L/V-shaped
     # routes don't produce false obstacles in their concave interior.
@@ -323,6 +414,13 @@ def _build_grid(
     for pin_info in endpoint_pins:
         for cell in _pin_window_cells(pin_info, clearance_um, step):
             obstacles.discard(cell)
+
+    # Re-assert non-endpoint pads as obstacles: pin escape window may have
+    # carved into a neighbouring pad of the same component — restore it so
+    # the route cannot pass over another pin's pad.
+    for pbx_lo, pby_lo, pbx_hi, pby_hi in non_endpoint_pad_bboxes:
+        for cell in _cells_in_bbox(pbx_lo, pby_lo, pbx_hi, pby_hi, step):
+            obstacles.add(cell)
 
     return obstacles, near_rf, ix0, iy0, ix1, iy1
 

@@ -355,37 +355,98 @@ def _route_flex_edges(
         for eid, r in new_geom.routes.items()
         if r.routing_class is not RoutingClass.FLEXIBLE_PATH
     }
-    pad_buffer_mm = 0.6
-    obstacle_bboxes: list[tuple[float, float, float, float]] = []
-    for comp in artifact.components.values():
-        if comp.bbox is None:
-            continue
-        obstacle_bboxes.append(
-            (
+    from .flex_drc import ObstacleEntry
+
+    pad_buffer_mm = 0.15
+    obstacle_entries: list[ObstacleEntry] = []
+    # Component-body obstacles (owner_id = component name).
+    # For fixed components use comp.bbox; for floating/UV derive from placement
+    # anchor + footprint dimensions (rotated).
+    import math as _math
+
+    def _body_bbox(
+        comp_name: str,
+    ) -> tuple[float, float, float, float] | None:
+        comp = artifact.components.get(comp_name)
+        if comp is None:
+            return None
+        if comp.bbox is not None:
+            return (
                 float(comp.bbox.min_x),
                 float(comp.bbox.min_y),
                 float(comp.bbox.max_x),
                 float(comp.bbox.max_y),
             )
+        placement = new_geom.placements.get(comp_name)
+        if placement is None or comp.footprint_dims_mm is None:
+            return None
+        w, ln = comp.footprint_dims_mm  # local: width along y, length along x
+        rot = float(placement.rotation_deg)
+        cos_t = round(_math.cos(_math.radians(rot)))
+        if cos_t == 0:  # 90 or 270 — swap
+            ext_x, ext_y = w, ln
+        else:
+            ext_x, ext_y = ln, w
+        cx = float(placement.anchor.x)
+        cy = float(placement.anchor.y)
+        return (cx - ext_x / 2, cy - ext_y / 2, cx + ext_x / 2, cy + ext_y / 2)
+
+    for comp_name in artifact.components:
+        bb = _body_bbox(comp_name)
+        if bb is None:
+            continue
+        obstacle_entries.append(
+            ObstacleEntry(bbox=bb, kind="component_body", owner_id=comp_name)
         )
-    for placement in new_geom.placements.values():
+    # Per-pad obstacles (owner_id = full pin id "Comp.Pin")
+    for comp_name, placement in new_geom.placements.items():
         if not placement.pads:
             continue
-        xs = [float(p.point.x) for p in placement.pads]
-        ys = [float(p.point.y) for p in placement.pads]
-        obstacle_bboxes.append(
-            (
-                min(xs) - pad_buffer_mm,
-                min(ys) - pad_buffer_mm,
-                max(xs) + pad_buffer_mm,
-                max(ys) + pad_buffer_mm,
+        comp = artifact.components.get(comp_name)
+        # Build pin -> (pad_w, pad_l) lookup from artifact (may be missing).
+        pad_size: dict[str, tuple[float, float]] = {}
+        if comp is not None:
+            for ap in comp.pads:
+                pw = float(ap.pad_width) if ap.pad_width else 0.0
+                pl = float(ap.pad_length) if ap.pad_length else 0.0
+                pad_size[ap.pin] = (pw, pl)
+        for pad in placement.pads:
+            cx = float(pad.point.x)
+            cy = float(pad.point.y)
+            pw, pl = pad_size.get(pad.pin, (0.0, 0.0))
+            # Conservative square approximation (rotation-invariant).
+            half = max(pw, pl) / 2.0
+            if half <= 0.0:
+                half = 0.2  # minimum half-size when pad geometry unknown
+            obstacle_entries.append(
+                ObstacleEntry(
+                    bbox=(
+                        cx - half - pad_buffer_mm,
+                        cy - half - pad_buffer_mm,
+                        cx + half + pad_buffer_mm,
+                        cy + half + pad_buffer_mm,
+                    ),
+                    kind="pad",
+                    owner_id=f"{comp_name}.{pad.pin}",
+                )
             )
+
+    # Build per-edge endpoint pin id map for precise pad-level DRC exemption.
+    endpoint_pin_ids: dict[str, tuple[str, str]] = {}
+    for eid in flex_routes:
+        edge_obj = artifact.edges.get(eid)
+        if edge_obj is None or len(edge_obj.connections) < 2:
+            continue
+        endpoint_pin_ids[eid] = (
+            str(edge_obj.connections[0]),
+            str(edge_obj.connections[-1]),
         )
 
     drc = validate_flex_routes(
         flex_routes=flex_routes,
         other_routes=other_routes,
-        obstacle_bboxes=obstacle_bboxes,
+        obstacle_entries=obstacle_entries,
+        endpoint_pin_ids=endpoint_pin_ids,
         clearance_mm=0.3,
     )
 

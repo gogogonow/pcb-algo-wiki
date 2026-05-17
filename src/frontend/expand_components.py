@@ -93,6 +93,12 @@ def _expand_floating(
                 pad_length=pad_l,
             )
         )
+    fp_dims: tuple[float, float] | None = None
+    if footprint is not None and footprint.dimensions is not None:
+        w = footprint.dimensions.width
+        ln = footprint.dimensions.length
+        if w is not None and ln is not None:
+            fp_dims = (float(w), float(ln))
     return ComponentExpansion(
         name=name,
         footprint_ref=component.footprint_ref,
@@ -101,6 +107,7 @@ def _expand_floating(
         bbox=None,
         uv_meta=None,
         pin_nets=dict(component.pin_nets or {}),
+        footprint_dims_mm=fp_dims,
     )
 
 
@@ -170,6 +177,13 @@ def _expand_fixed(
     if bbox is None and xs:
         bbox = BBox(min(xs), min(ys), max(xs), max(ys))
 
+    fp_dims: tuple[float, float] | None = None
+    if footprint is not None and footprint.dimensions is not None:
+        w = footprint.dimensions.width
+        ln = footprint.dimensions.length
+        if w is not None and ln is not None:
+            fp_dims = (float(w), float(ln))
+
     return ComponentExpansion(
         name=name,
         footprint_ref=component.footprint_ref,
@@ -178,6 +192,7 @@ def _expand_fixed(
         bbox=bbox,
         uv_meta=None,
         pin_nets=dict(component.pin_nets or {}),
+        footprint_dims_mm=fp_dims,
     )
 
 
@@ -220,6 +235,12 @@ def _expand_uv(
         anchor_pin=(placement.anchor_pin if placement is not None else "") or "",
         reference_net=(placement.reference_net if placement is not None else None),
     )
+    fp_dims: tuple[float, float] | None = None
+    if footprint is not None and footprint.dimensions is not None:
+        w = footprint.dimensions.width
+        ln = footprint.dimensions.length
+        if w is not None and ln is not None:
+            fp_dims = (float(w), float(ln))
     return ComponentExpansion(
         name=name,
         footprint_ref=component.footprint_ref,
@@ -228,6 +249,7 @@ def _expand_uv(
         bbox=None,
         uv_meta=uv_meta,
         pin_nets=dict(component.pin_nets or {}),
+        footprint_dims_mm=fp_dims,
     )
 
 

@@ -33,30 +33,94 @@ class DrcReport:
         return {v.edge_id for v in self.violations}
 
 
+@dataclass(frozen=True)
+class ObstacleEntry:
+    """精细化障碍：把 component_body / pad / legacy 区别开。
+
+    * ``kind="pad"``：``owner_id`` 是完整 pin id，如 ``"U_BIAS.PIN_2"``。
+      DRC 时仅当 ``owner_id`` 等于路由两端任意端点 pin 时才豁免。
+    * ``kind="component_body"``：``owner_id`` 是组件名，如 ``"U_BIAS"``。
+      DRC 时若路由端点 pin 的组件名匹配则豁免（允许从组件本体内部出 pin）。
+    * ``kind="legacy"``：旧逻辑，端点落入 bbox 即豁免整个 bbox。
+    """
+
+    bbox: tuple[float, float, float, float]
+    kind: str
+    owner_id: str | None = None
+
+
+def _comp_of(pin_id: str | None) -> str | None:
+    if pin_id is None:
+        return None
+    return pin_id.split(".", 1)[0]
+
+
 def validate_flex_routes(
     *,
     flex_routes: Mapping[str, RoutePolyline],
     other_routes: Mapping[str, RoutePolyline],
-    obstacle_bboxes: Iterable[tuple[float, float, float, float]],
+    obstacle_bboxes: Iterable[tuple[float, float, float, float]] = (),
+    obstacle_entries: Iterable[ObstacleEntry] = (),
+    endpoint_pin_ids: Mapping[str, tuple[str, str]] | None = None,
     clearance_mm: float = 0.05,
 ) -> DrcReport:
     report = DrcReport()
-    obs = list(obstacle_bboxes)
+    legacy_obs: list[tuple[float, float, float, float]] = list(obstacle_bboxes)
+    entries: list[ObstacleEntry] = list(obstacle_entries)
+    pin_map: Mapping[str, tuple[str, str]] = endpoint_pin_ids or {}
     flex_items = list(flex_routes.items())
 
-    # 1. polyline ↔ obstacle bbox overlap. Skip obstacles that the route's
-    # endpoints lie inside — those are the component's own pads/footprint and
-    # the route legitimately must enter them to reach the pin.
+    # 1. polyline ↔ obstacle overlap with pad-granular exemption.
     for eid, route in flex_items:
         pts = route.points
         if len(pts) < 2:
             continue
         ep0 = (float(pts[0].x), float(pts[0].y))
         ep1 = (float(pts[-1].x), float(pts[-1].y))
-        effective_obs = [
-            ob for ob in obs if not (_point_in_bbox(ep0, ob) or _point_in_bbox(ep1, ob))
+        end_pins = pin_map.get(eid)
+        end_pin_ids = set(end_pins) if end_pins else set()
+        end_comp_names = {_comp_of(p) for p in end_pin_ids if p}
+
+        # legacy: 端点落入 bbox 即整块豁免（保留旧行为给旧调用者）
+        effective_legacy = [
+            ob
+            for ob in legacy_obs
+            if not (_point_in_bbox(ep0, ob) or _point_in_bbox(ep1, ob))
         ]
-        if _polyline_hits_obstacle(route, effective_obs, clearance_mm):
+        # entries: 按 kind/owner_id 精确豁免
+        # 对于 endpoint 组件的同伴 pad（owner_id 同 component 但不同 pin），
+        # 几何上无法保持完整 clearance（同件 pad 间距常 < 1.5mm），
+        # 因此降级为 clearance=0（仅检查路由是否真的穿入 pad bbox）。
+        sibling_pad_bboxes: list[tuple[float, float, float, float]] = []
+        effective_entries: list[tuple[float, float, float, float]] = []
+        for entry in entries:
+            if entry.kind == "pad":
+                if entry.owner_id in end_pin_ids:
+                    continue
+                # sibling pad of an endpoint component
+                pad_comp = _comp_of(entry.owner_id)
+                if pad_comp in end_comp_names:
+                    sibling_pad_bboxes.append(entry.bbox)
+                    continue
+            elif entry.kind == "component_body":
+                if entry.owner_id in end_comp_names:
+                    continue
+                # If the body bbox swallows either endpoint of this route
+                # (e.g. SA placer placed a foreign component overlapping the
+                # endpoint component), exempt it — penalising would otherwise
+                # be physically unavoidable for that route.
+                if _point_in_bbox(ep0, entry.bbox) or _point_in_bbox(ep1, entry.bbox):
+                    continue
+            elif entry.kind == "legacy":
+                if _point_in_bbox(ep0, entry.bbox) or _point_in_bbox(ep1, entry.bbox):
+                    continue
+            effective_entries.append(entry.bbox)
+
+        all_eff = effective_legacy + effective_entries
+        hit = _polyline_hits_obstacle(route, all_eff, clearance_mm)
+        if not hit and sibling_pad_bboxes:
+            hit = _polyline_hits_obstacle(route, sibling_pad_bboxes, 0.0)
+        if hit:
             report.violations.append(
                 DrcViolation(eid, "overlap", "segment bbox intersects obstacle")
             )
