@@ -10,6 +10,7 @@ def _empty_board(w: float = 10.0, h: float = 10.0) -> Board:
 
 
 def test_node_labels_use_short_id():
+    """WI-I7: node labels removed, but node circles still rendered."""
     ir = GeometryIR(
         project="t",
         board=_empty_board(),
@@ -20,7 +21,10 @@ def test_node_labels_use_short_id():
         solve_wall_seconds=0.0,
     )
     svg = render_geometry_svg(ir)
-    assert ">p2s2_sp<" in svg
+    # Node circle still rendered (radius 1.5)
+    assert '<circle cx=' in svg and 'r="1.5"' in svg
+    # Node label no longer rendered
+    assert ">p2s2_sp<" not in svg
     assert "IC1_pin2_seg2_end_split_pad" not in svg
 
 

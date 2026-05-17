@@ -123,13 +123,14 @@ def render_geometry_svg(
         cx = x(float(point.x))
         cy = y(float(point.y))
         parts.append(
-            f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="2.5" ' f'fill="{_NODE_FILL}"/>'
+            f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="1.5" ' f'fill="{_NODE_FILL}"/>'
         )
-        parts.append(
-            f'<text x="{cx + 4:.2f}" y="{cy - 4:.2f}" '
-            'font-family="sans-serif" font-size="7" fill="#1f2937">'
-            f"{escape(short_id(node_id))}</text>"
-        )
+        # Node labels removed per user request (WI-I7)
+        # parts.append(
+        #     f'<text x="{cx + 4:.2f}" y="{cy - 4:.2f}" '
+        #     'font-family="sans-serif" font-size="7" fill="#1f2937">'
+        #     f"{escape(short_id(node_id))}</text>"
+        # )
 
     # Status banner.
     parts.append(
