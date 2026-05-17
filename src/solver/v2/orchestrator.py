@@ -296,10 +296,12 @@ def _route_flex_edges(
             pad_xy[f"{comp_name}.{pad.pin}"] = (float(pad.point.x), float(pad.point.y))
 
     def _endpoint(node: str) -> tuple[float, float] | None:
-        xy = plan.endpoint_xy.get(node)
+        # Prioritize actual pad position from placed geometry (floating/UV have
+        # stale or absent entries in plan.endpoint_xy; real pads win).
+        xy = pad_xy.get(node)
         if xy is not None:
             return xy
-        return pad_xy.get(node)
+        return plan.endpoint_xy.get(node)
 
     seeded_routes = dict(geometry.routes)
     for eid in flex_edge_ids:
