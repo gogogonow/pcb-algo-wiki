@@ -38,15 +38,17 @@ class FloatingPlacement:
 
 @dataclass(frozen=True)
 class FloatingPlacerConfig:
-    iterations: int = 4000
+    iterations: int = 6000
     temperature_init: float = 5000.0
     temperature_min: float = 1.0
-    cooling: float = 0.998
+    cooling: float = 0.9985
     step_mm: float = 1.2
     boundary_weight: float = 400.0
     overlap_weight: float = 2000.0
-    hpwl_weight: float = 1.0
-    clearance_mm: float = 0.2
+    hpwl_weight: float = 20.0
+    routability_weight: float = 50.0
+    escape_alignment_weight: float = 1.0
+    clearance_mm: float = 0.3
     margin_mm: float = 0.5  # 与板框、其他障碍的最小距离裕量
     seed: int = 0xC0FFEE
 
@@ -81,17 +83,67 @@ def place_floating_components(
         clearance=cfg.clearance_mm,
     )
 
-    # 初始化：在 board 右上角分散摆放，避免与左下的 IC1 / 微带线集中区域冲突
+    # Initialise each floating component at the centroid of its connected
+    # non-floating endpoints (with a small deterministic jitter to break
+    # symmetry between components sharing the same anchor).  This biases SA
+    # toward layouts where the floating component is "near" its neighbours so
+    # routability has a real chance of converging.
     state: dict[str, FloatingPlacement] = {}
+    floating_name_set = set(floating_names)
     for i, name in enumerate(floating_names):
-        # 网格化散布在 board 中心右侧
-        col = i % 2
-        row = i // 2
-        x0 = board_w * 0.65 + col * 6.0
-        y0 = board_h * 0.55 + row * 6.0
-        # 钳制到板内
         comp = artifact.components[name]
         w, h = _comp_wh(comp, rotation=0)
+        anchors: list[tuple[float, float]] = []
+        for edge in artifact.edges.values():
+            conns = edge.connections or ()
+            if not any(ep.split(".", 1)[0] == name for ep in conns if "." in ep):
+                continue
+            for ep in conns:
+                comp_id = ep.split(".", 1)[0] if "." in ep else None
+                if comp_id == name or comp_id in floating_name_set:
+                    continue
+                xy = _resolve_endpoint(artifact, skeleton, adhesion, ep)
+                if xy is not None:
+                    anchors.append(xy)
+        if anchors:
+            # Escape-aware centroid: shift each fixed pin in the direction its
+            # natural pin-escape would go, by ESCAPE_OFFSET_MM, so the floating
+            # component lands on the OPEN side of each fixed pin rather than
+            # behind its host component body.
+            ESCAPE_OFFSET_MM = 3.0
+            shifted: list[tuple[float, float]] = []
+            for edge in artifact.edges.values():
+                conns = edge.connections or ()
+                if not any(ep.split(".", 1)[0] == name for ep in conns if "." in ep):
+                    continue
+                for ep in conns:
+                    comp_id = ep.split(".", 1)[0] if "." in ep else None
+                    if comp_id == name or comp_id in floating_name_set:
+                        continue
+                    xy = _resolve_endpoint(artifact, skeleton, adhesion, ep)
+                    if xy is None:
+                        continue
+                    dx, dy = _pin_escape_global_dir(artifact, ep)
+                    shifted.append(
+                        (xy[0] + dx * ESCAPE_OFFSET_MM, xy[1] + dy * ESCAPE_OFFSET_MM)
+                    )
+            if shifted:
+                cx = sum(p[0] for p in shifted) / len(shifted)
+                cy = sum(p[1] for p in shifted) / len(shifted)
+            else:
+                cx = sum(p[0] for p in anchors) / len(anchors)
+                cy = sum(p[1] for p in anchors) / len(anchors)
+            jitter_x = (i % 3 - 1) * 1.5
+            jitter_y = ((i // 3) % 3 - 1) * 1.5
+            x0 = cx + jitter_x
+            y0 = cy + jitter_y
+        else:
+            # Fallback: spread along right-top grid (original heuristic).
+            col = i % 2
+            row = i // 2
+            x0 = board_w * 0.65 + col * 6.0
+            y0 = board_h * 0.55 + row * 6.0
+        # Clamp inside the board.
         x0 = min(max(x0, w / 2 + cfg.margin_mm), board_w - w / 2 - cfg.margin_mm)
         y0 = min(max(y0, h / 2 + cfg.margin_mm), board_h - h / 2 - cfg.margin_mm)
         state[name] = FloatingPlacement(x=x0, y=y0, rotation=0)
@@ -109,6 +161,9 @@ def place_floating_components(
             for j in range(i + 1, len(bboxes)):
                 e += cfg.overlap_weight * _bbox_overlap_area_sq(bboxes[i], bboxes[j])
         e += cfg.hpwl_weight * _hpwl_energy(artifact, s, skeleton, adhesion)
+        e += cfg.routability_weight * _routability_cost(
+            artifact, s, skeleton, adhesion, obstacles
+        )
         return e
 
     cur_e = energy(state)
@@ -296,9 +351,82 @@ def _placement_pad_bbox(
         return None
     xs = [float(p.point.x) for p in placement.pads]
     ys = [float(p.point.y) for p in placement.pads]
-    # 加一点 padding（焊盘半尺寸 ~ 0.5mm 兜底）
-    pad = 0.5
+    # Tight pad envelope — the per-obstacle clearance is added by the caller
+    # in ``_collect_static_obstacles`` so we don't double-pad here.
+    pad = 0.3
     return (min(xs) - pad, min(ys) - pad, max(xs) + pad, max(ys) + pad)
+
+
+def _floating_pin_xy(
+    comp: ComponentExpansion, pin_name: str, fp: FloatingPlacement
+) -> tuple[float, float] | None:
+    """Resolve absolute (x, y) for a pin on a floating component given the
+    current SA candidate placement.  Used by routability cost so direct-line
+    sampling actually originates at the pin (not at the component anchor)."""
+    cos_t, sin_t = _rot(float(fp.rotation))
+    for pad in comp.pads:
+        if pad.pin == pin_name:
+            lx = float(pad.local_x or 0.0)
+            ly = float(pad.local_y or 0.0)
+            return (fp.x + cos_t * lx - sin_t * ly, fp.y + sin_t * lx + cos_t * ly)
+    return None
+
+
+def _routability_cost(
+    artifact: FrontendArtifact,
+    state: dict[str, FloatingPlacement],
+    skeleton: SkeletonReport,
+    adhesion: UvAdhesionReport,
+    obstacles: list[tuple[float, float, float, float]],
+) -> float:
+    """For every edge with a floating endpoint, sample points along the direct
+    line between its endpoints (0.5 mm step) and count how many fall inside
+    any static obstacle bbox.  This biases SA toward positions where the
+    direct connection is unobstructed.
+
+    Each blocked sample contributes a unit of cost; SA multiplies by
+    ``cfg.routability_weight`` to scale against overlap / boundary.
+    """
+    if not obstacles:
+        return 0.0
+    floating_names = set(state.keys())
+    cost = 0.0
+    sample_step = 0.5  # mm
+    for edge in artifact.edges.values():
+        conns = edge.connections or ()
+        if not any(ep.split(".", 1)[0] in floating_names for ep in conns if "." in ep):
+            continue
+        # Resolve endpoint coordinates.  Use floating component ANCHOR (not
+        # pin centre) so a rotation move doesn't cause routability cost to
+        # jitter wildly — this keeps SA acceptance stable while still giving
+        # a useful signal about whether the component sits in a clear lane.
+        points: list[tuple[float, float]] = []
+        for ep in conns:
+            comp_id = ep.split(".", 1)[0] if "." in ep else None
+            if comp_id and comp_id in floating_names:
+                fp = state[comp_id]
+                points.append((fp.x, fp.y))
+                continue
+            xy = _resolve_endpoint(artifact, skeleton, adhesion, ep)
+            if xy is not None:
+                points.append(xy)
+        if len(points) < 2:
+            continue
+        # Sample direct segments between consecutive endpoints.
+        for (x1, y1), (x2, y2) in zip(points, points[1:]):
+            length = math.hypot(x2 - x1, y2 - y1)
+            if length < 1e-9:
+                continue
+            steps = max(2, int(length / sample_step))
+            for k in range(1, steps):  # skip the endpoints themselves
+                t = k / steps
+                sx = x1 + (x2 - x1) * t
+                sy = y1 + (y2 - y1) * t
+                for ob in obstacles:
+                    if ob[0] <= sx <= ob[2] and ob[1] <= sy <= ob[3]:
+                        cost += 1.0
+                        break
+    return cost
 
 
 def _hpwl_energy(
@@ -357,3 +485,96 @@ def _resolve_endpoint(
     if xy_um is not None:
         return (um_to_mm(xy_um[0]), um_to_mm(xy_um[1]))
     return None
+
+
+def _pin_escape_global_dir(
+    artifact: FrontendArtifact,
+    ep: str,
+    rotation_deg: float = 0.0,
+) -> tuple[float, float]:
+    """Return a unit (or zero) global-frame escape direction for endpoint ``ep``,
+    given the host component's ``rotation_deg`` (default 0 for fixed pins
+    where rotation is not yet known at SA init).
+    """
+    if "." not in ep:
+        return (0.0, 0.0)
+    comp_id, pin_id = ep.split(".", 1)
+    comp = artifact.components.get(comp_id)
+    if comp is None:
+        return (0.0, 0.0)
+    pad = next((p for p in comp.pads if p.pin == pin_id), None)
+    if pad is None:
+        return (0.0, 0.0)
+    lx = pad.local_x or 0.0
+    ly = pad.local_y or 0.0
+    if abs(lx) < 1e-9 and abs(ly) < 1e-9:
+        return (0.0, 0.0)
+    if abs(lx) >= abs(ly):
+        dx, dy = (1.0 if lx >= 0 else -1.0, 0.0)
+    else:
+        dx, dy = (0.0, 1.0 if ly >= 0 else -1.0)
+    th = math.radians(float(rotation_deg))
+    cos_t = round(math.cos(th))
+    sin_t = round(math.sin(th))
+    rx = dx * cos_t - dy * sin_t
+    ry = dx * sin_t + dy * cos_t
+    return (float(rx), float(ry))
+
+
+def _escape_alignment_penalty(
+    artifact: FrontendArtifact,
+    state: dict[str, FloatingPlacement],
+    skeleton: SkeletonReport,
+    adhesion: UvAdhesionReport,
+) -> float:
+    """Penalise floating-pin rotations that point AWAY from their connected
+    endpoints.  For each (floating_pin, other_endpoint) pair in a flex edge,
+    we compute the dot product of (other - pin) with the pin's escape unit
+    vector.  Negative dot products (other endpoint is "behind" the pin)
+    accumulate their magnitude as a penalty.  This drives SA toward rotations
+    where pin escape directions face the right way for the actual routing.
+    """
+    floating = set(state.keys())
+    penalty = 0.0
+    for edge in artifact.edges.values():
+        conns = edge.connections or ()
+        if not any(ep.split(".", 1)[0] in floating for ep in conns if "." in ep):
+            continue
+        # Pre-resolve all endpoint coordinates.
+        ep_xy: dict[str, tuple[float, float]] = {}
+        ep_dir: dict[str, tuple[float, float]] = {}
+        for ep in conns:
+            comp_id = ep.split(".", 1)[0] if "." in ep else None
+            if comp_id and comp_id in floating:
+                fp = state[comp_id]
+                comp = artifact.components.get(comp_id)
+                if comp is None:
+                    continue
+                pad = next(
+                    (p for p in comp.pads if p.pin == ep.split(".", 1)[1]),
+                    None,
+                )
+                lx = (pad.local_x if pad else 0.0) or 0.0
+                ly = (pad.local_y if pad else 0.0) or 0.0
+                th = math.radians(float(fp.rotation))
+                c, s = round(math.cos(th)), round(math.sin(th))
+                px = fp.x + lx * c - ly * s
+                py = fp.y + lx * s + ly * c
+                ep_xy[ep] = (px, py)
+                ep_dir[ep] = _pin_escape_global_dir(artifact, ep, float(fp.rotation))
+            else:
+                xy = _resolve_endpoint(artifact, skeleton, adhesion, ep)
+                if xy is not None:
+                    ep_xy[ep] = xy
+        for ep, (px, py) in ep_xy.items():
+            d = ep_dir.get(ep, (0.0, 0.0))
+            if d == (0.0, 0.0):
+                continue
+            for other_ep, (ox, oy) in ep_xy.items():
+                if other_ep == ep:
+                    continue
+                vx, vy = ox - px, oy - py
+                dot = vx * d[0] + vy * d[1]
+                if dot < 0:
+                    penalty += -dot
+    return penalty

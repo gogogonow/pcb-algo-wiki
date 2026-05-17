@@ -746,32 +746,106 @@
       "routing_class": "flexible_path",
       "connections": [
         "R_PULL.PIN_2",
-        "U_BIAS.PIN_1"
+        "TP2.PIN_1"
       ],
       "connections_short": [
         "R_PULL.2",
-        "U_BIAS.1"
+        "TP2.1"
       ],
       "width": 0.254,
       "target_length": null,
       "endpoint_positions_mm": {
         "R_PULL.PIN_2": {
+          "x": 15.0,
+          "y": 65.0,
+          "kind": "other"
+        },
+        "TP2.PIN_1": {
+          "x": 15.0,
+          "y": 65.0,
+          "kind": "fixed_pin"
+        }
+      },
+      "render_endpoint_positions_mm": {
+        "R_PULL.PIN_2": {
+          "x": 15.0,
+          "y": 65.0
+        },
+        "TP2.PIN_1": {
+          "x": 15.0,
+          "y": 65.0
+        }
+      }
+    },
+    {
+      "edge_id": "flex_ubias_ctrl_b",
+      "edge_short": "flex_ubias_ctrl_b",
+      "routing_class": "flexible_path",
+      "connections": [
+        "U_BIAS.PIN_3",
+        "C_DEC2.PIN_1"
+      ],
+      "connections_short": [
+        "U_BIAS.3",
+        "C_DEC2.1"
+      ],
+      "width": 0.254,
+      "target_length": null,
+      "endpoint_positions_mm": {
+        "U_BIAS.PIN_3": {
           "x": 20.0,
           "y": 42.5,
           "kind": "other"
         },
-        "U_BIAS.PIN_1": {
+        "C_DEC2.PIN_1": {
           "x": 20.0,
           "y": 42.5,
           "kind": "other"
         }
       },
       "render_endpoint_positions_mm": {
-        "R_PULL.PIN_2": {
+        "U_BIAS.PIN_3": {
           "x": 20.0,
           "y": 42.5
         },
-        "U_BIAS.PIN_1": {
+        "C_DEC2.PIN_1": {
+          "x": 20.0,
+          "y": 42.5
+        }
+      }
+    },
+    {
+      "edge_id": "flex_dec2_gnd",
+      "edge_short": "flex_dec2_gnd",
+      "routing_class": "flexible_path",
+      "connections": [
+        "C_DEC2.PIN_2",
+        "U_BIAS.PIN_4"
+      ],
+      "connections_short": [
+        "C_DEC2.2",
+        "U_BIAS.4"
+      ],
+      "width": 0.254,
+      "target_length": null,
+      "endpoint_positions_mm": {
+        "C_DEC2.PIN_2": {
+          "x": 20.0,
+          "y": 42.5,
+          "kind": "other"
+        },
+        "U_BIAS.PIN_4": {
+          "x": 20.0,
+          "y": 42.5,
+          "kind": "other"
+        }
+      },
+      "render_endpoint_positions_mm": {
+        "C_DEC2.PIN_2": {
+          "x": 20.0,
+          "y": 42.5
+        },
+        "U_BIAS.PIN_4": {
           "x": 20.0,
           "y": 42.5
         }
@@ -946,11 +1020,27 @@
       ]
     },
     {
+      "edge_id": "flex_dec2_gnd",
+      "mode": "relaxed",
+      "connections": [
+        "C_DEC2.PIN_2",
+        "U_BIAS.PIN_4"
+      ]
+    },
+    {
       "edge_id": "flex_rpull_pwr",
       "mode": "relaxed",
       "connections": [
         "R_PULL.PIN_2",
-        "U_BIAS.PIN_1"
+        "TP2.PIN_1"
+      ]
+    },
+    {
+      "edge_id": "flex_ubias_ctrl_b",
+      "mode": "relaxed",
+      "connections": [
+        "U_BIAS.PIN_3",
+        "C_DEC2.PIN_1"
       ]
     },
     {

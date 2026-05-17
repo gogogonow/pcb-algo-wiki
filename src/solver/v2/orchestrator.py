@@ -386,7 +386,7 @@ def _route_flex_edges(
         flex_routes=flex_routes,
         other_routes=other_routes,
         obstacle_bboxes=obstacle_bboxes,
-        clearance_mm=0.05,
+        clearance_mm=0.3,
     )
 
     routed_edges = list(report.routed_edges)
