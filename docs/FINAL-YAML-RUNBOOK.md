@@ -65,6 +65,9 @@ pcb_solve_v2 rf_layout_simplified.yaml
 - `phase_a.routed / phase_a.total`
 - `phase_b.uv_placed / phase_b.uv_total`
 - `phase_c.flex_routed / phase_c.flex_failed`
+- `phase_c.drc_violations`
+- `route_total_length_mm`
+- `route_total_segments`
 - `wall_total_s`
 
 ---
@@ -107,3 +110,30 @@ sudo apt-get install -y python3.11 python3.11-venv
 
 它们是历史对照链路，主线请使用 `pcb_solve_v2`（或 `pcb_solve`）。
 
+---
+
+## 7. 大规模案例（408 components / 154 edges）性能验收
+
+> 目标：默认路径 `wall_total_s <= 60s`，且不退化：
+> `phase_c.flex_routed` 不下降、`phase_c.drc_violations` 不增加、`route_total_length_mm / route_total_segments` 不变差。
+
+1. 基线分支生成 summary（`baseline.summary.json`）
+2. 优化分支生成 summary（`candidate.summary.json`）
+3. 用同一输入文件、同一参数比较：
+
+```bash
+python3 -m tools.pcb_solve_v2 <your_large_yaml>.yaml --quiet --report-out out/baseline.summary.json
+python3 -m tools.pcb_solve_v2 <your_large_yaml>.yaml --quiet --report-out out/candidate.summary.json
+
+python3 - <<'PY'
+import json
+b = json.load(open("out/baseline.summary.json"))
+c = json.load(open("out/candidate.summary.json"))
+assert c["wall_total_s"] <= 60.0
+assert c["phase_c"]["flex_routed"] >= b["phase_c"]["flex_routed"]
+assert c["phase_c"]["drc_violations"] <= b["phase_c"]["drc_violations"]
+assert c["route_total_length_mm"] <= b["route_total_length_mm"] + 1e-6
+assert c["route_total_segments"] <= b["route_total_segments"]
+print("quality/perf gates passed")
+PY
+```
