@@ -27,9 +27,17 @@ from schema.v33 import V33Layout, load_v33_layout
 from solver.v2 import OrchestratorV2Options, solve_layout_v2
 from solver.v2.orchestrator import (
     _assemble_geometry,
+    compile_and_plan,
     OrchestratorV2Result,
     phase_summary,
+    PhaseAResult,
+    PhaseBResult,
+    PhaseCResult,
+    run_phase_a,
+    run_phase_b,
+    run_phase_c,
 )
+from solver.v2.skeleton_router import SkeletonReport
 from solver.v2.uv_adhesion import UvAdhesionReport
 
 logger = logging.getLogger(__name__)
@@ -85,6 +93,15 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip per-edge progress printing.",
     )
+    p.add_argument(
+        "--stop-after",
+        choices=["preA", "phaseA", "phaseB", "phaseC"],
+        default="phaseC",
+        help=(
+            "Stop the pipeline after the specified phase and emit artefacts "
+            "(default: phaseC = run full pipeline)."
+        ),
+    )
     return p
 
 
@@ -107,6 +124,72 @@ def _build_phase_b_geom(result: OrchestratorV2Result) -> GeometryIR:
         skeleton=result.phase_a.skeleton,
         adhesion=result.phase_b.adhesion,
         wall_seconds=result.phase_a.wall_seconds + result.phase_b.wall_seconds,
+    )
+
+
+def _make_partial_result(
+    artifact: FrontendArtifact,
+    plan: Any,
+    *,
+    phase_a: PhaseAResult | None = None,
+    phase_b: PhaseBResult | None = None,
+    phase_c: PhaseCResult | None = None,
+    skeleton: SkeletonReport | None = None,
+) -> OrchestratorV2Result:
+    """Build an :class:`OrchestratorV2Result` for phases that have not run yet.
+
+    Missing phases are filled with empty stubs so all downstream rendering
+    helpers work without ``None``-checks.  The resulting result carries no
+    routing data for unrun phases.
+
+    Parameters
+    ----------
+    artifact:
+        Frontend artifact (always required).
+    plan:
+        Node plan from ``compile_and_plan`` (always required).
+    phase_a, phase_b, phase_c:
+        Per-phase result objects.  Pass *None* for phases not yet executed.
+    skeleton:
+        Post-Phase-B-retry skeleton.  Falls back to ``phase_a.skeleton`` if
+        not supplied and ``phase_a`` is available, otherwise an empty skeleton.
+    """
+    from solver.v2.node_planner import NodePlan
+
+    _plan: NodePlan = plan  # type: ignore[assignment]
+
+    empty_skeleton = SkeletonReport()
+    _skeleton: SkeletonReport
+    if skeleton is not None:
+        _skeleton = skeleton
+    elif phase_a is not None:
+        _skeleton = phase_a.skeleton
+    else:
+        _skeleton = empty_skeleton
+
+    _phase_a = phase_a or PhaseAResult(
+        skeleton=empty_skeleton, plan=_plan, wall_seconds=0.0
+    )
+    _phase_b = phase_b or PhaseBResult(adhesion=UvAdhesionReport(), wall_seconds=0.0)
+    _phase_c = phase_c or PhaseCResult(
+        routed_flex_edges=[], failed_flex_edges=[], wall_seconds=0.0
+    )
+
+    geometry = _assemble_geometry(
+        artifact=artifact,
+        plan=_plan,
+        skeleton=_skeleton,
+        adhesion=_phase_b.adhesion,
+        wall_seconds=_phase_a.wall_seconds + _phase_b.wall_seconds,
+    )
+    return OrchestratorV2Result(
+        artifact=artifact,  # type: ignore[arg-type]
+        phase_a=PhaseAResult(
+            skeleton=_skeleton, plan=_plan, wall_seconds=_phase_a.wall_seconds
+        ),
+        phase_b=_phase_b,
+        phase_c=_phase_c,
+        geometry=geometry,
     )
 
 
@@ -2571,7 +2654,9 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.WARNING if args.quiet else logging.INFO,
         format="[%(levelname)s] %(message)s",
     )
-    logger.info("pcb_solve_v2 start: layout=%s", args.layout)
+    logger.info(
+        "pcb_solve_v2 start: layout=%s stop_after=%s", args.layout, args.stop_after
+    )
 
     t_step = time.perf_counter()
     options = OrchestratorV2Options(
@@ -2581,13 +2666,69 @@ def main(argv: list[str] | None = None) -> int:
         out_dir=args.out_dir,
     )
     logger.info("build options: wall=%.2fs", time.perf_counter() - t_step)
-    t_step = time.perf_counter()
-    result = solve_layout_v2(args.layout, options=options)
-    logger.info("solve layout: wall=%.2fs", time.perf_counter() - t_step)
 
-    t_step = time.perf_counter()
     layout = load_v33_layout(args.layout)
-    logger.info("load layout: wall=%.2fs", time.perf_counter() - t_step)
+
+    stop_after = args.stop_after
+
+    # ---- Pre-A: compile + plan node positions --------------------------------
+    t_step = time.perf_counter()
+    artifact, plan = compile_and_plan(args.layout, options=options)
+    logger.info("compile_and_plan: wall=%.2fs", time.perf_counter() - t_step)
+
+    if stop_after == "preA":
+        result = _make_partial_result(artifact, plan)
+        artefacts = _persist_phase_artefacts(
+            result, args.out_dir, layout_path=Path(args.layout), layout=layout
+        )
+        _print_summary(result, artefacts, args, stop_after)
+        return 0
+
+    # ---- Phase A: skeleton routing -------------------------------------------
+    t_step = time.perf_counter()
+    phase_a = run_phase_a(artifact, plan, args.layout, options=options)
+    logger.info("run_phase_a: wall=%.2fs", time.perf_counter() - t_step)
+
+    if stop_after == "phaseA":
+        result = _make_partial_result(artifact, plan, phase_a=phase_a)
+        artefacts = _persist_phase_artefacts(
+            result, args.out_dir, layout_path=Path(args.layout), layout=layout
+        )
+        _print_summary(result, artefacts, args, stop_after)
+        return 0 if phase_a.skeleton.success_rate()[0] > 0 else 2
+
+    # ---- Phase B: UV adhesion + retry ----------------------------------------
+    t_step = time.perf_counter()
+    phase_b, skeleton = run_phase_b(artifact, plan, phase_a, options=options)
+    logger.info("run_phase_b: wall=%.2fs", time.perf_counter() - t_step)
+
+    if stop_after == "phaseB":
+        result = _make_partial_result(
+            artifact, plan, phase_a=phase_a, phase_b=phase_b, skeleton=skeleton
+        )
+        artefacts = _persist_phase_artefacts(
+            result, args.out_dir, layout_path=Path(args.layout), layout=layout
+        )
+        _print_summary(result, artefacts, args, stop_after)
+        return 0 if skeleton.success_rate()[0] > 0 else 2
+
+    # ---- Phase C: floating placement + flex routing -------------------------
+    t_step = time.perf_counter()
+    phase_c, geometry = run_phase_c(
+        args.layout, artifact, plan, skeleton, phase_a, phase_b, options=options
+    )
+    logger.info("run_phase_c: wall=%.2fs", time.perf_counter() - t_step)
+
+    result = OrchestratorV2Result(
+        artifact=artifact,
+        phase_a=PhaseAResult(
+            skeleton=skeleton, plan=plan, wall_seconds=phase_a.wall_seconds
+        ),
+        phase_b=phase_b,
+        phase_c=phase_c,
+        geometry=geometry,
+    )
+
     t_step = time.perf_counter()
     artefacts = _persist_phase_artefacts(
         result, args.out_dir, layout_path=Path(args.layout), layout=layout
@@ -2608,22 +2749,34 @@ def main(argv: list[str] | None = None) -> int:
             json.dumps(phase_summary(result), indent=2, default=str)
         )
 
+    _print_summary(result, artefacts, args, stop_after)
+    routed_ok, _ = result.phase_a.skeleton.success_rate()
+    return 0 if routed_ok > 0 else 2
+
+
+def _print_summary(
+    result: OrchestratorV2Result,
+    artefacts: dict[str, Path],
+    args: argparse.Namespace,
+    stop_after: str,
+) -> None:
+    """Print per-phase statistics to stdout unless --quiet."""
+    if args.quiet:
+        return
     routed_ok, routed_total = result.phase_a.skeleton.success_rate()
     uv_placed = len(result.phase_b.adhesion.placements)
     uv_total = len(result.artifact.uv_components)
     wall_total = result.geometry.solve_wall_seconds
-    if not args.quiet:
-        print(
-            f"[v2] project={result.geometry.project} "
-            f"status={result.geometry.solve_status} "
-            f"phase_a={routed_ok}/{routed_total} "
-            f"uv={uv_placed}/{uv_total} "
-            f"wall={wall_total:.2f}s"
-        )
-        for name, path in artefacts.items():
-            print(f"  {name}: {path}")
-
-    return 0 if routed_ok > 0 else 2
+    print(
+        f"[v2] project={result.geometry.project} "
+        f"stop_after={stop_after} "
+        f"status={result.geometry.solve_status} "
+        f"phase_a={routed_ok}/{routed_total} "
+        f"uv={uv_placed}/{uv_total} "
+        f"wall={wall_total:.2f}s"
+    )
+    for name, path in artefacts.items():
+        print(f"  {name}: {path}")
 
 
 if __name__ == "__main__":

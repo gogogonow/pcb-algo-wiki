@@ -9,16 +9,22 @@ Three-phase pipeline:
   no-op for PA_Module_Simplified).
 
 Public entry: :func:`solve_layout_v2` / :class:`OrchestratorV2Options`.
+Per-phase entry: :func:`compile_and_plan`, :func:`run_phase_a`,
+:func:`run_phase_b`, :func:`run_phase_c`.
 """
 
 from .channel_grid import ChannelGrid, GridConfig, RoutedPath, route_octilinear
 from .node_planner import NodePlan, plan_node_positions
 from .orchestrator import (
+    compile_and_plan,
     OrchestratorV2Options,
     OrchestratorV2Result,
     PhaseAResult,
     PhaseBResult,
     PhaseCResult,
+    run_phase_a,
+    run_phase_b,
+    run_phase_c,
     solve_layout_v2,
 )
 from .skeleton_router import (
@@ -44,8 +50,12 @@ __all__ = [
     "SkeletonReport",
     "UvAdhesionReport",
     "adhere_uv_components",
+    "compile_and_plan",
     "plan_node_positions",
     "route_octilinear",
     "route_skeleton",
+    "run_phase_a",
+    "run_phase_b",
+    "run_phase_c",
     "solve_layout_v2",
 ]

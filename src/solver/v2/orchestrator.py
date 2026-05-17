@@ -159,32 +159,48 @@ def _inject_prea_endpoints(
     return plan
 
 
-def solve_layout_v2(
+def compile_and_plan(
     yaml_path: str | Path,
     options: OrchestratorV2Options | None = None,
-) -> OrchestratorV2Result:
+) -> tuple[FrontendArtifact, NodePlan]:
+    """Pre-A: compile YAML layout and compute node positions (no routing).
+
+    Returns ``(artifact, plan)`` with endpoint positions already injected
+    from the preA target-length-aware solver.  Safe to call standalone for
+    topology inspection without running any routing.
+    """
     options = options or OrchestratorV2Options()
-    t_compile = time.perf_counter()
+    t0 = time.perf_counter()
     artifact = compile_layout(str(yaml_path))
-    compile_wall = time.perf_counter() - t_compile
     logger.info(
         "compile done: wall=%.2fs components=%d edges=%d",
-        compile_wall,
+        time.perf_counter() - t0,
         len(artifact.components),
         len(artifact.edges),
     )
-
     board_w = float(artifact.board.get("width", 40.0))
     board_h = float(artifact.board.get("height", 100.0))
-
-    # ---- Phase A: skeleton routing -----------------------------------------
-    logger.info("phase A start")
-    t0 = time.perf_counter()
     plan = plan_node_positions(
         artifact, board_width_mm=board_w, board_height_mm=board_h
     )
-    # Inject preA-refined endpoints (target_length aware) before A* router.
     plan = _inject_prea_endpoints(yaml_path, artifact, plan, board_w, board_h)
+    return artifact, plan
+
+
+def run_phase_a(
+    artifact: FrontendArtifact,
+    plan: NodePlan,
+    yaml_path: str | Path,
+    options: OrchestratorV2Options | None = None,
+) -> PhaseAResult:
+    """Phase A: skeleton A* routing + meander length compensation + 45° chamfering.
+
+    Returns a :class:`PhaseAResult` containing the final skeleton (post-meander
+    and post-chamfer) and wall-clock timing.
+    """
+    options = options or OrchestratorV2Options()
+    logger.info("phase A start")
+    t0 = time.perf_counter()
     grid_cfg = GridConfig(step_um=options.grid_step_um)
     skeleton = route_skeleton(
         artifact,
@@ -193,35 +209,53 @@ def solve_layout_v2(
         grid_config=grid_cfg,
         rip_up_rounds=options.rip_up_rounds,
     )
-    phase_a_wall = time.perf_counter() - t0
-    phase_a_ok, phase_a_total = skeleton.success_rate()
+    ok, total = skeleton.success_rate()
     logger.info(
-        "phase A done: wall=%.2fs routed=%d/%d",
-        phase_a_wall,
-        phase_a_ok,
-        phase_a_total,
+        "phase A routing done: wall=%.2fs routed=%d/%d",
+        time.perf_counter() - t0,
+        ok,
+        total,
     )
-
-    # ---- Length compensation: M7 hairpin meander on under-length routes ---
+    # ---- Length compensation: M7 hairpin meander on under-length routes ----
     skeleton = _apply_length_compensation(yaml_path, artifact, skeleton)
-    # WI-A3: Re-apply 45° chamfering after meanders introduce rectangular
-    # hairpins. Strict invariant — Phase A must only contain 45° corners.
+    # WI-A3: re-apply 45° chamfering after meanders introduce rectangular hairpins.
     skeleton = _chamfer_skeleton_routes(skeleton, options.grid_step_um)
+    wall = time.perf_counter() - t0
+    ok, total = skeleton.success_rate()
+    logger.info("phase A done: wall=%.2fs routed=%d/%d", wall, ok, total)
+    return PhaseAResult(skeleton=skeleton, plan=plan, wall_seconds=wall)
 
-    # ---- Phase B: UV adhesion ---------------------------------------------
+
+def run_phase_b(
+    artifact: FrontendArtifact,
+    plan: NodePlan,
+    phase_a: PhaseAResult,
+    options: OrchestratorV2Options | None = None,
+) -> tuple[PhaseBResult, SkeletonReport]:
+    """Phase B: UV component adhesion + reroute of still-failing Phase A edges.
+
+    Returns ``(result, updated_skeleton)`` where ``updated_skeleton`` may have
+    more successful routes than ``phase_a.skeleton`` due to the post-UV retry.
+
+    .. note::
+        ``PhaseBResult.wall_seconds`` covers only UV adhesion, not the retry,
+        to preserve backward compatibility with the existing summary JSON schema.
+    """
+    options = options or OrchestratorV2Options()
     logger.info("phase B start")
-    t1 = time.perf_counter()
+    t0 = time.perf_counter()
     adhesion = adhere_uv_components(
         artifact,
-        skeleton,
+        phase_a.skeleton,
         seed_anchor_mm=plan.uv_anchor_seed,
         seed_rotation_deg=plan.uv_rotation_seed,
     )
-    phase_b_wall = time.perf_counter() - t1
+    phase_b_wall = time.perf_counter() - t0
+    # Retry failed Phase A routes after UV placement resolves obstacles.
     skeleton = _retry_failed_phase_a_routes(
         artifact=artifact,
         plan=plan,
-        skeleton=skeleton,
+        skeleton=phase_a.skeleton,
         options=options,
     )
     logger.info(
@@ -230,16 +264,34 @@ def solve_layout_v2(
         len(adhesion.placements),
         len(artifact.uv_components),
     )
+    return PhaseBResult(adhesion=adhesion, wall_seconds=phase_b_wall), skeleton
 
-    # ---- Phase C: floating placer + A* on flexible_path edges ------------
+
+def run_phase_c(
+    yaml_path: str | Path,
+    artifact: FrontendArtifact,
+    plan: NodePlan,
+    skeleton: SkeletonReport,
+    phase_a: PhaseAResult,
+    phase_b: PhaseBResult,
+    options: OrchestratorV2Options | None = None,
+) -> tuple[PhaseCResult, GeometryIR]:
+    """Phase C: floating component placement + A* routing of flexible_path edges.
+
+    *skeleton* should be the post-Phase-B-retry skeleton (from :func:`run_phase_b`).
+
+    Returns ``(result, geometry)`` where ``geometry.solve_wall_seconds`` includes
+    wall time from all prior phases.
+    """
+    options = options or OrchestratorV2Options()
     logger.info("phase C start")
-    t2 = time.perf_counter()
+    t0 = time.perf_counter()
     board_w = float(artifact.board.get("width", 40.0))
     board_h = float(artifact.board.get("height", 100.0))
     floating_placements = place_floating_components(
         artifact=artifact,
         skeleton=skeleton,
-        adhesion=adhesion,
+        adhesion=phase_b.adhesion,
         board_w=board_w,
         board_h=board_h,
     )
@@ -247,9 +299,9 @@ def solve_layout_v2(
         artifact=artifact,
         plan=plan,
         skeleton=skeleton,
-        adhesion=adhesion,
+        adhesion=phase_b.adhesion,
         floating_placements=floating_placements,
-        wall_seconds=phase_a_wall + phase_b_wall,
+        wall_seconds=phase_a.wall_seconds + phase_b.wall_seconds,
     )
     flex_routed: list[str] = []
     flex_failed: list[str] = []
@@ -265,26 +317,51 @@ def solve_layout_v2(
             geometry=geometry,
             floating_placements=floating_placements,
         )
-    phase_c_wall = time.perf_counter() - t2
+    wall = time.perf_counter() - t0
     logger.info(
         "phase C done: wall=%.2fs flex_routed=%d flex_failed=%d",
-        phase_c_wall,
+        wall,
         len(flex_routed),
         len(flex_failed),
     )
-
-    # Refresh wall in the final GeometryIR.
-    geometry = _with_wall_seconds(geometry, phase_a_wall + phase_b_wall + phase_c_wall)
-
-    return OrchestratorV2Result(
-        artifact=artifact,
-        phase_a=PhaseAResult(skeleton=skeleton, plan=plan, wall_seconds=phase_a_wall),
-        phase_b=PhaseBResult(adhesion=adhesion, wall_seconds=phase_b_wall),
-        phase_c=PhaseCResult(
+    geometry = _with_wall_seconds(
+        geometry, phase_a.wall_seconds + phase_b.wall_seconds + wall
+    )
+    return (
+        PhaseCResult(
             routed_flex_edges=flex_routed,
             failed_flex_edges=flex_failed,
-            wall_seconds=phase_c_wall,
+            wall_seconds=wall,
         ),
+        geometry,
+    )
+
+
+def solve_layout_v2(
+    yaml_path: str | Path,
+    options: OrchestratorV2Options | None = None,
+) -> OrchestratorV2Result:
+    """Run the full three-phase pipeline.
+
+    Convenience wrapper around :func:`compile_and_plan`, :func:`run_phase_a`,
+    :func:`run_phase_b`, and :func:`run_phase_c`.  For step-by-step execution
+    (e.g. ``--stop-after phaseA``) call the individual phase functions directly.
+    """
+    options = options or OrchestratorV2Options()
+    artifact, plan = compile_and_plan(yaml_path, options)
+    phase_a = run_phase_a(artifact, plan, yaml_path, options)
+    phase_b, skeleton = run_phase_b(artifact, plan, phase_a, options)
+    phase_c, geometry = run_phase_c(
+        yaml_path, artifact, plan, skeleton, phase_a, phase_b, options
+    )
+    return OrchestratorV2Result(
+        artifact=artifact,
+        # phase_a.skeleton is the post-B-retry skeleton — best result available.
+        phase_a=PhaseAResult(
+            skeleton=skeleton, plan=plan, wall_seconds=phase_a.wall_seconds
+        ),
+        phase_b=phase_b,
+        phase_c=phase_c,
         geometry=geometry,
     )
 
@@ -829,11 +906,15 @@ def phase_summary(result: OrchestratorV2Result) -> dict[str, object]:
 
 __all__ = [
     "_assemble_geometry",
+    "compile_and_plan",
     "OrchestratorV2Options",
     "OrchestratorV2Result",
     "PhaseAResult",
     "PhaseBResult",
     "PhaseCResult",
     "phase_summary",
+    "run_phase_a",
+    "run_phase_b",
+    "run_phase_c",
     "solve_layout_v2",
 ]
