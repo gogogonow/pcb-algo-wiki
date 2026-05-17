@@ -51,13 +51,12 @@ def test_pa_module_uv_components_count() -> None:
 def test_pa_module_edge_routing_class_histogram() -> None:
     artifact = compile_layout(REAL_CASE_PATH)
     hist = artifact.edges_by_class()
-    # Removed 4 virtual stub edges (IC1_pin1_seg2_to_C7, IC1_pin1_seg3_to_C5,
-    # IC1_pin2_seg2_to_C3, IC1_pin2_seg3_to_C6) — microstrips now terminate
-    # directly at RLC PINs. 14 locked, 3 free, total 17.
+    # WI-J1 added 4 flexible_path edges (flex_ubias_dec1, flex_dec1_gnd,
+    # flex_ubias_rpull, flex_rpull_pwr). 14 locked, 3 free, 4 flex → 21.
     assert hist.get("rf_constrained_locked") == 14
     assert hist.get("rf_constrained_free") == 3
-    assert hist.get("flexible_path", 0) == 0
-    assert sum(hist.values()) == 17
+    assert hist.get("flexible_path", 0) == 4
+    assert sum(hist.values()) == 21
 
 
 def test_pa_module_node_type_histogram() -> None:

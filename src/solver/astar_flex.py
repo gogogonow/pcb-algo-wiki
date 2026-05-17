@@ -86,6 +86,21 @@ def _build_grid(
         for cell in _cells_in_bbox(bx_lo, by_lo, bx_hi, by_hi, step):
             obstacles.add(cell)
 
+    # Pad envelopes from GeometryIR placements (UV-adhered + floating components
+    # have no FrontendArtifact bbox, so we derive bbox from pad points + buffer).
+    pad_buffer_um = mm_to_um(0.6)
+    for placement in geom.placements.values():
+        if not placement.pads:
+            continue
+        xs = [mm_to_um(float(p.point.x)) for p in placement.pads]
+        ys = [mm_to_um(float(p.point.y)) for p in placement.pads]
+        bx_lo = min(xs) - pad_buffer_um
+        by_lo = min(ys) - pad_buffer_um
+        bx_hi = max(xs) + pad_buffer_um
+        by_hi = max(ys) + pad_buffer_um
+        for cell in _cells_in_bbox(bx_lo, by_lo, bx_hi, by_hi, step):
+            obstacles.add(cell)
+
     # Inflated RF route bboxes.
     clearance_um = mm_to_um(float(ir.clearance))
     for edge_id, route in geom.routes.items():

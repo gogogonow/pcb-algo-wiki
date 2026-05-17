@@ -48,11 +48,11 @@ def test_load_v33_layout_parses_real_case_with_expected_counts() -> None:
 
     assert isinstance(layout.metadata, Metadata)
     assert layout.metadata.project_name == "PA_Module_Simplified"
-    assert len(layout.components) == 14
+    assert len(layout.components) == 17
     assert len(layout.footprints) == 5
     assert len(layout.nodes) == 8
     assert len(layout.terminals) == 9
-    assert len(layout.edges) == 17
+    assert len(layout.edges) == 21
 
 
 def test_load_v33_layout_preserves_unknown_fields_on_nested_models() -> None:

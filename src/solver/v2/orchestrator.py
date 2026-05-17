@@ -28,6 +28,12 @@ from solver.astar_flex import AstarConfig, route_flexible_paths
 from solver.units import MM_TO_UM
 
 from .channel_grid import GridConfig
+from .flex_drc import validate_flex_routes
+from .floating_placer import (
+    FloatingPlacement,
+    build_component_placement,
+    place_floating_components,
+)
 from .node_planner import NodePlan, plan_node_positions
 from .skeleton_router import RouteOutcome, SkeletonReport, route_skeleton
 from .uv_adhesion import UvAdhesionReport, adhere_uv_components
@@ -199,13 +205,23 @@ def solve_layout_v2(
         options=options,
     )
 
-    # ---- Phase C: A* on flexible_path edges (no-op when none) ------------
+    # ---- Phase C: floating placer + A* on flexible_path edges ------------
     t2 = time.perf_counter()
+    board_w = float(artifact.board.get("width", 40.0))
+    board_h = float(artifact.board.get("height", 100.0))
+    floating_placements = place_floating_components(
+        artifact=artifact,
+        skeleton=skeleton,
+        adhesion=adhesion,
+        board_w=board_w,
+        board_h=board_h,
+    )
     geometry = _assemble_geometry(
         artifact=artifact,
         plan=plan,
         skeleton=skeleton,
         adhesion=adhesion,
+        floating_placements=floating_placements,
         wall_seconds=phase_a_wall + phase_b_wall,
     )
     flex_routed: list[str] = []
@@ -216,7 +232,11 @@ def solve_layout_v2(
         ir = None
     if ir is not None:
         geometry, flex_routed, flex_failed = _route_flex_edges(
-            ir=ir, artifact=artifact, plan=plan, geometry=geometry
+            ir=ir,
+            artifact=artifact,
+            plan=plan,
+            geometry=geometry,
+            floating_placements=floating_placements,
         )
     phase_c_wall = time.perf_counter() - t2
 
@@ -242,16 +262,24 @@ def _route_flex_edges(
     artifact: FrontendArtifact,
     plan: NodePlan,
     geometry: GeometryIR,
+    floating_placements: dict[str, FloatingPlacement] | None = None,
     grid_step_um: int = 500,
 ) -> tuple[GeometryIR, list[str], list[str]]:
     """Route every ``flexible_path`` edge using ``solver.astar_flex``.
 
     Skeleton router only handles ``rf_constrained*`` edges, so flex edges are
     absent from ``geometry.routes``. We seed each flex edge with a direct
-    two-point polyline using node_planner endpoints, then delegate to
+    two-point polyline using node_planner endpoints (with fallback to
+    GeometryIR placements for floating-component pads), then delegate to
     :func:`solver.astar_flex.route_flexible_paths` which replaces the seeds
     with obstacle-aware A* polylines.
+
+    Finally, :func:`flex_drc.validate_flex_routes` enforces hard DRC: routes
+    that overlap obstacles or cross other polylines are dropped from
+    ``geometry.routes`` and reported as failed.
     """
+
+    floating_placements = floating_placements or {}
 
     flex_edge_ids = [
         eid
@@ -261,14 +289,26 @@ def _route_flex_edges(
     if not flex_edge_ids:
         return geometry, [], []
 
+    # Build pin → (x, y) lookup from GeometryIR placements (covers floating + UV).
+    pad_xy: dict[str, tuple[float, float]] = {}
+    for comp_name, placement in geometry.placements.items():
+        for pad in placement.pads:
+            pad_xy[f"{comp_name}.{pad.pin}"] = (float(pad.point.x), float(pad.point.y))
+
+    def _endpoint(node: str) -> tuple[float, float] | None:
+        xy = plan.endpoint_xy.get(node)
+        if xy is not None:
+            return xy
+        return pad_xy.get(node)
+
     seeded_routes = dict(geometry.routes)
     for eid in flex_edge_ids:
         edge = artifact.edges[eid]
         if len(edge.connections) < 2:
             continue
         a, b = edge.connections[0], edge.connections[-1]
-        a_xy = plan.endpoint_xy.get(a)
-        b_xy = plan.endpoint_xy.get(b)
+        a_xy = _endpoint(a)
+        b_xy = _endpoint(b)
         if a_xy is None or b_xy is None:
             continue
         seeded_routes[eid] = RoutePolyline(
@@ -302,7 +342,74 @@ def _route_flex_edges(
     except Exception:
         return seeded_geom, [], list(flex_edge_ids)
 
-    return new_geom, list(report.routed_edges), list(report.failed_edges)
+    # ---- Hard DRC pass on flexible routes -----------------------------------
+    flex_routes = {
+        eid: r
+        for eid, r in new_geom.routes.items()
+        if r.routing_class is RoutingClass.FLEXIBLE_PATH
+    }
+    other_routes = {
+        eid: r
+        for eid, r in new_geom.routes.items()
+        if r.routing_class is not RoutingClass.FLEXIBLE_PATH
+    }
+    pad_buffer_mm = 0.6
+    obstacle_bboxes: list[tuple[float, float, float, float]] = []
+    for comp in artifact.components.values():
+        if comp.bbox is None:
+            continue
+        obstacle_bboxes.append(
+            (
+                float(comp.bbox.min_x),
+                float(comp.bbox.min_y),
+                float(comp.bbox.max_x),
+                float(comp.bbox.max_y),
+            )
+        )
+    for placement in new_geom.placements.values():
+        if not placement.pads:
+            continue
+        xs = [float(p.point.x) for p in placement.pads]
+        ys = [float(p.point.y) for p in placement.pads]
+        obstacle_bboxes.append(
+            (
+                min(xs) - pad_buffer_mm,
+                min(ys) - pad_buffer_mm,
+                max(xs) + pad_buffer_mm,
+                max(ys) + pad_buffer_mm,
+            )
+        )
+
+    drc = validate_flex_routes(
+        flex_routes=flex_routes,
+        other_routes=other_routes,
+        obstacle_bboxes=obstacle_bboxes,
+        clearance_mm=0.05,
+    )
+
+    routed_edges = list(report.routed_edges)
+    failed_edges = list(report.failed_edges)
+    drc_failed = drc.failed_edges()
+    if drc_failed:
+        kept_routes = {
+            eid: r for eid, r in new_geom.routes.items() if eid not in drc_failed
+        }
+        new_geom = GeometryIR(
+            project=new_geom.project,
+            board=new_geom.board,
+            placements=new_geom.placements,
+            routes=kept_routes,
+            nodes=new_geom.nodes,
+            solve_status=new_geom.solve_status,
+            solve_wall_seconds=new_geom.solve_wall_seconds,
+            objective_value=new_geom.objective_value,
+        )
+        routed_edges = [e for e in routed_edges if e not in drc_failed]
+        for eid in drc_failed:
+            if eid not in failed_edges:
+                failed_edges.append(eid)
+
+    return new_geom, routed_edges, failed_edges
 
 
 def _retry_failed_phase_a_routes(
@@ -378,6 +485,7 @@ def _assemble_geometry(
     plan: NodePlan,
     skeleton: SkeletonReport,
     adhesion: UvAdhesionReport,
+    floating_placements: dict[str, FloatingPlacement] | None = None,
     wall_seconds: float,
 ) -> GeometryIR:
     board_w = float(artifact.board.get("width", 40.0))
@@ -417,6 +525,12 @@ def _assemble_geometry(
         )
     # UV components (overrides).
     placements.update(adhesion.placements)
+    # Floating components (PhaseC SA placer).
+    for name, fp in (floating_placements or {}).items():
+        f_comp = artifact.components.get(name)
+        if f_comp is None:
+            continue
+        placements[name] = build_component_placement(name, f_comp, fp)
 
     routes: dict[str, RoutePolyline] = {}
     for edge_id, route in skeleton.routes.items():

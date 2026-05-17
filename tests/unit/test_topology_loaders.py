@@ -10,12 +10,16 @@ REAL_CASE_PATH = Path(__file__).resolve().parents[2] / "rf_layout_simplified.yam
 def test_real_case_extracts_expected_entity_counts() -> None:
     graph = load_topology_graph(REAL_CASE_PATH)
 
-    assert len(graph.fixed_components) == 5
+    # WI-J1: added 3 floating components (U_BIAS IC + C_DEC1 cap + R_PULL res)
+    # and 4 flexible_path edges (flex_ubias_dec1, flex_dec1_gnd,
+    # flex_ubias_rpull, flex_rpull_pwr).
+    # Floating components are classified as "fixed" by the topology loader
+    # (they lack is_parametric_uv). 5 original + 3 floating = 8.
+    assert len(graph.fixed_components) == 8
     assert len(graph.parametric_uv_components) == 9
-    # Removed IC1_pin1_seg3_end_split_pad (now IC1_pin1_seg3 → C5.PIN_1 directly)
     assert len(graph.nodes) == 10
     assert len(graph.terminals) == 9
-    assert len(graph.edges) == 17
+    assert len(graph.edges) == 21
 
 
 def test_real_case_preserves_named_entities_and_classification() -> None:

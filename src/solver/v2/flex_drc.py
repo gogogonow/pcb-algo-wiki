@@ -44,9 +44,19 @@ def validate_flex_routes(
     obs = list(obstacle_bboxes)
     flex_items = list(flex_routes.items())
 
-    # 1. polyline ↔ obstacle bbox overlap
+    # 1. polyline ↔ obstacle bbox overlap. Skip obstacles that the route's
+    # endpoints lie inside — those are the component's own pads/footprint and
+    # the route legitimately must enter them to reach the pin.
     for eid, route in flex_items:
-        if _polyline_hits_obstacle(route, obs, clearance_mm):
+        pts = route.points
+        if len(pts) < 2:
+            continue
+        ep0 = (float(pts[0].x), float(pts[0].y))
+        ep1 = (float(pts[-1].x), float(pts[-1].y))
+        effective_obs = [
+            ob for ob in obs if not (_point_in_bbox(ep0, ob) or _point_in_bbox(ep1, ob))
+        ]
+        if _polyline_hits_obstacle(route, effective_obs, clearance_mm):
             report.violations.append(
                 DrcViolation(eid, "overlap", "segment bbox intersects obstacle")
             )
@@ -86,6 +96,13 @@ def validate_flex_routes(
 # ----------------------------------------------------------------------
 # Helpers
 # ----------------------------------------------------------------------
+
+
+def _point_in_bbox(
+    p: tuple[float, float], bb: tuple[float, float, float, float]
+) -> bool:
+    eps = 1e-6
+    return bb[0] - eps <= p[0] <= bb[2] + eps and bb[1] - eps <= p[1] <= bb[3] + eps
 
 
 def _polyline_hits_obstacle(
