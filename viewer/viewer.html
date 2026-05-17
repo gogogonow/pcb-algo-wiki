@@ -408,17 +408,25 @@ class SceneRenderer {
     if (len === 0) return;
     const dashLen = 6; const gapLen = 4;
     let t = 0; let drawing = true;
-    g.moveTo(x1, y1);
+    // In PixiJS 8 each .stroke() finalises the path, so we accumulate all
+    // dash segments first and call .stroke() exactly once at the end.
+    let segStart = null;
     while (t < len) {
       const step = drawing ? dashLen : gapLen;
       const t2 = Math.min(t + step, len);
       const x = x1 + dx * (t2 / len);
       const y = y1 + dy * (t2 / len);
-      if (drawing) g.lineTo(x, y).stroke({ color, width });
-      else         g.moveTo(x, y);
+      if (drawing) {
+        const sx = segStart ? segStart[0] : x1 + dx * (t / len);
+        const sy = segStart ? segStart[1] : y1 + dy * (t / len);
+        g.moveTo(sx, sy).lineTo(x, y);
+      } else {
+        segStart = [x, y];
+      }
       t = t2;
       drawing = !drawing;
     }
+    g.stroke({ color, width });
   }
 
   _routeColor(route, kind) {
