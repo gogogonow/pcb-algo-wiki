@@ -54,6 +54,12 @@ class FloatingPlacerConfig:
     clearance_mm: float = 0.3
     margin_mm: float = 0.5  # 与板框、其他障碍的最小距离裕量
     seed: int = 0xC0FFEE
+    # M4: SA early-stop — terminate (returning best_state) when best energy
+    # hasn't improved for ``no_improve_patience`` consecutive iterations.
+    # Disabled when set to 0 (legacy behaviour: run all iterations).
+    no_improve_patience: int = 0
+    # Relative improvement threshold below which a step is "not an improvement".
+    no_improve_min_rel: float = 1e-4
 
 
 # ----------------------------------------------------------------------
@@ -218,6 +224,9 @@ def place_floating_components(
     cur_e = energy(state)
     best_state, best_e = dict(state), cur_e
     T = cfg.temperature_init
+    no_improve = 0
+    patience = max(0, int(cfg.no_improve_patience))
+    rel_threshold = float(cfg.no_improve_min_rel)
 
     for _ in range(cfg.iterations):
         if T < cfg.temperature_min:
@@ -236,10 +245,20 @@ def place_floating_components(
         if new_e < cur_e or rng.random() < math.exp(-(new_e - cur_e) / max(T, 1e-6)):
             cur_e = new_e
             if cur_e < best_e:
+                improvement = (best_e - cur_e) / max(abs(best_e), 1e-9)
                 best_state, best_e = dict(state), cur_e
+                if improvement >= rel_threshold:
+                    no_improve = 0
+                else:
+                    no_improve += 1
+            else:
+                no_improve += 1
         else:
             state[name] = old
+            no_improve += 1
         T *= cfg.cooling
+        if patience and no_improve >= patience:
+            break
 
     return best_state
 
@@ -481,6 +500,20 @@ def _routability_cost(
     floating_names = set(state.keys())
     cost = 0.0
     sample_step = 0.5  # mm
+    # M5: bucket obstacles into a coarse uniform grid for sub-linear sample
+    # lookup.  Equivalent semantics — every obstacle that contains a sample
+    # was reachable in the legacy linear scan and is still found here.
+    bucket_mm = 4.0
+    inv_b = 1.0 / bucket_mm
+    bucket_map: dict[tuple[int, int], list[tuple[float, float, float, float]]] = {}
+    for ob in obstacles:
+        ix0 = int(math.floor(ob[0] * inv_b))
+        iy0 = int(math.floor(ob[1] * inv_b))
+        ix1 = int(math.floor(ob[2] * inv_b))
+        iy1 = int(math.floor(ob[3] * inv_b))
+        for ix in range(ix0, ix1 + 1):
+            for iy in range(iy0, iy1 + 1):
+                bucket_map.setdefault((ix, iy), []).append(ob)
     for edge in artifact.edges.values():
         conns = edge.connections or ()
         if not any(ep.split(".", 1)[0] in floating_names for ep in conns if "." in ep):
@@ -511,7 +544,11 @@ def _routability_cost(
                 t = k / steps
                 sx = x1 + (x2 - x1) * t
                 sy = y1 + (y2 - y1) * t
-                for ob in obstacles:
+                key = (int(math.floor(sx * inv_b)), int(math.floor(sy * inv_b)))
+                bucket = bucket_map.get(key)
+                if not bucket:
+                    continue
+                for ob in bucket:
                     if ob[0] <= sx <= ob[2] and ob[1] <= sy <= ob[3]:
                         cost += 1.0
                         break

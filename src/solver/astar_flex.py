@@ -19,6 +19,8 @@ final SVG / GeometryIR remains well-formed; callers can detect this via
 from __future__ import annotations
 
 import heapq
+import logging
+import time
 from dataclasses import dataclass, field
 
 from frontend.models import FrontendArtifact
@@ -27,6 +29,8 @@ from schema.solver_ir import RoutingClass, SolverIR
 from schema.v6_ir import Point
 
 from .units import mm_to_um, um_to_mm
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -60,6 +64,167 @@ class PinEscapeInfo:
     escape_dir: tuple[int, int]
     pad_w_um: int
     pad_l_um: int
+
+
+@dataclass(frozen=True)
+class _FlexBaseGrid:
+    """Per-flex-pass cache of obstacles that don't depend on the current edge.
+
+    Built once by :func:`_build_flex_base_grid` before iterating flex edges,
+    then re-used by every per-edge :func:`_build_grid` call so we avoid
+    rasterising all pads and all non-flex (skeleton) routes on every edge.
+
+    * ``ix0/iy0/ix1/iy1``: board cell bounds (constant across edges).
+    * ``pad_all_buffered_cells``: union of all pads' buffered envelope cells.
+      Used as the base obstacle set for pads — pin escape windows of the
+      current edge are carved out of the per-edge copy.
+    * ``pad_tight_cells_by_pin``: per-pin tight (no-buffer) cell sets.  Used
+      to re-assert non-endpoint pads after pin window carving so the route
+      cannot pass over a neighbouring pin's pad.
+    * ``non_flex_route_obstacles``: rasterised obstacle cells of every route
+      with ``routing_class != FLEXIBLE_PATH`` (skeleton/RF buses).  Constant
+      during the flex pass.
+    * ``non_flex_route_near_rf``: soft "near RF" cells from the same routes,
+      filtered to exclude any cell already in obstacles.
+    * ``non_flex_route_endpoint_cells``: per-route (route_id → list of
+      (endpoint_xy_um, infl_um, skip_radius_sq_um)).  Used per-edge to skip
+      obstacles within ``skip_radius`` of any current-edge endpoint that
+      coincides with a route endpoint (shared pad).
+    """
+
+    ix0: int
+    iy0: int
+    ix1: int
+    iy1: int
+    pad_all_buffered_cells: frozenset[tuple[int, int]]
+    pad_tight_cells_by_pin: dict[str, frozenset[tuple[int, int]]]
+    non_flex_route_obstacles: frozenset[tuple[int, int]]
+    non_flex_route_near_rf: frozenset[tuple[int, int]]
+    # Per-non-flex-route endpoint info used to clear shared-pad cells:
+    #   list of (endpoint_xy_um, infl_um, route_obstacle_cells).
+    non_flex_route_endpoints: tuple[
+        tuple[tuple[int, int], int, frozenset[tuple[int, int]]], ...
+    ]
+
+
+def _build_flex_base_grid(
+    *,
+    ir: SolverIR,
+    artifact: FrontendArtifact,
+    geom: GeometryIR,
+    cfg: AstarConfig,
+) -> _FlexBaseGrid:
+    """One-shot rasterisation of edge-independent obstacles (M2 cache).
+
+    Result is reused across every flex edge in :func:`route_flexible_paths`,
+    eliminating the per-edge rebuild of pad and skeleton-route cells which is
+    the dominant cost on large boards.
+    """
+
+    t0 = time.perf_counter()
+    bx0 = mm_to_um(float(ir.board.origin.x))
+    by0 = mm_to_um(float(ir.board.origin.y))
+    bx1 = bx0 + mm_to_um(float(ir.board.width))
+    by1 = by0 + mm_to_um(float(ir.board.height))
+    step = cfg.grid_step_um
+    ix0, iy0 = bx0 // step, by0 // step
+    ix1, iy1 = bx1 // step, by1 // step
+
+    pad_all_buffered: set[tuple[int, int]] = set()
+    pad_tight_cells_by_pin: dict[str, frozenset[tuple[int, int]]] = {}
+    pad_buffer_um = mm_to_um(float(ir.clearance))
+
+    for comp_name, placement in geom.placements.items():
+        if not placement.pads:
+            continue
+        comp_obj = artifact.components.get(comp_name)
+        pad_sizes: dict[str, tuple[float, float]] = {}
+        if comp_obj is not None:
+            for ap in comp_obj.pads:
+                pw = float(ap.pad_width) if ap.pad_width else 0.0
+                pl = float(ap.pad_length) if ap.pad_length else 0.0
+                pad_sizes[ap.pin] = (pw, pl)
+        for pad in placement.pads:
+            pin_id = f"{comp_name}.{pad.pin}"
+            cx_mm = float(pad.point.x)
+            cy_mm = float(pad.point.y)
+            pw, pl = pad_sizes.get(pad.pin, (0.0, 0.0))
+            half_mm = max(pw, pl) / 2.0
+            if half_mm <= 0.0:
+                half_mm = 0.2
+            half_um = mm_to_um(half_mm)
+            cx = mm_to_um(cx_mm)
+            cy = mm_to_um(cy_mm)
+            pbx_lo = cx - half_um - pad_buffer_um
+            pby_lo = cy - half_um - pad_buffer_um
+            pbx_hi = cx + half_um + pad_buffer_um
+            pby_hi = cy + half_um + pad_buffer_um
+            for cell in _cells_in_bbox(pbx_lo, pby_lo, pbx_hi, pby_hi, step):
+                pad_all_buffered.add(cell)
+            tight_cells = frozenset(
+                _cells_in_bbox(
+                    cx - half_um, cy - half_um, cx + half_um, cy + half_um, step
+                )
+            )
+            pad_tight_cells_by_pin[pin_id] = tight_cells
+
+    clearance_um = mm_to_um(float(ir.clearance))
+    non_flex_obstacles: set[tuple[int, int]] = set()
+    non_flex_near_rf: set[tuple[int, int]] = set()
+    non_flex_endpoints: list[
+        tuple[tuple[int, int], int, frozenset[tuple[int, int]]]
+    ] = []
+
+    for edge_id, route in geom.routes.items():
+        if route.routing_class is RoutingClass.FLEXIBLE_PATH:
+            continue  # flex routes handled incrementally per-edge
+        half_w = mm_to_um(float(route.width)) // 2
+        infl = half_w + clearance_um + cfg.rf_inflate_um
+        pts = [(mm_to_um(float(p.x)), mm_to_um(float(p.y))) for p in route.points]
+        route_cells: set[tuple[int, int]] = set()
+        for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
+            for cell in _cells_in_segment_buffer(x1, y1, x2, y2, infl, step):
+                non_flex_obstacles.add(cell)
+                route_cells.add(cell)
+            near_infl = infl + step
+            bx_lo = min(x1, x2) - near_infl
+            by_lo = min(y1, y2) - near_infl
+            bx_hi = max(x1, x2) + near_infl
+            by_hi = max(y1, y2) + near_infl
+            for cell in _cells_in_bbox(bx_lo, by_lo, bx_hi, by_hi, step):
+                non_flex_near_rf.add(cell)
+        # Track route endpoints + their cell set for per-edge "shared pad"
+        # cell clearing.
+        if pts:
+            frozen_cells = frozenset(route_cells)
+            non_flex_endpoints.append((pts[0], infl, frozen_cells))
+            if pts[-1] != pts[0]:
+                non_flex_endpoints.append((pts[-1], infl, frozen_cells))
+    # Drop near_rf cells that are also obstacles (kept distinction matches
+    # legacy behaviour where near_rf is filled only for cells not in obstacles).
+    non_flex_near_rf -= non_flex_obstacles
+
+    base = _FlexBaseGrid(
+        ix0=ix0,
+        iy0=iy0,
+        ix1=ix1,
+        iy1=iy1,
+        pad_all_buffered_cells=frozenset(pad_all_buffered),
+        pad_tight_cells_by_pin=pad_tight_cells_by_pin,
+        non_flex_route_obstacles=frozenset(non_flex_obstacles),
+        non_flex_route_near_rf=frozenset(non_flex_near_rf),
+        non_flex_route_endpoints=tuple(non_flex_endpoints),
+    )
+    logger.info(
+        "flex base-grid built: wall=%.2fs pads=%d pad_cells=%d "
+        "non_flex_route_cells=%d near_rf=%d",
+        time.perf_counter() - t0,
+        len(pad_tight_cells_by_pin),
+        len(base.pad_all_buffered_cells),
+        len(base.non_flex_route_obstacles),
+        len(base.non_flex_route_near_rf),
+    )
+    return base
 
 
 def _escape_direction(
@@ -425,6 +590,188 @@ def _build_grid(
     return obstacles, near_rf, ix0, iy0, ix1, iy1
 
 
+def _build_grid_with_base(
+    *,
+    ir: SolverIR,
+    artifact: FrontendArtifact,
+    geom: GeometryIR,
+    cfg: AstarConfig,
+    skip_edge_id: str,
+    endpoint_pins: tuple[PinEscapeInfo, ...],
+    base: _FlexBaseGrid,
+    routed_flex_obstacles: frozenset[tuple[int, int]],
+    routed_flex_near_rf: frozenset[tuple[int, int]],
+    routed_flex_endpoints: tuple[
+        tuple[tuple[int, int], int, frozenset[tuple[int, int]]], ...
+    ],
+    endpoint_locs_um: tuple[tuple[int, int], ...] = (),
+) -> tuple[set[tuple[int, int]], set[tuple[int, int]], int, int, int, int]:
+    """M2 cached variant of :func:`_build_grid`.
+
+    Reuses ``base`` (which encodes pads + non-flex routes computed once for
+    the whole flex pass) and adds ``routed_flex_*`` (cells from flex edges
+    routed earlier in the same pass).  Per-edge work is limited to:
+
+    * component-body bboxes with endpoint-swallow exemption (cheap)
+    * pin escape window carving for the current edge's endpoints
+    * non-endpoint pad re-assertion (taken from base mapping)
+    * shared-pad cell clearing for routes whose endpoints coincide with
+      the current edge's endpoints
+
+    Behaviour is equivalent to :func:`_build_grid`: the produced obstacle /
+    near_rf sets are bit-for-bit identical because all set operations are
+    order-independent.
+    """
+
+    step = cfg.grid_step_um
+    ix0, iy0, ix1, iy1 = base.ix0, base.iy0, base.ix1, base.iy1
+
+    # Identify endpoint pin ids/components for current edge.
+    endpoint_pin_ids: set[str] = set()
+    endpoint_comp_names: set[str] = set()
+    edge_ir = ir.edges.get(skip_edge_id) if skip_edge_id else None
+    if edge_ir is not None:
+        for ep in edge_ir.endpoints:
+            endpoint_pin_ids.add(str(ep))
+            if "." in ep:
+                endpoint_comp_names.add(ep.split(".", 1)[0])
+
+    import math as _math
+
+    # Component-body bboxes — recomputed per edge because of the endpoint
+    # swallow check (foreign component overlapping current endpoint must not
+    # block the start/goal cell).
+    endpoint_xys_um = [pin_info.pin_xy_um for pin_info in endpoint_pins]
+    body_obstacles: set[tuple[int, int]] = set()
+    for comp_name, comp in artifact.components.items():
+        bx_lo_mm: float | None = None
+        by_lo_mm: float | None = None
+        bx_hi_mm: float | None = None
+        by_hi_mm: float | None = None
+        if comp.bbox is not None:
+            bx_lo_mm = float(comp.bbox.min_x)
+            by_lo_mm = float(comp.bbox.min_y)
+            bx_hi_mm = float(comp.bbox.max_x)
+            by_hi_mm = float(comp.bbox.max_y)
+        else:
+            placement = geom.placements.get(comp_name)
+            if placement is not None and comp.footprint_dims_mm is not None:
+                w_mm, l_mm = comp.footprint_dims_mm
+                rot = float(placement.rotation_deg)
+                cos_t = round(_math.cos(_math.radians(rot)))
+                if cos_t == 0:
+                    ext_x, ext_y = w_mm, l_mm
+                else:
+                    ext_x, ext_y = l_mm, w_mm
+                cx = float(placement.anchor.x)
+                cy = float(placement.anchor.y)
+                bx_lo_mm = cx - ext_x / 2
+                by_lo_mm = cy - ext_y / 2
+                bx_hi_mm = cx + ext_x / 2
+                by_hi_mm = cy + ext_y / 2
+        if bx_lo_mm is None:
+            continue
+        bx_lo = mm_to_um(bx_lo_mm)
+        by_lo = mm_to_um(by_lo_mm or 0.0)
+        bx_hi = mm_to_um(bx_hi_mm or 0.0)
+        by_hi = mm_to_um(by_hi_mm or 0.0)
+        swallows_endpoint = False
+        for ex_um, ey_um in endpoint_xys_um:
+            if bx_lo <= ex_um <= bx_hi and by_lo <= ey_um <= by_hi:
+                if comp_name not in endpoint_comp_names:
+                    swallows_endpoint = True
+                    break
+        if swallows_endpoint:
+            continue
+        for cell in _cells_in_bbox(bx_lo, by_lo, bx_hi, by_hi, step):
+            body_obstacles.add(cell)
+
+    # Assemble per-edge obstacles: base layers (cached) + body + already-
+    # routed flex.
+    obstacles: set[tuple[int, int]] = set(base.pad_all_buffered_cells)
+    obstacles |= base.non_flex_route_obstacles
+    obstacles |= body_obstacles
+    obstacles |= routed_flex_obstacles
+
+    # Shared-pad endpoint clearing: for non-flex and routed-flex routes whose
+    # endpoint coincides with a current-edge endpoint, drop cells within
+    # skip_radius of that endpoint.  This matches the legacy per-route loop.
+    ep_coincidence_radius = mm_to_um(0.6)
+    ep_coincidence_sq = ep_coincidence_radius * ep_coincidence_radius
+
+    def _clear_shared_pad(
+        endpoints: tuple[tuple[tuple[int, int], int, frozenset[tuple[int, int]]], ...],
+    ) -> None:
+        for (rx, ry), infl, cells in endpoints:
+            coincident: list[tuple[int, int]] = []
+            for ex, ey in endpoint_locs_um:
+                if (rx - ex) ** 2 + (ry - ey) ** 2 <= ep_coincidence_sq:
+                    coincident.append((ex, ey))
+                    break
+            if not coincident:
+                continue
+            skip_radius = max(ep_coincidence_radius, infl + step)
+            skip_radius_sq = skip_radius * skip_radius
+            for cell in cells:
+                cx = cell[0] * step + step // 2
+                cy = cell[1] * step + step // 2
+                for ex, ey in coincident:
+                    if (cx - ex) ** 2 + (cy - ey) ** 2 <= skip_radius_sq:
+                        obstacles.discard(cell)
+                        break
+
+    if endpoint_locs_um:
+        _clear_shared_pad(base.non_flex_route_endpoints)
+        _clear_shared_pad(routed_flex_endpoints)
+
+    # near_rf = base + routed-flex near, minus current obstacles.
+    near_rf: set[tuple[int, int]] = set(base.non_flex_route_near_rf)
+    near_rf |= routed_flex_near_rf
+    near_rf -= obstacles
+
+    # Pin escape window carving for current edge.
+    for pin_info in endpoint_pins:
+        for cell in _pin_window_cells(pin_info, mm_to_um(float(ir.clearance)), step):
+            obstacles.discard(cell)
+
+    # Re-assert non-endpoint pad tight cells (recover any neighbouring pad
+    # of the same component opened by pin escape window).
+    for pin_id, tight_cells in base.pad_tight_cells_by_pin.items():
+        if pin_id in endpoint_pin_ids:
+            continue
+        obstacles |= tight_cells
+
+    return obstacles, near_rf, ix0, iy0, ix1, iy1
+
+
+def _rasterize_flex_route(
+    route: RoutePolyline, cfg: AstarConfig, clearance_um: int
+) -> tuple[frozenset[tuple[int, int]], frozenset[tuple[int, int]], int]:
+    """Rasterise a single flex route into (obstacles, near_rf, infl_um).
+
+    Used to incrementally accumulate already-routed flex polylines as
+    obstacles for subsequent edges in the same flex pass.
+    """
+    step = cfg.grid_step_um
+    half_w = mm_to_um(float(route.width)) // 2
+    infl = half_w + clearance_um + cfg.rf_inflate_um
+    pts = [(mm_to_um(float(p.x)), mm_to_um(float(p.y))) for p in route.points]
+    obs: set[tuple[int, int]] = set()
+    near: set[tuple[int, int]] = set()
+    for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
+        for cell in _cells_in_segment_buffer(x1, y1, x2, y2, infl, step):
+            obs.add(cell)
+        near_infl = infl + step
+        bx_lo = min(x1, x2) - near_infl
+        by_lo = min(y1, y2) - near_infl
+        bx_hi = max(x1, x2) + near_infl
+        by_hi = max(y1, y2) + near_infl
+        for cell in _cells_in_bbox(bx_lo, by_lo, bx_hi, by_hi, step):
+            near.add(cell)
+    near -= obs
+    return frozenset(obs), frozenset(near), infl
+
+
 def _xy_to_cell(x_um: int, y_um: int, step: int) -> tuple[int, int]:
     return x_um // step, y_um // step
 
@@ -541,6 +888,16 @@ def route_flexible_paths(
 
     new_routes = dict(geom.routes)
     report = AstarReport()
+
+    # M2: build edge-independent obstacle cache once for the whole pass.
+    base = _build_flex_base_grid(ir=ir, artifact=artifact, geom=geom, cfg=cfg)
+    clearance_um = mm_to_um(float(ir.clearance))
+    routed_flex_obstacles: set[tuple[int, int]] = set()
+    routed_flex_near_rf: set[tuple[int, int]] = set()
+    routed_flex_endpoints: list[
+        tuple[tuple[int, int], int, frozenset[tuple[int, int]]]
+    ] = []
+    t_flex_loop = time.perf_counter()
     for edge_id in flex_edges:
         original = geom.routes.get(edge_id)
         if original is None:
@@ -589,31 +946,24 @@ def route_flexible_paths(
                     pad_l_um=pad_l_um,
                 )
             )
-        # Build obstacles from current_geom (updated with already-routed flex
-        # paths as hard obstacles to prevent route-route crossings).
-        current_geom = GeometryIR(
-            project=geom.project,
-            board=geom.board,
-            placements=geom.placements,
-            routes=new_routes,
-            nodes=geom.nodes,
-            solve_status=geom.solve_status,
-            solve_wall_seconds=geom.solve_wall_seconds,
-            objective_value=geom.objective_value,
-        )
+        # Build obstacles via cached base + incremental flex layer (M2).
+        current_geom = geom  # for component-body placement lookup
         # Endpoint locations in µm for obstacle clearing near terminal pads.
         ep_locs = (
             (mm_to_um(float(start_pt.x)), mm_to_um(float(start_pt.y))),
             (mm_to_um(float(end_pt.x)), mm_to_um(float(end_pt.y))),
         )
-        obstacles, near_rf, ix0, iy0, ix1, iy1 = _build_grid(
+        obstacles, near_rf, ix0, iy0, ix1, iy1 = _build_grid_with_base(
             ir=ir,
             artifact=artifact,
             geom=current_geom,
             cfg=cfg,
             skip_edge_id=edge_id,
             endpoint_pins=tuple(endpoint_pins),
-            routed_flex_ids=frozenset(report.routed_edges),
+            base=base,
+            routed_flex_obstacles=frozenset(routed_flex_obstacles),
+            routed_flex_near_rf=frozenset(routed_flex_near_rf),
+            routed_flex_endpoints=tuple(routed_flex_endpoints),
             endpoint_locs_um=ep_locs,
         )
         start_cell = _xy_to_cell(
@@ -642,6 +992,25 @@ def route_flexible_paths(
             points=polyline,
         )
         report.routed_edges.append(edge_id)
+        # Accumulate this route's obstacle/near_rf cells for subsequent edges.
+        routed = new_routes[edge_id]
+        obs_inc, near_inc, infl_inc = _rasterize_flex_route(routed, cfg, clearance_um)
+        routed_flex_obstacles |= obs_inc
+        # Maintain invariant: near_rf disjoint from obstacles globally — recompute
+        # delta minus the accumulated obstacle set.
+        routed_flex_near_rf |= near_inc - routed_flex_obstacles
+        pts_um = [(mm_to_um(float(p.x)), mm_to_um(float(p.y))) for p in routed.points]
+        if pts_um:
+            routed_flex_endpoints.append((pts_um[0], infl_inc, obs_inc))
+            if pts_um[-1] != pts_um[0]:
+                routed_flex_endpoints.append((pts_um[-1], infl_inc, obs_inc))
+
+    logger.info(
+        "flex route loop done: wall=%.2fs routed=%d failed=%d",
+        time.perf_counter() - t_flex_loop,
+        len(report.routed_edges),
+        len(report.failed_edges),
+    )
 
     return (
         GeometryIR(
