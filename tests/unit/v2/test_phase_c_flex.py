@@ -100,12 +100,13 @@ def test_route_flex_edges_seeds_and_routes_flex() -> None:
     geom = _empty_geom()
     plan = NodePlan(endpoint_xy={"A.P": (2.0, 10.0), "B.P": (18.0, 10.0)})
 
-    new_geom, routed, failed = _route_flex_edges(
+    new_geom, routed, failed, drc_violations = _route_flex_edges(
         ir=ir, artifact=artifact, plan=plan, geometry=geom, grid_step_um=500
     )
 
     assert "flex1" in routed
     assert failed == []
+    assert drc_violations == 0
     assert "flex1" in new_geom.routes
     pts = new_geom.routes["flex1"].points
     assert len(pts) >= 2
@@ -118,7 +119,7 @@ def test_route_flex_edges_no_op_when_no_flex() -> None:
     artifact = _trivial_artifact_with_flex()
     # Strip flex edge.
     object.__setattr__(artifact, "edges", {})
-    new_geom, routed, failed = _route_flex_edges(
+    new_geom, routed, failed, drc_violations = _route_flex_edges(
         ir=_trivial_ir(),
         artifact=artifact,
         plan=NodePlan(),
@@ -126,4 +127,5 @@ def test_route_flex_edges_no_op_when_no_flex() -> None:
     )
     assert routed == []
     assert failed == []
+    assert drc_violations == 0
     assert "flex1" not in new_geom.routes

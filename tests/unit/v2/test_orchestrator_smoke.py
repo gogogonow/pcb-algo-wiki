@@ -28,6 +28,9 @@ def test_skeleton_first_runs_end_to_end() -> None:
     # airwire-airwire crossing, and body-body overlap with connected-pair
     # exemption), the PA case routes >=4 of 6 flexible edges reliably.
     assert summary["phase_c"]["flex_routed"] >= 4
+    assert "drc_violations" in summary["phase_c"]
+    assert "route_total_length_mm" in summary
+    assert "route_total_segments" in summary
     assert "wall_s" in summary["phase_c"]
     # Status must be one of the schema-allowed values.
     assert result.geometry.solve_status in {

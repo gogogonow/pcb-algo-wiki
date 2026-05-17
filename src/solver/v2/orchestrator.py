@@ -66,6 +66,7 @@ class PhaseCResult:
     routed_flex_edges: list[str]
     wall_seconds: float
     failed_flex_edges: list[str] = field(default_factory=list)
+    drc_violations: int = 0
 
 
 @dataclass
@@ -230,8 +231,9 @@ def solve_layout_v2(
         ir = compile_solver_ir(yaml_path)
     except Exception:
         ir = None
+    drc_violations = 0
     if ir is not None:
-        geometry, flex_routed, flex_failed = _route_flex_edges(
+        geometry, flex_routed, flex_failed, drc_violations = _route_flex_edges(
             ir=ir,
             artifact=artifact,
             plan=plan,
@@ -251,6 +253,7 @@ def solve_layout_v2(
             routed_flex_edges=flex_routed,
             failed_flex_edges=flex_failed,
             wall_seconds=phase_c_wall,
+            drc_violations=drc_violations,
         ),
         geometry=geometry,
     )
@@ -264,7 +267,7 @@ def _route_flex_edges(
     geometry: GeometryIR,
     floating_placements: dict[str, FloatingPlacement] | None = None,
     grid_step_um: int = 500,
-) -> tuple[GeometryIR, list[str], list[str]]:
+) -> tuple[GeometryIR, list[str], list[str], int]:
     """Route every ``flexible_path`` edge using ``solver.astar_flex``.
 
     Skeleton router only handles ``rf_constrained*`` edges, so flex edges are
@@ -287,7 +290,7 @@ def _route_flex_edges(
         if edge.routing_class == "flexible_path"
     ]
     if not flex_edge_ids:
-        return geometry, [], []
+        return geometry, [], [], 0
 
     # Build pin → (x, y) lookup from GeometryIR placements (covers floating + UV).
     pad_xy: dict[str, tuple[float, float]] = {}
@@ -342,7 +345,7 @@ def _route_flex_edges(
             config=AstarConfig(grid_step_um=grid_step_um),
         )
     except Exception:
-        return seeded_geom, [], list(flex_edge_ids)
+        return seeded_geom, [], list(flex_edge_ids), 0
 
     # ---- Hard DRC pass on flexible routes -----------------------------------
     flex_routes = {
@@ -472,7 +475,7 @@ def _route_flex_edges(
             if eid not in failed_edges:
                 failed_edges.append(eid)
 
-    return new_geom, routed_edges, failed_edges
+    return new_geom, routed_edges, failed_edges, len(drc.violations)
 
 
 def _retry_failed_phase_a_routes(
@@ -761,6 +764,16 @@ def phase_summary(result: OrchestratorV2Result) -> dict[str, object]:
     err_pcts = [
         abs(r.length_err_pct) for r in routes.values() if r.length_err_pct is not None
     ]
+    route_total_length_mm = 0.0
+    route_total_segments = 0
+    for route in result.geometry.routes.values():
+        pts = route.points
+        route_total_segments += max(0, len(pts) - 1)
+        for a, b in zip(pts, pts[1:]):
+            dx = float(b.x) - float(a.x)
+            dy = float(b.y) - float(a.y)
+            route_total_length_mm += (dx * dx + dy * dy) ** 0.5
+
     return {
         "project": result.geometry.project,
         "status": result.geometry.solve_status,
@@ -788,8 +801,11 @@ def phase_summary(result: OrchestratorV2Result) -> dict[str, object]:
         "phase_c": {
             "flex_routed": len(result.phase_c.routed_flex_edges),
             "flex_failed": list(result.phase_c.failed_flex_edges),
+            "drc_violations": int(result.phase_c.drc_violations),
             "wall_s": result.phase_c.wall_seconds,
         },
+        "route_total_length_mm": route_total_length_mm,
+        "route_total_segments": route_total_segments,
         "wall_total_s": result.geometry.solve_wall_seconds,
     }
 
