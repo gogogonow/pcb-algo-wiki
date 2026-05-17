@@ -166,6 +166,12 @@ def place_floating_components(
         e += cfg.routability_weight * _routability_cost(
             artifact, s, skeleton, adhesion, obstacles
         )
+        e += cfg.rf_bus_cross_weight * _rf_bus_cross_cost(
+            artifact, s, skeleton, adhesion
+        )
+        e += cfg.airwire_cross_weight * _airwire_cross_cost(
+            artifact, s, skeleton, adhesion
+        )
         return e
 
     cur_e = energy(state)
