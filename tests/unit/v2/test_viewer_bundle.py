@@ -400,6 +400,10 @@ def test_emit_viewer_bundle_prea_emits_all_microstrip_branches(tmp_path) -> None
     prea_edges = {e["edge_id"]: e for e in data["phases"]["preA"]["edges"]}
 
     assert {"seg1", "seg2", "seg3", "seg4"}.issubset(prea_edges)
+    assert set(prea_edges["seg1"]["endpoint_positions_mm"].keys()) == {"U1.PIN_2", "N1"}
+    assert set(prea_edges["seg2"]["endpoint_positions_mm"].keys()) == {"N1", "R1.PIN_1"}
+    assert set(prea_edges["seg3"]["endpoint_positions_mm"].keys()) == {"N1", "C1.PIN_1"}
+    assert set(prea_edges["seg4"]["endpoint_positions_mm"].keys()) == {"N1", "R1.PIN_2"}
     for edge_id in ("seg1", "seg2", "seg3", "seg4"):
         assert len(prea_edges[edge_id]["endpoint_positions_mm"]) == 2
 
