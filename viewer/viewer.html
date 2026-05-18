@@ -115,6 +115,9 @@ const C = {
   ROUTE_FLEX: 0xf5a623,
   ROUTE_FAIL: 0xe74c3c,
   EDGE_PRE: 0x888888,
+  EDGE_SCENE1: 0x4caf50,   // scene 1 – fixed tree, exact position (green)
+  EDGE_SCENE2: 0x555555,   // scene 2 – shunt UV deferred to PhaseB (dim)
+  EDGE_SCENE3: 0xf5a623,   // scene 3 – floating, BFS-approx (orange)
   SEL: 0xf0c040,
   DIM_ALPHA: 0.25,
 };
@@ -379,6 +382,14 @@ class SceneRenderer {
     const pts = Object.values(ep);
     if (pts.length === 0) return;
 
+    // Scene-aware colour: s1=exact(green), s2=deferred(dim), s3=approx(orange)
+    const sceneColorMap = {
+      'scene_1_fixed_tree': C.EDGE_SCENE1,
+      'scene_2_shunt_uv':   C.EDGE_SCENE2,
+      'scene_3_floating':   C.EDGE_SCENE3,
+    };
+    const edgeColor = sceneColorMap[edge.scene] || C.EDGE_PRE;
+
     const g = new PIXI.Graphics();
     g.eventMode = 'static';
     g.cursor = 'pointer';
@@ -391,11 +402,11 @@ class SceneRenderer {
       // dashed line between first two endpoints
       const x1 = this.sx(pts[0].x); const y1 = this.sy(pts[0].y);
       const x2 = this.sx(pts[1].x); const y2 = this.sy(pts[1].y);
-      this._dashedLine(g, x1, y1, x2, y2, C.EDGE_PRE, Math.max(1, 0.3 * this.scale));
+      this._dashedLine(g, x1, y1, x2, y2, edgeColor, Math.max(1, 0.3 * this.scale));
     } else {
       // single endpoint: draw a small circle
       const x = this.sx(pts[0].x); const y = this.sy(pts[0].y);
-      g.circle(x, y, 4).stroke({ color: C.EDGE_PRE, width: 1 });
+      g.circle(x, y, 4).stroke({ color: edgeColor, width: 1 });
     }
 
     this.layerEdges.addChild(g);
@@ -641,8 +652,15 @@ class PropertyInspector {
   }
 
   showEdge(edge) {
+    const sceneLabels = {
+      'scene_1_fixed_tree': 'Fixed Tree (exact)',
+      'scene_2_shunt_uv':   'Shunt UV (deferred→PhaseB)',
+      'scene_3_floating':   'Floating (approx)',
+      'not_applicable':     'N/A',
+    };
     const rows = [
       ['Net',    edge.edge_id || '—'],
+      ['Scene',  sceneLabels[edge.scene] || (edge.scene || '—')],
       ['Class',  edge.routing_class || '—'],
       ['Width',  (edge.width_mm != null ? edge.width_mm + ' mm' : '—')],
       ['Target', (edge.target_length_mm != null ? edge.target_length_mm + ' mm' : '—')],

@@ -391,3 +391,21 @@ def test_emit_viewer_bundle_prea_includes_uv_placements(tmp_path) -> None:
     placements = data["phases"]["preA"]["uv_placements"]
     refs = {p["ref"] for p in placements}
     assert refs == {"R1", "C1"}
+
+
+def test_emit_viewer_bundle_prea_edges_have_scene_field(tmp_path) -> None:
+    """Each preA edge in the bundle must carry a 'scene' field."""
+    result = _minimal_orchestrator_result_for_prea()
+    out = _emit_viewer_bundle(result, tmp_path)
+    data = json.loads(out.read_text())
+    valid_scenes = {
+        "scene_1_fixed_tree",
+        "scene_2_shunt_uv",
+        "scene_3_floating",
+        "not_applicable",
+    }
+    for edge in data["phases"]["preA"]["edges"]:
+        assert "scene" in edge, f"Edge {edge['edge_id']} missing 'scene' field"
+        assert edge["scene"] in valid_scenes, (
+            f"Edge {edge['edge_id']} has unknown scene: {edge['scene']!r}"
+        )

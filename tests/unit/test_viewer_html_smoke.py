@@ -53,3 +53,12 @@ def test_viewer_html_has_key_js_classes() -> None:
         "PhaseTabBar",
     ):
         assert cls in content, f"Missing JS class: {cls}"
+
+
+def test_viewer_html_prea_scene_colors() -> None:
+    content = VIEWER_HTML.read_text()
+    for key in ("EDGE_SCENE1", "EDGE_SCENE2", "EDGE_SCENE3"):
+        assert key in content, f"Missing scene color constant: {key}"
+    assert "scene_1_fixed_tree" in content
+    assert "scene_2_shunt_uv" in content
+    assert "scene_3_floating" in content

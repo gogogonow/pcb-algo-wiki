@@ -211,6 +211,9 @@ def _emit_viewer_bundle(
         board_w=float(board.width),
         board_h=float(board.height),
     )
+    from solver.v2.prea_scenes import classify_edges as _classify_prea_edges
+
+    prea_scene_cls = _classify_prea_edges(result.artifact)
     prea_edges = []
     for edge_id, edge in result.artifact.edges.items():
         ep_positions: dict[str, dict] = {}
@@ -221,10 +224,12 @@ def _emit_viewer_bundle(
                     "x": round(float(xy[0]), 4),
                     "y": round(float(xy[1]), 4),
                 }
+        cls = prea_scene_cls.get(edge_id)
         prea_edges.append(
             {
                 "edge_id": edge_id,
                 "routing_class": edge.routing_class,
+                "scene": cls.scene if cls is not None else "not_applicable",
                 "width_mm": round(float(edge.width), 4) if edge.width else None,
                 "target_length_mm": (
                     round(float(edge.target_length), 4) if edge.target_length else None
