@@ -100,6 +100,14 @@ pcb_solve rf_layout_simplified.yaml
 
 ### 3.5 交互式查看器（推荐）
 
+> **⚡ 快速预览（不等 PhaseC）**  
+> PhaseC 浮动布局 + flex 路由在复杂案例可能耗时数十分钟。若只需查看前三阶段结果，用：
+> ```bash
+> pcb_solve rf_layout_simplified.yaml --stop-after phaseB --quiet
+> # → out/PA_Module_Simplified.viewer.json  几分钟内完成
+> # PhaseC tab 在查看器中显示骨架路由（无 flex 走线），其余三个 Tab 完整可用
+> ```
+
 运行完成后，直接在浏览器打开 `viewer/viewer.html`，点击 **Load JSON ▶** 加载 `out/PA_Module_Simplified.viewer.json`：
 
 | 功能 | 操作 |
