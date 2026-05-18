@@ -144,19 +144,21 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     assert pin1_node["y"] < pin1["y"]
     assert pin2_node["y"] < pin2["y"]
 
-    # IC1 PIN_1 seg3: reference seg1 points downward.
-    # angle=90 rotates B to the right. offset_u=-1.6 moves backward along B,
-    # edge_left uses signed_v=+(W_branch/2 + clearance) along B's left normal.
+    # IC1 PIN_1 seg3: reference seg1 points southward (ref_u = (0,-1)).
+    # angle=90 rotates branch eastward. offset_u=-1.6 shifts anchor 1.6mm
+    # northward along ref; edge_left shifts +(W_branch/2 + clearance) eastward
+    # along ref's math-left perp (east for a southward reference).
     seg3_render = by_edge["IC1_pin1_seg3"]["render_endpoint_positions_mm"]
     seg3_start = seg3_render["IC1_pin1_seg1_universal_node"]
     seg3_end = seg3_render["C5.PIN_1"]  # terminates at C5.PIN_1 (no virtual stub)
     seg3_w = float(by_edge["IC1_pin1_seg3"]["width"])
     clearance = 0.15
-    assert seg3_start["x"] - pin1_node["x"] == pytest.approx(-1.6, abs=0.2)
-    assert seg3_start["y"] - pin1_node["y"] == pytest.approx(
-        seg3_w / 2.0 + clearance,
-        abs=0.2,
+    # x: signed_v shifts east by (w/2 + clearance)
+    assert seg3_start["x"] - pin1_node["x"] == pytest.approx(
+        seg3_w / 2.0 + clearance, abs=0.2
     )
+    # y: offset_u=-1.6 along ref_u=(0,-1) adds +1.6 in y (northward toward pin)
+    assert seg3_start["y"] - pin1_node["y"] == pytest.approx(1.6, abs=0.2)
     assert seg3_end["x"] > seg3_start["x"]
     assert seg3_end["y"] == pytest.approx(seg3_start["y"], abs=0.2)
 

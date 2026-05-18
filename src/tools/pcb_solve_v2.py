@@ -197,6 +197,7 @@ def _emit_viewer_bundle(
     out_dir: Path,
     *,
     layout: "V33Layout | None" = None,
+    junction_templates: "dict[str, Any] | None" = None,
 ) -> Path:
     """Emit {project}.viewer.json — single-file bundle for the PixiJS viewer."""
     _ = layout  # Reserved for future extension
@@ -210,6 +211,7 @@ def _emit_viewer_bundle(
         result,
         board_w=float(board.width),
         board_h=float(board.height),
+        junction_templates=junction_templates,
     )
     from solver.v2.prea_scenes import classify_edges as _classify_prea_edges
 
@@ -1773,14 +1775,16 @@ def _apply_junction_templates(
                 bdx = ux * cos_t - uy * sin_t
                 bdy = ux * sin_t + uy * cos_t
                 branch_edge = artifact.edges.get(branch.edge_id)
+                # anchor in reference-edge frame:
+                #   offset_u along ref_u, signed_v along ref's math-left perp (-uy, ux)
                 anchor = _clamp_board(
                     (
                         nx
-                        + float(branch.offset_u) * bdx
-                        + float(branch.signed_v) * (-bdy),
+                        + float(branch.offset_u) * ux
+                        + float(branch.signed_v) * (-uy),
                         ny
-                        + float(branch.offset_u) * bdy
-                        + float(branch.signed_v) * bdx,
+                        + float(branch.offset_u) * uy
+                        + float(branch.signed_v) * ux,
                     ),
                     board_w,
                     board_h,
@@ -2194,7 +2198,9 @@ def _persist_phase_artefacts(
     logger.info("persist artefacts total: wall=%.2fs", time.perf_counter() - t_all)
 
     t_step = time.perf_counter()
-    viewer_path = _emit_viewer_bundle(result, out_dir, layout=layout)
+    viewer_path = _emit_viewer_bundle(
+        result, out_dir, layout=layout, junction_templates=templates
+    )
     artefacts["viewer_bundle"] = viewer_path
     logger.info("persist viewer bundle: wall=%.2fs", time.perf_counter() - t_step)
 
