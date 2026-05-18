@@ -2,19 +2,36 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
-from tools.pcb_solve_v2 import _make_viewer_components, _collect_skeleton_routes
+from tools.pcb_solve_v2 import (
+    _collect_skeleton_routes,
+    _emit_viewer_bundle,
+    _make_viewer_components,
+)
 from frontend.models import (
-    FrontendArtifact,
     ComponentExpansion,
     BBox,
     ExpandedPad,
+    FrontendArtifact,
     LintReport,
+    NormalizedNode,
     TriagedEdge,
+    UvMeta,
+)
+from schema.geometry_ir import GeometryIR
+from schema.v6_ir import Board, Point
+from solver.v2.node_planner import NodePlan
+from solver.v2.orchestrator import (
+    OrchestratorV2Result,
+    PhaseAResult,
+    PhaseBResult,
+    PhaseCResult,
 )
 from solver.v2.skeleton_router import RouteOutcome, SkeletonReport
-
+from solver.v2.uv_adhesion import UvAdhesionReport
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -184,7 +201,9 @@ def test_collect_skeleton_routes_missing_edge_width() -> None:
     assert result["width_mm"] == 0.0
 
     # edge present but width=None
-    (result2,) = _collect_skeleton_routes(skeleton, _artifact({}, edges={"e1": _edge(None)}))
+    (result2,) = _collect_skeleton_routes(
+        skeleton, _artifact({}, edges={"e1": _edge(None)})
+    )
     assert result2["width_mm"] == 0.0
 
 
@@ -194,3 +213,181 @@ def test_collect_skeleton_routes_failed_route() -> None:
     (result,) = _collect_skeleton_routes(skeleton, artifact)
     assert result["success"] is False
     assert result["failure_reason"] == "no_path"
+
+
+def _minimal_orchestrator_result_for_prea() -> OrchestratorV2Result:
+    fixed_comp = ComponentExpansion(
+        name="U1",
+        footprint_ref="FP_U1",
+        placement_kind="fixed",
+        pads=(
+            ExpandedPad(
+                component="U1",
+                pin="PIN_2",
+                abs_x=10.0,
+                abs_y=10.0,
+                orientation=0.0,
+                kind="fixed",
+            ),
+        ),
+        bbox=BBox(9.5, 9.0, 10.5, 11.0),
+    )
+    r1_uv = ComponentExpansion(
+        name="R1",
+        footprint_ref="FP_R",
+        placement_kind="parametric_uv",
+        pads=(
+            ExpandedPad(
+                component="R1",
+                pin="PIN_1",
+                abs_x=None,
+                abs_y=None,
+                orientation=None,
+                kind="uv_deferred",
+                local_x=-0.5,
+                local_y=0.0,
+            ),
+            ExpandedPad(
+                component="R1",
+                pin="PIN_2",
+                abs_x=None,
+                abs_y=None,
+                orientation=None,
+                kind="uv_deferred",
+                local_x=0.5,
+                local_y=0.0,
+            ),
+        ),
+        uv_meta=UvMeta(anchor_pin="PIN_1", reference_net="$N1"),
+    )
+    c1_uv = ComponentExpansion(
+        name="C1",
+        footprint_ref="FP_C",
+        placement_kind="parametric_uv",
+        pads=(
+            ExpandedPad(
+                component="C1",
+                pin="PIN_1",
+                abs_x=None,
+                abs_y=None,
+                orientation=None,
+                kind="uv_deferred",
+                local_x=-0.5,
+                local_y=0.0,
+            ),
+            ExpandedPad(
+                component="C1",
+                pin="PIN_2",
+                abs_x=None,
+                abs_y=None,
+                orientation=None,
+                kind="uv_deferred",
+                local_x=0.5,
+                local_y=0.0,
+            ),
+        ),
+        uv_meta=UvMeta(anchor_pin="PIN_1", reference_net="$N1"),
+    )
+    edges = {
+        "seg1": TriagedEdge(
+            name="seg1",
+            edge_type="microstrip",
+            routing_class="rf_constrained_locked",
+            target_length=5.0,
+            width=1.0,
+            connections=("U1.PIN_2", "N1"),
+            net="$N1",
+        ),
+        "seg2": TriagedEdge(
+            name="seg2",
+            edge_type="microstrip",
+            routing_class="rf_constrained_locked",
+            target_length=1.3,
+            width=1.8,
+            connections=("N1", "R1.PIN_1"),
+            net="$N1",
+        ),
+        "seg3": TriagedEdge(
+            name="seg3",
+            edge_type="microstrip",
+            routing_class="rf_constrained_locked",
+            target_length=1.5,
+            width=1.2,
+            connections=("N1", "C1.PIN_1"),
+            net="$N1",
+        ),
+    }
+    artifact = FrontendArtifact(
+        project_name="P",
+        board={"width": 40.0, "height": 100.0},
+        lint_report=LintReport(),
+        components={"U1": fixed_comp, "R1": r1_uv, "C1": c1_uv},
+        fixed_terminals={"U1.PIN_2": fixed_comp.pads[0]},
+        uv_components={"R1": r1_uv, "C1": c1_uv},
+        edges=edges,
+        nodes={
+            "N1": NormalizedNode(
+                name="N1",
+                original_type="universal_junction",
+                normalized_type="universal_junction",
+            )
+        },
+    )
+    plan = NodePlan(
+        endpoint_xy={
+            "U1.PIN_2": (10.0, 10.0),
+            "N1": (15.0, 10.0),
+            "R1.PIN_1": (16.3, 10.0),
+            "C1.PIN_1": (15.0, 8.5),
+            "R1.PIN_2": (17.2, 10.0),
+            "C1.PIN_2": (15.0, 7.5),
+        }
+    )
+    skeleton = SkeletonReport(
+        routes={},
+        final_endpoint_um={
+            "U1.PIN_2": (10000, 10000),
+            "N1": (15000, 10000),
+        },
+    )
+    geometry = GeometryIR(
+        project="P",
+        board=Board(
+            origin=Point(x=0.0, y=0.0),
+            width=40.0,
+            height=100.0,
+        ),
+        solve_status="UNKNOWN",
+        solve_wall_seconds=0.0,
+    )
+    return OrchestratorV2Result(
+        artifact=artifact,
+        phase_a=PhaseAResult(skeleton=skeleton, plan=plan, wall_seconds=0.0),
+        phase_b=PhaseBResult(adhesion=UvAdhesionReport(), wall_seconds=0.0),
+        phase_c=PhaseCResult(
+            routed_flex_edges=[], failed_flex_edges=[], wall_seconds=0.0
+        ),
+        geometry=geometry,
+    )
+
+
+def test_emit_viewer_bundle_prea_uses_prea_positions_not_skeleton_only(
+    tmp_path,
+) -> None:
+    result = _minimal_orchestrator_result_for_prea()
+    out = _emit_viewer_bundle(result, tmp_path)
+    data = json.loads(out.read_text())
+    prea_edges = {e["edge_id"]: e for e in data["phases"]["preA"]["edges"]}
+    # seg2/seg3 should still be drawable even though skeleton.final_endpoint_um
+    # only carries seg1 endpoints in this fixture.
+    assert set(prea_edges["seg2"]["endpoint_positions_mm"]) == {"N1", "R1.PIN_1"}
+    assert set(prea_edges["seg3"]["endpoint_positions_mm"]) == {"N1", "C1.PIN_1"}
+
+
+def test_emit_viewer_bundle_prea_includes_uv_placements(tmp_path) -> None:
+    result = _minimal_orchestrator_result_for_prea()
+    out = _emit_viewer_bundle(result, tmp_path)
+    data = json.loads(out.read_text())
+    placements = data["phases"]["preA"]["uv_placements"]
+    refs = {p["ref"] for p in placements}
+    assert refs == {"R1", "C1"}

@@ -172,8 +172,7 @@ def _collect_skeleton_routes(
         width_mm = round(float(edge.width), 4) if (edge and edge.width) else 0.0
         target_mm = round(float(r.target_mm), 4) if r.target_mm is not None else None
         polyline_mm = [
-            [round(x * UM_TO_MM, 4), round(y * UM_TO_MM, 4)]
-            for x, y in r.polyline_um
+            [round(x * UM_TO_MM, 4), round(y * UM_TO_MM, 4)] for x, y in r.polyline_um
         ]
         routes.append(
             {
@@ -183,9 +182,9 @@ def _collect_skeleton_routes(
                 "success": r.success,
                 "length_mm": round(r.length_mm, 4),
                 "target_mm": target_mm,
-                "length_err_pct": round(r.length_err_pct, 2)
-                if r.length_err_pct is not None
-                else None,
+                "length_err_pct": (
+                    round(r.length_err_pct, 2) if r.length_err_pct is not None else None
+                ),
                 "failure_reason": r.failure_reason,
                 "rip_up_round": r.rip_up_round,
             }
@@ -205,31 +204,73 @@ def _emit_viewer_bundle(
     board = result.geometry.board
 
     # --- preA: edge connectivity graph ---
-    skeleton = result.phase_a.skeleton
+    # Use preA solver coordinates (not phaseA skeleton endpoint snapshot), so
+    # preA can render all branches even when some edges are unrouted in phaseA.
+    pre_positions, pre_edge_overrides = _solve_pre_a_positions(
+        result,
+        board_w=float(board.width),
+        board_h=float(board.height),
+    )
     prea_edges = []
     for edge_id, edge in result.artifact.edges.items():
         ep_positions: dict[str, dict] = {}
         for ep in edge.connections:
-            um = skeleton.final_endpoint_um.get(ep)
-            if um is not None:
+            xy = pre_edge_overrides.get(edge_id, {}).get(ep, pre_positions.get(ep))
+            if xy is not None:
                 ep_positions[ep] = {
-                    "x": round(um[0] / 1000.0, 4),
-                    "y": round(um[1] / 1000.0, 4),
+                    "x": round(float(xy[0]), 4),
+                    "y": round(float(xy[1]), 4),
                 }
         prea_edges.append(
             {
                 "edge_id": edge_id,
                 "routing_class": edge.routing_class,
                 "width_mm": round(float(edge.width), 4) if edge.width else None,
-                "target_length_mm": round(float(edge.target_length), 4)
-                if edge.target_length
-                else None,
+                "target_length_mm": (
+                    round(float(edge.target_length), 4) if edge.target_length else None
+                ),
                 "connections": list(edge.connections),
                 "endpoint_positions_mm": ep_positions,
             }
         )
 
+    # --- preA: UV/RLC estimated placements from preA endpoint solve ---
+    pre_uv_placements = []
+    for name, comp in result.artifact.uv_components.items():
+        pad_points: list[tuple[str, float, float]] = []
+        for p in comp.pads:
+            ep = f"{name}.{p.pin}"
+            xy = pre_positions.get(ep)
+            if xy is None:
+                continue
+            pad_points.append((p.pin, round(float(xy[0]), 4), round(float(xy[1]), 4)))
+        if not pad_points:
+            continue
+        pads = [
+            {"pin": pin, "x_mm": x_mm, "y_mm": y_mm} for pin, x_mm, y_mm in pad_points
+        ]
+        anchor_pin = (
+            comp.uv_meta.anchor_pin if comp.uv_meta is not None else pads[0]["pin"]
+        )
+        anchor = next((p for p in pads if p["pin"] == anchor_pin), pads[0])
+        rotation_deg = 0.0
+        if len(pad_points) >= 2:
+            dx = pad_points[1][1] - pad_points[0][1]
+            dy = pad_points[1][2] - pad_points[0][2]
+            if abs(dx) > 1e-9 or abs(dy) > 1e-9:
+                rotation_deg = round(math.degrees(math.atan2(dy, dx)), 4)
+        pre_uv_placements.append(
+            {
+                "ref": name,
+                "anchor_x_mm": anchor["x_mm"],
+                "anchor_y_mm": anchor["y_mm"],
+                "rotation_deg": rotation_deg,
+                "pads": pads,
+            }
+        )
+
     # --- phaseA / phaseB: skeleton routes ---
+    skeleton = result.phase_a.skeleton
     skeleton_routes = _collect_skeleton_routes(skeleton, result.artifact)
 
     # --- phaseB: UV placements ---
@@ -240,8 +281,11 @@ def _emit_viewer_bundle(
             "anchor_y_mm": round(float(p.anchor.y), 4),
             "rotation_deg": float(p.rotation_deg),
             "pads": [
-                {"pin": pp.pin, "x_mm": round(float(pp.point.x), 4),
-                 "y_mm": round(float(pp.point.y), 4)}
+                {
+                    "pin": pp.pin,
+                    "x_mm": round(float(pp.point.x), 4),
+                    "y_mm": round(float(pp.point.y), 4),
+                }
                 for pp in p.pads
             ],
         }
@@ -267,8 +311,13 @@ def _emit_viewer_bundle(
     # Failed flex edges (no polyline)
     for eid in result.phase_c.failed_flex_edges:
         flex_routes.append(
-            {"edge_id": eid, "polyline_mm": [], "width_mm": 0.0,
-             "routing_class": result.artifact.edges[eid].routing_class, "success": False}
+            {
+                "edge_id": eid,
+                "polyline_mm": [],
+                "width_mm": 0.0,
+                "routing_class": result.artifact.edges[eid].routing_class,
+                "success": False,
+            }
         )
 
     # --- Assemble bundle ---
@@ -282,7 +331,7 @@ def _emit_viewer_bundle(
         },
         "components": _make_viewer_components(result.artifact),
         "phases": {
-            "preA": {"edges": prea_edges},
+            "preA": {"edges": prea_edges, "uv_placements": pre_uv_placements},
             "phaseA": {"routes": skeleton_routes},
             "phaseB": {"routes": skeleton_routes, "uv_placements": uv_placements},
             "phaseC": {
