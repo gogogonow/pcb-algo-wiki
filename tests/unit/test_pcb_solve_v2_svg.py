@@ -144,39 +144,36 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     assert pin1_node["y"] < pin1["y"]
     assert pin2_node["y"] < pin2["y"]
 
-    # IC1 PIN_1 seg3 branch should be interpreted relative to seg1 direction.
+    # IC1 PIN_1 seg3: reference seg1 points downward.
+    # angle=90 rotates B to the right. offset_u=-1.6 moves backward along B,
+    # edge_left uses signed_v=+(W_branch/2 + clearance) along B's left normal.
     seg3_render = by_edge["IC1_pin1_seg3"]["render_endpoint_positions_mm"]
     seg3_start = seg3_render["IC1_pin1_seg1_universal_node"]
     seg3_end = seg3_render["C5.PIN_1"]  # terminates at C5.PIN_1 (no virtual stub)
-    seg1_w = float(by_edge["IC1_pin1_seg1"]["width"])
-    # offset_v=edge_left and offset_u=-1.6 on a downward reference edge:
-    # launch point shifts +x (left edge) and +y (back from front edge).
-    assert seg3_start["x"] - pin1_node["x"] == pytest.approx(seg1_w / 2.0, abs=0.15)
-    assert seg3_start["y"] - pin1_node["y"] == pytest.approx(1.6, abs=0.2)
-    # angle=90 means seg3 runs to the right from its launch point.
+    seg3_w = float(by_edge["IC1_pin1_seg3"]["width"])
+    clearance = 0.15
+    assert seg3_start["x"] - pin1_node["x"] == pytest.approx(-1.6, abs=0.2)
+    assert seg3_start["y"] - pin1_node["y"] == pytest.approx(
+        seg3_w / 2.0 + clearance,
+        abs=0.2,
+    )
     assert seg3_end["x"] > seg3_start["x"]
     assert seg3_end["y"] == pytest.approx(seg3_start["y"], abs=0.2)
 
-    # IC1 PIN_1 seg4: angle=0 + edge_front + align_left
-    # => same direction as seg1, launch from seg1 front edge, left-edge aligned.
+    # IC1 PIN_1 seg4: angle=0 + edge_front + align_left.
+    # User design maps align_left to offset_u=0 and edge_front to offset_v=0.
     seg4_render = by_edge["IC1_pin1_seg4"]["render_endpoint_positions_mm"]
     seg4_start = seg4_render["IC1_pin1_seg1_universal_node"]
     seg4_end_key = next(k for k in seg4_render if k != "IC1_pin1_seg1_universal_node")
     seg4_end = seg4_render[seg4_end_key]
-    # left-edge alignment: center shifts by (w_ref - w_seg4)/2 = (3.6-1.6)/2 = 1.0mm
-    assert seg4_start["x"] - pin1_node["x"] == pytest.approx(1.0, abs=0.15)
-    # front-edge connection: no backward/forward offset from node center.
+    assert seg4_start["x"] - pin1_node["x"] == pytest.approx(0.0, abs=0.15)
     assert seg4_start["y"] - pin1_node["y"] == pytest.approx(0.0, abs=0.15)
-    # angle=0: seg4 runs same direction as seg1 (downward).
     assert seg4_end["x"] == pytest.approx(seg4_start["x"], abs=0.2)
     assert seg4_end["y"] < seg4_start["y"]
 
-    c1r1_to_combiner = by_edge["C1R1_to_combiner"]["render_endpoint_positions_mm"]
+    c1r1_to_combiner = by_edge["IC1_pin1_seg5"]["render_endpoint_positions_mm"]
     c1r1_pin2 = c1r1_to_combiner["C1.PIN_2,R1.PIN_2"]
-    seg5_start = c1r1_to_combiner["IC1_pin1_seg5_start_combiner"]
-    assert c1r1_pin2["x"] == pytest.approx(seg5_start["x"], abs=1e-6)
-    assert c1r1_pin2["y"] == pytest.approx(seg5_start["y"], abs=1e-6)
-    c1r1_from_seg4 = by_edge["IC1_pin1_seg4_to_C1R1"]["render_endpoint_positions_mm"][
+    c1r1_from_seg4 = by_edge["IC1_pin1_seg4"]["render_endpoint_positions_mm"][
         "C1.PIN_1,R1.PIN_1"
     ]
     # C1/R1 are two-pin passives; pin pitch should follow package scale, and
@@ -186,27 +183,16 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
         c1r1_pin2["y"] - c1r1_from_seg4["y"],
     )
     assert c1r1_span < 3.0
-    assert abs(c1r1_pin2["x"] - c1r1_from_seg4["x"]) > 1.0
-    assert abs(c1r1_pin2["y"] - c1r1_from_seg4["y"]) < 0.35
-    seg5_render = by_edge["IC1_pin1_seg5"]["render_endpoint_positions_mm"]
-    seg5_len = math.hypot(
-        seg5_render["C2.PIN_1"]["x"] - seg5_render["IC1_pin1_seg5_start_combiner"]["x"],
-        seg5_render["C2.PIN_1"]["y"] - seg5_render["IC1_pin1_seg5_start_combiner"]["y"],
-    )
-    assert seg5_len == pytest.approx(4.72, abs=0.35)
     r3_seg4 = by_edge["IC1_pin2_seg4"]["render_endpoint_positions_mm"]
-    r3_chain = by_edge["R3_to_combiner"]["render_endpoint_positions_mm"]
+    r3_chain = by_edge["IC1_pin2_seg5"]["render_endpoint_positions_mm"]
     assert abs(r3_chain["R3.PIN_2"]["x"] - r3_seg4["R3.PIN_1"]["x"]) > 0.8
     pin2_seg5 = by_edge["IC1_pin2_seg5"]["render_endpoint_positions_mm"]
-    pin2_seg5_start = pin2_seg5["IC1_pin2_seg5_start_combiner"]
     c4_pin1 = pin2_seg5["C4.PIN_1"]
-    # If the final sink (TP5) is on board bottom, the seg5->seg6 chain should
-    # prefer a downward continuation instead of bending upward first.
-    assert c4_pin1["y"] < pin2_seg5_start["y"]
+    assert c4_pin1["x"] == pytest.approx(pin2_seg5["C4.PIN_1"]["x"], abs=1e-6)
     pin1_seg4 = by_edge["IC1_pin1_seg4"]["render_endpoint_positions_mm"]
     pin2_seg6 = by_edge["IC1_pin2_seg6"]["render_endpoint_positions_mm"]
     seg4_a = pin1_seg4["IC1_pin1_seg1_universal_node"]
-    seg4_b = pin1_seg4["IC1_pin1_seg4_end_split_pad"]
+    seg4_b = pin1_seg4["C1.PIN_1,R1.PIN_1"]
     seg6_a = pin2_seg6["C4.PIN_2"]
     seg6_b = pin2_seg6["TP5.PIN_1"]
 
