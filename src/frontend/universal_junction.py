@@ -1,19 +1,15 @@
 """M3 — universal_junction template expansion.
 
-For each `universal_junction` node we emit one BranchConstraint per branch:
-the (dx, dy) constants that, added to the node's center variable pair,
-yield the absolute (x, y) coordinates of the branch's far endpoint.
-
-Per `ALGORITHM-OVERVIEW.md` §5:
+The template layer resolves symbolic branch parameters only:
 
 ```
-signed_v = +(W/2 + clearance)   if offset_v == "edge_left"
-         = -(W/2 + clearance)   if offset_v == "edge_right"
-         = 0                    if offset_v == "align_center"
-cosθ, sinθ = cos(angle°), sin(angle°)
-dx = cosθ · offset_u  −  sinθ · signed_v
-dy = sinθ · offset_u  +  cosθ · signed_v
+signed_v = +(W_branch/2 + clearance) if offset_v == "edge_left"
+         = -(W_branch/2 + clearance) if offset_v == "edge_right"
+         = 0                          if offset_v == "edge_front" or "align_center"
 ```
+
+Symbolic offset_u tokens align_left/align_center/align_right resolve to 0.0.
+The PreA application layer rotates these values into the reference edge frame.
 """
 
 from __future__ import annotations

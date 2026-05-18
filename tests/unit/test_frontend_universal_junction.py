@@ -15,7 +15,7 @@ def _layout(
     angle: float,
     offset_v: str,
     *,
-    offset_u: float = 1.0,
+    offset_u: object = 1.0,
     width: float = 1.0,
     clearance: float = 0.2,
 ) -> V33Layout:
@@ -107,6 +107,18 @@ def test_branch_geometry(
         assert branch.dx == pytest.approx(expected_dx)
     if expected_dy is not None:
         assert branch.dy == pytest.approx(expected_dy)
+
+
+@pytest.mark.parametrize("token", ["align_left", "align_center", "align_right"])
+def test_symbolic_offset_u_tokens_resolve_to_zero(token: str) -> None:
+    layout = _layout(0.0, "edge_front", offset_u=token)
+    templates = expand_universal_junctions(layout)
+    branch = templates["J1"].branches[0]
+    assert branch.offset_u == 0.0
+    assert branch.signed_v_kind is SignedVKind.EDGE_FRONT
+    assert branch.signed_v == 0.0
+    assert branch.dx == 0.0
+    assert branch.dy == 0.0
 
 
 def test_target_endpoint_is_far_side() -> None:
