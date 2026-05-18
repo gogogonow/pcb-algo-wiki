@@ -14,7 +14,6 @@ import logging
 import math
 import sys
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
@@ -193,85 +192,32 @@ def _collect_skeleton_routes(
     return routes
 
 
-@dataclass
-class PreATopologyModel:
-    edges: list[dict[str, Any]]
-    uv_placements: list[dict[str, Any]]
-
-
-def _iter_prea_uv_components(artifact: "FrontendArtifact") -> dict[str, Any]:
-    if artifact.uv_components:
-        return dict(artifact.uv_components)
-    return {
-        ref: comp
-        for ref, comp in artifact.components.items()
-        if comp.placement_kind == "parametric_uv"
-    }
-
-
-def _build_prea_topology_model(
+def _emit_viewer_bundle(
     result: "OrchestratorV2Result",
+    out_dir: Path,
     *,
-    board_w: float,
-    board_h: float,
-) -> PreATopologyModel:
+    layout: "V33Layout | None" = None,
+) -> Path:
+    """Emit {project}.viewer.json — single-file bundle for the PixiJS viewer."""
+    _ = layout  # Reserved for future extension
+    project = result.geometry.project
+    board = result.geometry.board
+
+    # --- preA: edge connectivity graph ---
+    # Use preA solver coordinates (not phaseA skeleton endpoint snapshot), so
+    # preA can render all branches even when some edges are unrouted in phaseA.
     pre_positions, pre_edge_overrides = _solve_pre_a_positions(
         result,
-        board_w=board_w,
-        board_h=board_h,
+        board_w=float(board.width),
+        board_h=float(board.height),
     )
-    edge_endpoint_overrides = {
-        edge_id: dict(overrides) for edge_id, overrides in pre_edge_overrides.items()
-    }
-
-    endpoint_microstrip_edges: dict[str, list[str]] = {}
-    for edge_id, edge in result.artifact.edges.items():
-        if edge.edge_type != "microstrip" or len(edge.connections) != 2:
-            continue
-        for endpoint in edge.connections:
-            endpoint_microstrip_edges.setdefault(endpoint, []).append(edge_id)
-
-    for endpoint, edge_ids in endpoint_microstrip_edges.items():
-        if len(edge_ids) <= 1:
-            continue
-        node_xy = pre_positions.get(endpoint)
-        if node_xy is None:
-            continue
-        for idx, edge_id in enumerate(sorted(edge_ids)):
-            if endpoint in edge_endpoint_overrides.get(edge_id, {}):
-                continue
-            edge = result.artifact.edges[edge_id]
-            a_id, b_id = edge.connections
-            other_id = b_id if a_id == endpoint else a_id
-            other_xy = pre_positions.get(other_id)
-            if other_xy is not None:
-                vx = other_xy[0] - node_xy[0]
-                vy = other_xy[1] - node_xy[1]
-            else:
-                theta = (2.0 * math.pi * idx) / max(len(edge_ids), 1)
-                vx = math.cos(theta)
-                vy = math.sin(theta)
-            norm = math.hypot(vx, vy)
-            if norm <= 1e-9:
-                theta = (2.0 * math.pi * idx) / max(len(edge_ids), 1)
-                vx = math.cos(theta)
-                vy = math.sin(theta)
-                norm = 1.0
-            launch = max(float(edge.width or 0.0) * 0.5, 0.2)
-            edge_endpoint_overrides.setdefault(edge_id, {})[endpoint] = (
-                node_xy[0] + (vx / norm) * launch,
-                node_xy[1] + (vy / norm) * launch,
-            )
-
     prea_edges = []
     for edge_id, edge in result.artifact.edges.items():
         ep_positions: dict[str, dict] = {}
-        for endpoint in edge.connections:
-            xy = edge_endpoint_overrides.get(edge_id, {}).get(
-                endpoint, pre_positions.get(endpoint)
-            )
+        for ep in edge.connections:
+            xy = pre_edge_overrides.get(edge_id, {}).get(ep, pre_positions.get(ep))
             if xy is not None:
-                ep_positions[endpoint] = {
+                ep_positions[ep] = {
                     "x": round(float(xy[0]), 4),
                     "y": round(float(xy[1]), 4),
                 }
@@ -288,15 +234,16 @@ def _build_prea_topology_model(
             }
         )
 
+    # --- preA: UV/RLC estimated placements from preA endpoint solve ---
     pre_uv_placements = []
-    for name, comp in _iter_prea_uv_components(result.artifact).items():
+    for name, comp in result.artifact.uv_components.items():
         pad_points: list[tuple[str, float, float]] = []
-        for pad in comp.pads:
-            endpoint = f"{name}.{pad.pin}"
-            xy = pre_positions.get(endpoint)
+        for p in comp.pads:
+            ep = f"{name}.{p.pin}"
+            xy = pre_positions.get(ep)
             if xy is None:
                 continue
-            pad_points.append((pad.pin, round(float(xy[0]), 4), round(float(xy[1]), 4)))
+            pad_points.append((p.pin, round(float(xy[0]), 4), round(float(xy[1]), 4)))
         if not pad_points:
             continue
         pads = [
@@ -305,7 +252,7 @@ def _build_prea_topology_model(
         anchor_pin = (
             comp.uv_meta.anchor_pin if comp.uv_meta is not None else pads[0]["pin"]
         )
-        anchor = next((pad for pad in pads if pad["pin"] == anchor_pin), pads[0])
+        anchor = next((p for p in pads if p["pin"] == anchor_pin), pads[0])
         rotation_deg = 0.0
         if len(pad_points) >= 2:
             dx = pad_points[1][1] - pad_points[0][1]
@@ -321,27 +268,6 @@ def _build_prea_topology_model(
                 "pads": pads,
             }
         )
-
-    return PreATopologyModel(edges=prea_edges, uv_placements=pre_uv_placements)
-
-
-def _emit_viewer_bundle(
-    result: "OrchestratorV2Result",
-    out_dir: Path,
-    *,
-    layout: "V33Layout | None" = None,
-) -> Path:
-    """Emit {project}.viewer.json — single-file bundle for the PixiJS viewer."""
-    _ = layout  # Reserved for future extension
-    project = result.geometry.project
-    board = result.geometry.board
-
-    # --- preA: topology-first connectivity + UV estimate ---
-    pre_a_topology = _build_prea_topology_model(
-        result,
-        board_w=float(board.width),
-        board_h=float(board.height),
-    )
 
     # --- phaseA / phaseB: skeleton routes ---
     skeleton = result.phase_a.skeleton
@@ -405,10 +331,7 @@ def _emit_viewer_bundle(
         },
         "components": _make_viewer_components(result.artifact),
         "phases": {
-            "preA": {
-                "edges": pre_a_topology.edges,
-                "uv_placements": pre_a_topology.uv_placements,
-            },
+            "preA": {"edges": prea_edges, "uv_placements": pre_uv_placements},
             "phaseA": {"routes": skeleton_routes},
             "phaseB": {"routes": skeleton_routes, "uv_placements": uv_placements},
             "phaseC": {
