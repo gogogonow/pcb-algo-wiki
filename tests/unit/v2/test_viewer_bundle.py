@@ -406,6 +406,6 @@ def test_emit_viewer_bundle_prea_edges_have_scene_field(tmp_path) -> None:
     }
     for edge in data["phases"]["preA"]["edges"]:
         assert "scene" in edge, f"Edge {edge['edge_id']} missing 'scene' field"
-        assert edge["scene"] in valid_scenes, (
-            f"Edge {edge['edge_id']} has unknown scene: {edge['scene']!r}"
-        )
+        assert (
+            edge["scene"] in valid_scenes
+        ), f"Edge {edge['edge_id']} has unknown scene: {edge['scene']!r}"

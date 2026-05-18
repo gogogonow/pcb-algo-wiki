@@ -62,3 +62,22 @@ def test_viewer_html_prea_scene_colors() -> None:
     assert "scene_1_fixed_tree" in content
     assert "scene_2_shunt_uv" in content
     assert "scene_3_floating" in content
+
+
+def test_viewer_html_prea_list_panel() -> None:
+    content = VIEWER_HTML.read_text()
+    # HTML placeholder
+    assert 'id="prea-list"' in content, "Missing #prea-list element"
+    # CSS classes
+    for cls in (".prea-item", ".prea-group", ".prea-group-hdr", ".prea-dot"):
+        assert cls in content, f"Missing CSS class: {cls}"
+    # JS class
+    assert "PreAListPanel" in content, "Missing PreAListPanel class"
+    assert "syncSelect" in content, "Missing syncSelect method"
+
+
+def test_viewer_html_prea_reasoning() -> None:
+    content = VIEWER_HTML.read_text()
+    assert "prop-reasoning" in content, "Missing .prop-reasoning class"
+    assert "_edgeReasoning" in content, "Missing _edgeReasoning method"
+    assert "推理说明" in content, "Missing reasoning section label"

@@ -43,6 +43,35 @@
   .filter-item input[type=checkbox] { cursor: pointer; accent-color: #2196f3; }
   .filter-item label { cursor: pointer; color: #bbb; user-select: none; }
 
+  /* ─── preA element list ───────────────────────────────────────────────── */
+  #prea-list { margin-top: 10px; border-top: 1px solid #2a2a2a; padding-top: 8px; }
+  .prea-group { margin-bottom: 8px; }
+  .prea-group-hdr {
+    display: flex; align-items: center; gap: 5px; cursor: default;
+    color: #777; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+    padding: 2px 0; user-select: none;
+  }
+  .prea-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .prea-items { margin-left: 2px; }
+  .prea-item {
+    padding: 2px 6px; cursor: pointer; color: #aaa; font-size: 11px;
+    border-left: 2px solid transparent; border-radius: 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    line-height: 1.6;
+  }
+  .prea-item:hover { background: #222; color: #ddd; }
+  .prea-item.prea-selected { background: #0d3560; border-left-color: #2196f3; color: #fff; }
+  .prea-conn { color: #444; font-size: 10px; margin-left: 4px; }
+
+  /* ─── reasoning block in inspector ───────────────────────────────────── */
+  .prop-reasoning {
+    margin-top: 10px; padding: 8px 10px; background: #141414;
+    border-left: 3px solid #2196f3; color: #999; font-size: 11px;
+    line-height: 1.6; word-break: break-word;
+  }
+  .prop-reasoning-title { color: #555; font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.5px; margin-bottom: 4px; }
+
   #canvas-container {
     overflow: hidden; position: relative; background: #111;
   }
@@ -90,6 +119,7 @@
     <div class="filter-item"><input type="checkbox" id="chk-fixed" checked><label for="chk-fixed">Fixed Components</label></div>
     <div class="filter-item"><input type="checkbox" id="chk-pads" checked><label for="chk-pads">Pads</label></div>
     <div class="filter-item"><input type="checkbox" id="chk-failed" checked><label for="chk-failed">Failed Routes</label></div>
+    <div id="prea-list" style="display:none"></div>
   </div>
   <div id="canvas-container"></div>
   <div id="prop-panel">
@@ -552,6 +582,30 @@ class SceneRenderer {
     this.highlightLayer.addChild(hl);
   }
 
+  // Select a preA dashed edge (no polyline — uses endpoint_positions_mm)
+  selectEdge(edge, gfx) {
+    this.clearSelection();
+    this.selectedGfx = gfx;
+    for (const r of this.allRouteGfx) {
+      if (r.gfx !== gfx) r.gfx.alpha = C.DIM_ALPHA;
+    }
+    for (const c of this.allCompGfx) c.gfx.alpha = C.DIM_ALPHA;
+    this._highlightEdge(edge);
+  }
+
+  _highlightEdge(edge) {
+    const ep = edge.endpoint_positions_mm || {};
+    const pts = Object.values(ep);
+    if (pts.length < 2) return;
+    const h = new PIXI.Graphics();
+    const x1 = this.sx(pts[0].x); const y1 = this.sy(pts[0].y);
+    const x2 = this.sx(pts[1].x); const y2 = this.sy(pts[1].y);
+    h.moveTo(x1, y1).lineTo(x2, y2);
+    h.stroke({ color: C.SEL, width: Math.max(3, 0.5 * this.scale) + 2, cap: 'round' });
+    h.alpha = 0.65;
+    this.highlightLayer.addChild(h);
+  }
+
   // expose layer refs for FilterPanel
   get filterTargets() {
     return {
@@ -653,9 +707,9 @@ class PropertyInspector {
 
   showEdge(edge) {
     const sceneLabels = {
-      'scene_1_fixed_tree': 'Fixed Tree (exact)',
-      'scene_2_shunt_uv':   'Shunt UV (deferred→PhaseB)',
-      'scene_3_floating':   'Floating (approx)',
+      'scene_1_fixed_tree': '场景1 · 固定树（精确）',
+      'scene_2_shunt_uv':   '场景2 · Shunt UV（延迟→PhaseB）',
+      'scene_3_floating':   '场景3 · 浮动（BFS近似）',
       'not_applicable':     'N/A',
     };
     const rows = [
@@ -664,11 +718,34 @@ class PropertyInspector {
       ['Class',  edge.routing_class || '—'],
       ['Width',  (edge.width_mm != null ? edge.width_mm + ' mm' : '—')],
       ['Target', (edge.target_length_mm != null ? edge.target_length_mm + ' mm' : '—')],
-      ['Conns',  (edge.connections || []).join(', ') || '—'],
+      ['Conns',  (edge.connections || []).join(' → ') || '—'],
     ];
-    this.el.innerHTML = rows.map(([k, v]) =>
+    let html = rows.map(([k, v]) =>
       `<div class="prop-row"><span class="prop-key">${k}:</span><span class="prop-val">${v}</span></div>`
     ).join('');
+    const reasoning = this._edgeReasoning(edge);
+    if (reasoning) {
+      html += `<div class="prop-reasoning"><div class="prop-reasoning-title">推理说明</div>${reasoning}</div>`;
+    }
+    this.el.innerHTML = html;
+  }
+
+  _edgeReasoning(edge) {
+    const conns = edge.connections || [];
+    const a = conns[0] || '?';
+    const b = conns[1] || '?';
+    const w   = edge.width_mm != null ? `${edge.width_mm} mm` : '?';
+    const len = edge.target_length_mm != null ? `${edge.target_length_mm} mm` : '?';
+    switch (edge.scene) {
+      case 'scene_1_fixed_tree':
+        return `端点 <b>${a}</b> / <b>${b}</b> 中至少有一端属于 IC/终端等固定器件，其 pin 坐标和出线方向已在版图 terminal 中声明。PreA 从固定端沿 pin 方向延伸目标长度 <b>${len}</b>（线宽 <b>${w}</b>）直接推导出另一端坐标。此为<b>精确值</b>，后续路由阶段不再调整微带几何。`;
+      case 'scene_2_shunt_uv':
+        return `此边为 Shunt UV RLC 并联支路，PreA 阶段<b>不求解位置</b>。器件一脚接微带线节点，另一脚接地/浮空。最终位置在 <b>PhaseB UV 吸附</b>阶段根据邻近微带线最终坐标自动确定。当前显示坐标为 plan_xy 占位值，仅保证 SVG/JSON 完整性。`;
+      case 'scene_3_floating':
+        return `两端均为浮动器件（无固定 pin）。PreA 采用 <b>BFS 外推</b>：从场景1已确定的端点出发，沿拓扑邻接顺序按目标长度 <b>${len}</b> 估算坐标。此为<b>近似值</b>，仅供初始布局参考，PhaseA 路由会在此基础上精细调整。`;
+      default:
+        return `非微带线边（routing_class: ${edge.routing_class || '?'}），PreA 不直接管理此边几何位置。`;
+    }
   }
 
   showComponent(comp, kind) {
@@ -682,6 +759,142 @@ class PropertyInspector {
     this.el.innerHTML = rows.map(([k, v]) =>
       `<div class="prop-row"><span class="prop-key">${k}:</span><span class="prop-val">${v}</span></div>`
     ).join('');
+  }
+}
+
+// ─── PreAListPanel ────────────────────────────────────────────────────────────
+class PreAListPanel {
+  constructor(el, renderer, inspector) {
+    this.el = el;
+    this.renderer = renderer;
+    this.inspector = inspector;
+    this.selectedId   = null;
+    this.selectedType = null;
+  }
+
+  show(phaseData, components) {
+    this.el.style.display = '';
+    this._build(phaseData, components);
+  }
+
+  hide() {
+    this.el.style.display = 'none';
+    this.el.innerHTML = '';
+    this.selectedId = null;
+  }
+
+  // Sync highlight from canvas → list (called by InteractionMgr)
+  syncSelect(id, type) {
+    this.selectedId = id; this.selectedType = type;
+    this.el.querySelectorAll('.prea-item').forEach(el => {
+      el.classList.toggle('prea-selected',
+        id !== null && el.dataset.id === id && el.dataset.type === type);
+    });
+  }
+
+  _build(phaseData, components) {
+    const edges        = phaseData.edges        || [];
+    const uvPlacements = phaseData.uv_placements || [];
+
+    const SCENE_META = {
+      scene_1_fixed_tree: { label: '微带线 · 固定树', color: '#4caf50' },
+      scene_2_shunt_uv:   { label: '微带线 · Shunt UV', color: '#666' },
+      scene_3_floating:   { label: '微带线 · 浮动', color: '#f5a623' },
+      not_applicable:     { label: '微带线 · 其他', color: '#777' },
+    };
+
+    // Group edges by scene
+    const grouped = {};
+    for (const edge of edges) {
+      const key = edge.scene || 'not_applicable';
+      (grouped[key] = grouped[key] || []).push(edge);
+    }
+
+    let html = '<h3 style="color:#666;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">PreA 元素</h3>';
+
+    const SCENE_ORDER = ['scene_1_fixed_tree', 'scene_2_shunt_uv', 'scene_3_floating', 'not_applicable'];
+    for (const key of SCENE_ORDER) {
+      const group = grouped[key];
+      if (!group || group.length === 0) continue;
+      const meta = SCENE_META[key];
+      html += `<div class="prea-group">
+        <div class="prea-group-hdr">
+          <span class="prea-dot" style="background:${meta.color}"></span>
+          ${meta.label} <span style="color:#444">[${group.length}]</span>
+        </div>
+        <div class="prea-items">`;
+      for (const edge of group) {
+        const conns = (edge.connections || []).join(' → ');
+        html += `<div class="prea-item" data-id="${edge.edge_id}" data-type="edge"
+            title="${conns}">
+          ${edge.edge_id}<span class="prea-conn">${conns}</span>
+        </div>`;
+      }
+      html += '</div></div>';
+    }
+
+    // UV components (preA placements)
+    const uvRefs = new Set(uvPlacements.map(u => u.ref));
+    if (uvPlacements.length > 0) {
+      html += `<div class="prea-group">
+        <div class="prea-group-hdr">
+          <span class="prea-dot" style="background:#4caf50"></span>
+          UV 器件 <span style="color:#444">[${uvPlacements.length}]</span>
+        </div>
+        <div class="prea-items">`;
+      for (const uv of uvPlacements) {
+        html += `<div class="prea-item" data-id="${uv.ref}" data-type="comp">${uv.ref}</div>`;
+      }
+      html += '</div></div>';
+    }
+
+    // Fixed / floating components (excluding UV already listed)
+    const fixed   = components.filter(c => c.kind === 'fixed');
+    const floating = components.filter(c => c.kind === 'floating' && !uvRefs.has(c.ref));
+    const compGroups = [
+      { label: '固定器件', color: '#888', items: fixed },
+      { label: '浮动器件', color: '#2196f3', items: floating },
+    ];
+    for (const { label, color, items } of compGroups) {
+      if (items.length === 0) continue;
+      html += `<div class="prea-group">
+        <div class="prea-group-hdr">
+          <span class="prea-dot" style="background:${color}"></span>
+          ${label} <span style="color:#444">[${items.length}]</span>
+        </div>
+        <div class="prea-items">`;
+      for (const comp of items) {
+        html += `<div class="prea-item" data-id="${comp.ref}" data-type="comp">${comp.ref}</div>`;
+      }
+      html += '</div></div>';
+    }
+
+    this.el.innerHTML = html;
+
+    // Attach click handlers
+    this.el.querySelectorAll('.prea-item').forEach(item => {
+      item.addEventListener('click', () => this._onItemClick(item));
+    });
+  }
+
+  _onItemClick(item) {
+    const id   = item.dataset.id;
+    const type = item.dataset.type;
+    this.syncSelect(id, type);
+
+    if (type === 'edge') {
+      const entry = this.renderer.allRouteGfx.find(r => r.route?.edge_id === id);
+      if (entry) {
+        this.renderer.selectEdge(entry.route, entry.gfx);
+        this.inspector.showEdge(entry.route);
+      }
+    } else {
+      const entry = this.renderer.allCompGfx.find(c => c.comp?.ref === id);
+      if (entry) {
+        this.renderer.selectComponent(entry.comp, entry.gfx);
+        this.inspector.showComponent(entry.comp, entry.kind);
+      }
+    }
   }
 }
 
@@ -721,9 +934,10 @@ class FilterPanel {
 
 // ─── InteractionMgr ──────────────────────────────────────────────────────────
 class InteractionMgr {
-  constructor(renderer, inspector) {
+  constructor(renderer, inspector, preAList) {
     this.renderer = renderer;
     this.inspector = inspector;
+    this.preAList = preAList;
     const tooltip = document.getElementById('tooltip');
 
     renderer.onHover = (info, e) => {
@@ -747,12 +961,15 @@ class InteractionMgr {
       if (info.type === 'route') {
         renderer.selectRoute(info.route, gfx);
         inspector.showRoute(info.route, info.kind);
+        preAList && preAList.syncSelect(null, null);
       } else if (info.type === 'edge') {
-        renderer.selectRoute(info.route || info.edge, gfx);
+        renderer.selectEdge(info.edge, gfx);
         inspector.showEdge(info.edge);
+        preAList && preAList.syncSelect(info.edge.edge_id, 'edge');
       } else if (info.type === 'comp') {
         renderer.selectComponent(info.comp, gfx);
         inspector.showComponent(info.comp, info.kind);
+        preAList && preAList.syncSelect(info.comp.ref, 'comp');
       }
     };
 
@@ -761,14 +978,16 @@ class InteractionMgr {
     renderer.app.stage.on('pointerdown', () => {
       renderer.clearSelection();
       inspector.clear();
+      preAList && preAList.syncSelect(null, null);
     });
   }
 }
 
 // ─── PhaseTabBar ─────────────────────────────────────────────────────────────
 class PhaseTabBar {
-  constructor(renderer) {
+  constructor(renderer, preAList) {
     this.renderer = renderer;
+    this.preAList = preAList;
     this.data = null;
     this.currentPhase = 'preA';
     document.querySelectorAll('.tab').forEach(btn => {
@@ -789,6 +1008,13 @@ class PhaseTabBar {
   _render() {
     if (!this.data) return;
     this.renderer.loadPhase(this.data, this.currentPhase);
+    if (this.preAList) {
+      if (this.currentPhase === 'preA') {
+        this.preAList.show(this.data.phaseData('preA'), this.data.components);
+      } else {
+        this.preAList.hide();
+      }
+    }
   }
 }
 
@@ -801,10 +1027,12 @@ class PhaseTabBar {
   const panZoom   = new PanZoom(renderer);
   panZoom.attach();
 
-  const inspector = new PropertyInspector(document.getElementById('prop-content'));
-  const interMgr  = new InteractionMgr(renderer, inspector);  // eslint-disable-line no-unused-vars
-  const filterPanel = new FilterPanel(renderer);              // eslint-disable-line no-unused-vars
-  const tabBar    = new PhaseTabBar(renderer);
+  const inspector   = new PropertyInspector(document.getElementById('prop-content'));
+  const preAListEl  = document.getElementById('prea-list');
+  const preAList    = new PreAListPanel(preAListEl, renderer, inspector);
+  const interMgr    = new InteractionMgr(renderer, inspector, preAList);  // eslint-disable-line no-unused-vars
+  const filterPanel = new FilterPanel(renderer);                          // eslint-disable-line no-unused-vars
+  const tabBar      = new PhaseTabBar(renderer, preAList);
 
   // Load button
   const loadBtn   = document.getElementById('load-btn');
