@@ -195,8 +195,6 @@ def _collect_skeleton_routes(
 
 @dataclass
 class PreATopologyModel:
-    endpoint_positions: dict[str, tuple[float, float]]
-    edge_endpoint_overrides: dict[str, dict[str, tuple[float, float]]]
     edges: list[dict[str, Any]]
     uv_placements: list[dict[str, Any]]
 
@@ -216,15 +214,11 @@ def _build_prea_topology_model(
     *,
     board_w: float,
     board_h: float,
-    junction_templates: dict[str, UniversalJunctionTemplate] | None = None,
-    branch_offset_u_tokens: dict[str, str] | None = None,
 ) -> PreATopologyModel:
     pre_positions, pre_edge_overrides = _solve_pre_a_positions(
         result,
         board_w=board_w,
         board_h=board_h,
-        junction_templates=junction_templates,
-        branch_offset_u_tokens=branch_offset_u_tokens,
     )
     edge_endpoint_overrides = {
         edge_id: dict(overrides) for edge_id, overrides in pre_edge_overrides.items()
@@ -328,12 +322,7 @@ def _build_prea_topology_model(
             }
         )
 
-    return PreATopologyModel(
-        endpoint_positions=pre_positions,
-        edge_endpoint_overrides=edge_endpoint_overrides,
-        edges=prea_edges,
-        uv_placements=pre_uv_placements,
-    )
+    return PreATopologyModel(edges=prea_edges, uv_placements=pre_uv_placements)
 
 
 def _emit_viewer_bundle(
@@ -341,7 +330,6 @@ def _emit_viewer_bundle(
     out_dir: Path,
     *,
     layout: "V33Layout | None" = None,
-    pre_a_topology: PreATopologyModel | None = None,
 ) -> Path:
     """Emit {project}.viewer.json — single-file bundle for the PixiJS viewer."""
     _ = layout  # Reserved for future extension
@@ -349,7 +337,7 @@ def _emit_viewer_bundle(
     board = result.geometry.board
 
     # --- preA: topology-first connectivity + UV estimate ---
-    model = pre_a_topology or _build_prea_topology_model(
+    pre_a_topology = _build_prea_topology_model(
         result,
         board_w=float(board.width),
         board_h=float(board.height),
@@ -418,8 +406,8 @@ def _emit_viewer_bundle(
         "components": _make_viewer_components(result.artifact),
         "phases": {
             "preA": {
-                "edges": model.edges,
-                "uv_placements": model.uv_placements,
+                "edges": pre_a_topology.edges,
+                "uv_placements": pre_a_topology.uv_placements,
             },
             "phaseA": {"routes": skeleton_routes},
             "phaseB": {"routes": skeleton_routes, "uv_placements": uv_placements},
@@ -1041,7 +1029,6 @@ def _render_pre_phase_svg(
     *,
     templates: dict[str, UniversalJunctionTemplate] | None = None,
     branch_offset_u_tokens: dict[str, str] | None = None,
-    pre_a_topology: PreATopologyModel | None = None,
     layout: V33Layout | None = None,
     banner: str = "",
     px_per_mm: float = 6.0,
@@ -1060,23 +1047,13 @@ def _render_pre_phase_svg(
     artifact = result.artifact
     board_w = float(artifact.board.get("width", 40.0))
     board_h = float(artifact.board.get("height", 100.0))
-    model = pre_a_topology or _build_prea_topology_model(
+    positions, edge_endpoint_overrides = _solve_pre_a_positions(
         result,
         board_w=board_w,
         board_h=board_h,
         junction_templates=templates,
         branch_offset_u_tokens=branch_offset_u_tokens,
     )
-    positions = dict(model.endpoint_positions)
-    edge_endpoint_overrides = {
-        edge_id: dict(overrides)
-        for edge_id, overrides in model.edge_endpoint_overrides.items()
-    }
-    uv_placements_by_ref = {
-        placement["ref"]: placement
-        for placement in model.uv_placements
-        if placement.get("ref")
-    }
     virtual_endpoints = {
         endpoint
         for endpoint in positions
@@ -1270,31 +1247,21 @@ def _render_pre_phase_svg(
             cy = ay + t * vy
             return math.hypot(px - cx, py - cy)
 
-        for comp_id, placement_data in uv_placements_by_ref.items():
+        for comp_id, uv in artifact.uv_components.items():
             component = layout.components.get(comp_id)
             if component is None or component.footprint_ref is None:
                 continue
             footprint = layout.footprints.get(component.footprint_ref)
             if footprint is None or len(footprint.pins) != 2:
                 continue
-            placement_pads = {
-                str(pad.get("pin")): (
-                    float(pad["x_mm"]),
-                    float(pad["y_mm"]),
-                )
-                for pad in placement_data.get("pads", [])
-                if pad.get("pin") is not None
-                and pad.get("x_mm") is not None
-                and pad.get("y_mm") is not None
-            }
-            pin_world_exact_raw = [
-                placement_pads.get(pin_name) for pin_name in footprint.pins
-            ]
-            if any(pin_xy is None for pin_xy in pin_world_exact_raw):
-                continue
-            pin_world_exact: list[tuple[float, float]] = [
-                pin_xy for pin_xy in pin_world_exact_raw if pin_xy is not None
-            ]
+            pin_world_exact: list[tuple[float, float]] = []
+            for pin_name in footprint.pins:
+                endpoint = f"{comp_id}.{pin_name}"
+                xy = positions.get(endpoint)
+                if xy is None:
+                    pin_world_exact = []
+                    break
+                pin_world_exact.append(xy)
             if len(pin_world_exact) != 2:
                 continue
             (ax, ay), (bx, by) = pin_world_exact
@@ -1323,7 +1290,7 @@ def _render_pre_phase_svg(
                 uv_display_shift[comp_id] = (nx * delta, ny * delta)
 
         rendered_uv_components: set[str] = set()
-        for comp_id, uv in _iter_prea_uv_components(artifact).items():
+        for comp_id, uv in artifact.uv_components.items():
             component = layout.components.get(comp_id)
             if component is None or component.footprint_ref is None:
                 continue
@@ -1335,19 +1302,11 @@ def _render_pre_phase_svg(
                 for pin_name, net_name in component.pin_nets.items()
                 if net_name.strip().upper() == "GND"
             ]
-            placement_data = uv_placements_by_ref.get(comp_id, {})
-            pin_world: dict[str, tuple[float, float]] = {
-                str(pad["pin"]): (float(pad["x_mm"]), float(pad["y_mm"]))
-                for pad in placement_data.get("pads", [])
-                if pad.get("pin") is not None
-                and pad.get("x_mm") is not None
-                and pad.get("y_mm") is not None
-            }
-            if not pin_world:
-                for pin_name in footprint.pins:
-                    endpoint = f"{comp_id}.{pin_name}"
-                    if endpoint in positions:
-                        pin_world[pin_name] = positions[endpoint]
+            pin_world: dict[str, tuple[float, float]] = {}
+            for pin_name in footprint.pins:
+                endpoint = f"{comp_id}.{pin_name}"
+                if endpoint in positions:
+                    pin_world[pin_name] = positions[endpoint]
             if not pin_world:
                 continue
             shift_x, shift_y = uv_display_shift.get(comp_id, (0.0, 0.0))
@@ -2769,19 +2728,11 @@ def _persist_phase_artefacts(
     pre_a_svg = out_dir / f"{project}.preA.svg"
     templates = _load_junction_templates(layout_path=layout_path)
     branch_offset_u_tokens = _load_branch_offset_u_tokens(layout_path=layout_path)
-    pre_a_topology = _build_prea_topology_model(
-        result,
-        board_w=float(result.geometry.board.width),
-        board_h=float(result.geometry.board.height),
-        junction_templates=templates,
-        branch_offset_u_tokens=branch_offset_u_tokens,
-    )
     pre_positions, virtual_endpoints, pre_edge_overrides = _render_pre_phase_svg(
         result,
         pre_a_svg,
         templates=templates,
         branch_offset_u_tokens=branch_offset_u_tokens,
-        pre_a_topology=pre_a_topology,
         layout=layout,
         banner=_phase_banner(
             "Pre-A",
@@ -2810,32 +2761,20 @@ def _persist_phase_artefacts(
                         "target_length": edge.target_length,
                         "endpoint_positions_mm": {
                             endpoint: {
-                                "x": round(
-                                    pre_positions.get(endpoint, (0.0, 0.0))[0], 4
-                                ),
-                                "y": round(
-                                    pre_positions.get(endpoint, (0.0, 0.0))[1], 4
-                                ),
+                                "x": pre_positions.get(endpoint, (0.0, 0.0))[0],
+                                "y": pre_positions.get(endpoint, (0.0, 0.0))[1],
                                 "kind": _prea_endpoint_kind(result.artifact, endpoint),
                             }
                             for endpoint in edge.connections
                         },
                         "render_endpoint_positions_mm": {
                             endpoint: {
-                                "x": round(
-                                    pre_edge_overrides.get(edge.name, {}).get(
-                                        endpoint,
-                                        pre_positions.get(endpoint, (0.0, 0.0)),
-                                    )[0],
-                                    4,
-                                ),
-                                "y": round(
-                                    pre_edge_overrides.get(edge.name, {}).get(
-                                        endpoint,
-                                        pre_positions.get(endpoint, (0.0, 0.0)),
-                                    )[1],
-                                    4,
-                                ),
+                                "x": pre_edge_overrides.get(edge.name, {}).get(
+                                    endpoint, pre_positions.get(endpoint, (0.0, 0.0))
+                                )[0],
+                                "y": pre_edge_overrides.get(edge.name, {}).get(
+                                    endpoint, pre_positions.get(endpoint, (0.0, 0.0))
+                                )[1],
                             }
                             for endpoint in edge.connections
                         },
@@ -2984,9 +2923,7 @@ def _persist_phase_artefacts(
     logger.info("persist artefacts total: wall=%.2fs", time.perf_counter() - t_all)
 
     t_step = time.perf_counter()
-    viewer_path = _emit_viewer_bundle(
-        result, out_dir, layout=layout, pre_a_topology=pre_a_topology
-    )
+    viewer_path = _emit_viewer_bundle(result, out_dir, layout=layout)
     artefacts["viewer_bundle"] = viewer_path
     logger.info("persist viewer bundle: wall=%.2fs", time.perf_counter() - t_step)
 

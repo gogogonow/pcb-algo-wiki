@@ -116,8 +116,6 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
 
     pre_a_json = scratch_dir / "PA_Module_Simplified.preA.json"
     payload = json.loads(pre_a_json.read_text(encoding="utf-8"))
-    viewer_json = scratch_dir / "PA_Module_Simplified.viewer.json"
-    viewer_payload = json.loads(viewer_json.read_text(encoding="utf-8"))
     assert "yaml_geometric_constraints_applied" in payload
     assert any(
         item.get("edge_id") == "IC1_pin1_seg3"
@@ -126,24 +124,6 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     )
 
     by_edge = {edge["edge_id"]: edge for edge in payload["edges"]}
-    viewer_by_edge = {
-        edge["edge_id"]: edge for edge in viewer_payload["phases"]["preA"]["edges"]
-    }
-    assert {
-        "IC1_pin1_seg3",
-        "IC1_pin1_seg4",
-        "IC1_pin2_seg2",
-        "IC1_pin2_seg3",
-    }.issubset(viewer_by_edge)
-    for edge_id in ("IC1_pin1_seg3", "IC1_pin1_seg4", "IC1_pin2_seg2", "IC1_pin2_seg3"):
-        assert (
-            by_edge[edge_id]["render_endpoint_positions_mm"]
-            == viewer_by_edge[edge_id]["endpoint_positions_mm"]
-        )
-    assert {
-        placement["ref"]
-        for placement in viewer_payload["phases"]["preA"]["uv_placements"]
-    } >= {"C1", "R1", "C3", "C5", "C6"}
     # IC1_pin2_seg2 → C3.PIN_1, seg3 → C6.PIN_2 (no virtual stubs).
     # Old test checked y-separation > 1.5mm for junction nodes; now RLC PINs
     # are placed by UV adhesion and may be closer. Just verify non-overlap.
@@ -191,26 +171,42 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     assert seg4_end["x"] == pytest.approx(seg4_start["x"], abs=0.2)
     assert seg4_end["y"] < seg4_start["y"]
 
-    c1r1_from_seg4 = by_edge["IC1_pin1_seg4"]["render_endpoint_positions_mm"][
+    c1r1_to_combiner = by_edge["C1R1_to_combiner"]["render_endpoint_positions_mm"]
+    c1r1_pin2 = c1r1_to_combiner["C1.PIN_2,R1.PIN_2"]
+    seg5_start = c1r1_to_combiner["IC1_pin1_seg5_start_combiner"]
+    assert c1r1_pin2["x"] == pytest.approx(seg5_start["x"], abs=1e-6)
+    assert c1r1_pin2["y"] == pytest.approx(seg5_start["y"], abs=1e-6)
+    c1r1_from_seg4 = by_edge["IC1_pin1_seg4_to_C1R1"]["render_endpoint_positions_mm"][
         "C1.PIN_1,R1.PIN_1"
     ]
-    seg5_render = by_edge["IC1_pin1_seg5"]["render_endpoint_positions_mm"]
-    c1r1_pin2 = seg5_render["C1.PIN_2,R1.PIN_2"]
-    assert c1r1_pin2["x"] == pytest.approx(c1r1_from_seg4["x"], abs=0.15)
-    assert c1r1_pin2["y"] < c1r1_from_seg4["y"]
-    seg5_len = math.hypot(
-        seg5_render["C2.PIN_1"]["x"] - c1r1_pin2["x"],
-        seg5_render["C2.PIN_1"]["y"] - c1r1_pin2["y"],
+    # C1/R1 are two-pin passives; pin pitch should follow package scale, and
+    # the downstream trace endpoint should move to keep compact connectivity.
+    c1r1_span = math.hypot(
+        c1r1_pin2["x"] - c1r1_from_seg4["x"],
+        c1r1_pin2["y"] - c1r1_from_seg4["y"],
     )
-    assert seg5_len == pytest.approx(25.33, abs=0.8)
+    assert c1r1_span < 3.0
+    assert abs(c1r1_pin2["x"] - c1r1_from_seg4["x"]) > 1.0
+    assert abs(c1r1_pin2["y"] - c1r1_from_seg4["y"]) < 0.35
+    seg5_render = by_edge["IC1_pin1_seg5"]["render_endpoint_positions_mm"]
+    seg5_len = math.hypot(
+        seg5_render["C2.PIN_1"]["x"] - seg5_render["IC1_pin1_seg5_start_combiner"]["x"],
+        seg5_render["C2.PIN_1"]["y"] - seg5_render["IC1_pin1_seg5_start_combiner"]["y"],
+    )
+    assert seg5_len == pytest.approx(4.72, abs=0.35)
+    r3_seg4 = by_edge["IC1_pin2_seg4"]["render_endpoint_positions_mm"]
+    r3_chain = by_edge["R3_to_combiner"]["render_endpoint_positions_mm"]
+    assert abs(r3_chain["R3.PIN_2"]["x"] - r3_seg4["R3.PIN_1"]["x"]) > 0.8
     pin2_seg5 = by_edge["IC1_pin2_seg5"]["render_endpoint_positions_mm"]
-    pin2_seg5_start = pin2_seg5["R3.PIN_2"]
+    pin2_seg5_start = pin2_seg5["IC1_pin2_seg5_start_combiner"]
     c4_pin1 = pin2_seg5["C4.PIN_1"]
-    assert abs(c4_pin1["y"] - pin2_seg5_start["y"]) > 1.0
+    # If the final sink (TP5) is on board bottom, the seg5->seg6 chain should
+    # prefer a downward continuation instead of bending upward first.
+    assert c4_pin1["y"] < pin2_seg5_start["y"]
     pin1_seg4 = by_edge["IC1_pin1_seg4"]["render_endpoint_positions_mm"]
     pin2_seg6 = by_edge["IC1_pin2_seg6"]["render_endpoint_positions_mm"]
     seg4_a = pin1_seg4["IC1_pin1_seg1_universal_node"]
-    seg4_b = pin1_seg4["C1.PIN_1,R1.PIN_1"]
+    seg4_b = pin1_seg4["IC1_pin1_seg4_end_split_pad"]
     seg6_a = pin2_seg6["C4.PIN_2"]
     seg6_b = pin2_seg6["TP5.PIN_1"]
 
@@ -290,15 +286,10 @@ def test_render_pre_phase_svg_zero_length_edge_no_crash(
     )
     fake_result = SimpleNamespace(artifact=artifact)
 
-    def _fake_topology(*_args, **_kwargs):
-        return pcb_solve_v2.PreATopologyModel(
-            endpoint_positions={"A.P1": (5.0, 5.0), "N1": (5.0, 5.0)},
-            edge_endpoint_overrides={},
-            edges=[],
-            uv_placements=[],
-        )
+    def _fake_positions(*_args, **_kwargs):
+        return {"A.P1": (5.0, 5.0), "N1": (5.0, 5.0)}, {}
 
-    monkeypatch.setattr(pcb_solve_v2, "_build_prea_topology_model", _fake_topology)
+    monkeypatch.setattr(pcb_solve_v2, "_solve_pre_a_positions", _fake_positions)
     svg_path = scratch_dir / "zero_len.preA.svg"
 
     positions, virtual_endpoints, overrides = pcb_solve_v2._render_pre_phase_svg(
