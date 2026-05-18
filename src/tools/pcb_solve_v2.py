@@ -1927,15 +1927,15 @@ def _solve_pre_a_positions(
 ) -> tuple[dict[str, tuple[float, float]], dict[str, dict[str, tuple[float, float]]]]:
     """Relax endpoint positions to satisfy target-length proportions before routing.
 
-    若环境变量 ``PREA_PIPELINE=scene_split``，走 :mod:`solver.v2.prea_pipeline`
-    的场景化新流水线；否则保持 legacy 行为（默认）。
+    若环境变量 ``PREA_PIPELINE=legacy`` 则走旧版（保留作为安全回退）；
+    否则默认使用 :mod:`solver.v2.prea_pipeline` 的场景化新流水线.
     """
     import os
 
     artifact = result.artifact
     plan_xy = dict(result.phase_a.plan.endpoint_xy)
 
-    if os.environ.get("PREA_PIPELINE", "").lower() == "scene_split":
+    if os.environ.get("PREA_PIPELINE", "scene_split").lower() == "scene_split":
         from solver.v2.prea_pipeline import solve_prea_scene_split
 
         positions, edge_endpoint_overrides = solve_prea_scene_split(

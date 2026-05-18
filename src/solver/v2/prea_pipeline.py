@@ -52,22 +52,34 @@ def place_series_rlc_on_tree(
     positions: dict[str, tuple[float, float]],
     constrained: set[str],
     scene1_edges: set[str],
+    edge_endpoint_overrides: dict[str, dict[str, tuple[float, float]]] | None = None,
 ) -> set[str]:
-    """串联 RLC（两个 pin 都在固定微带线树上）的中点放置.
+    """串联 RLC（两 pin 都在固定微带线树上）按封装 pin pitch 锚定.
 
-    对每个串联 UV RLC：
-    - 找到两端的 microstrip 端点（两个 pin 对应的 endpoint id）
-    - 若两端坐标都已确定，则 RLC pin1/pin2 各置于"两端 + 沿向量 ±半 pitch"位置
-    - 否则跳过（由后续阶段处理）
+    上游 microstrip 末端（pin1）位置由 junction template / propagate 锁死，**不动**：
 
-    pitch 取自 footprint 的 pad 间距（通过 footprint_dims_mm 推算），若无则
-    使用 1.4mm 作为兜底（与 node_planner 一致）.
+    * ``A``  = ``overrides[upstream_edge][upstream_endpoint]``（或 ``positions``）
+    * 取 ``B`` 为下游 microstrip 远端（非 RLC 端）的位置
+    * ``dir = unit(B - A)``  → 下游走线方向
+    * ``pitch`` = 封装两 pad 中心距（``footprint_dims_mm`` 较长边 0.5；fallback=1.0mm）
+    * pin1 = A（保持）；pin2 = A + dir * pitch（沿下游方向偏移一个 pitch）
+
+    这样上游 microstrip 形状完全由 junction template 决定，串联 RLC 紧贴 pin1 摆放，
+    下游 microstrip 从 pin2 出发到原远端，长度按需调整.
     """
     edges = artifact.edges
     uv_components = artifact.uv_components
+    overrides = edge_endpoint_overrides if edge_endpoint_overrides is not None else {}
+
+    def _ep_pos(edge_name: str, ep: str) -> tuple[float, float] | None:
+        ov = overrides.get(edge_name, {})
+        if ep in ov:
+            return ov[ep]
+        return positions.get(ep)
 
     for comp_name, comp in uv_components.items():
-        pin_endpoints: dict[str, str] = {}
+        # comp_name → {pin → [(endpoint_id, edge_name)]}
+        pin_endpoints: dict[str, list[tuple[str, str]]] = {}
         for edge_name in scene1_edges:
             edge = edges.get(edge_name)
             if edge is None or len(edge.connections) != 2:
@@ -76,26 +88,64 @@ def place_series_rlc_on_tree(
                 for token in _split_endpoint_tokens(ep):
                     if token.startswith(f"{comp_name}."):
                         pin = token.split(".", 1)[1]
-                        pin_endpoints.setdefault(pin, ep)
+                        pin_endpoints.setdefault(pin, []).append((ep, edge_name))
         if len(pin_endpoints) < 2:
             continue
         pin_list = sorted(pin_endpoints.items())
-        ep_a = pin_endpoints[pin_list[0][0]]
-        ep_b = pin_endpoints[pin_list[1][0]]
-        if ep_a not in positions or ep_b not in positions:
+        eps_a = pin_endpoints[pin_list[0][0]]
+        eps_b = pin_endpoints[pin_list[1][0]]
+        if not eps_a or not eps_b:
             continue
-        ax, ay = positions[ep_a]
-        bx, by = positions[ep_b]
-        # 串联 RLC 方向 = 两端点向量；位置 = 两端点本身（边端点就是 pin）
-        # 因此只需把"该 pin 名 → 单端点字符串 token"也写入 positions 用于
-        # SVG 渲染（边端点是复合 token，单独 pin token 需要 sync）.
-        for pin, ep in pin_list:
-            full_token = f"{comp_name}.{pin}"
-            xy = positions[ep]
-            positions[full_token] = xy
-            constrained.add(full_token)
-        _ = (ax, ay, bx, by)  # 保留向量计算的可读性占位
+        ep_a_id, edge_a = eps_a[0]
+        ep_b_id, edge_b = eps_b[0]
+        pa = _ep_pos(edge_a, ep_a_id)
+        if pa is None:
+            continue
+        # B = 下游 microstrip 的远端（非 RLC 端）
+        downstream_edge = edges[edge_b]
+        far_end = next((c for c in downstream_edge.connections if c != ep_b_id), None)
+        pb = _ep_pos(edge_b, far_end) if far_end else None
+        if pb is None:
+            pb = _ep_pos(edge_b, ep_b_id)
+        if pb is None:
+            continue
+        ax, ay = pa
+        bx, by = pb
+        vx, vy = bx - ax, by - ay
+        n = math.hypot(vx, vy)
+        if n < 1e-9:
+            ux, uy = 1.0, 0.0
+        else:
+            ux, uy = vx / n, vy / n
+        pitch = _pin_pitch(comp)
+        pin1_xy = (ax, ay)
+        pin2_xy = (ax + ux * pitch, ay + uy * pitch)
+
+        for ep, edge_name in eps_a:
+            positions[ep] = pin1_xy
+            constrained.add(ep)
+            overrides.setdefault(edge_name, {})[ep] = pin1_xy
+        for ep, edge_name in eps_b:
+            positions[ep] = pin2_xy
+            constrained.add(ep)
+            overrides.setdefault(edge_name, {})[ep] = pin2_xy
+
+        full_pin1 = f"{comp_name}.{pin_list[0][0]}"
+        full_pin2 = f"{comp_name}.{pin_list[1][0]}"
+        positions[full_pin1] = pin1_xy
+        positions[full_pin2] = pin2_xy
+        constrained.add(full_pin1)
+        constrained.add(full_pin2)
     return constrained
+
+
+def _pin_pitch(comp: Any) -> float:
+    """封装两 pad 中心距估算：取 footprint 长边（0805≈1.75mm，0603≈1.6mm）；fallback=1.0mm."""
+    dims = getattr(comp, "footprint_dims_mm", None)
+    if dims:
+        w, h = dims
+        return max(w, h)
+    return 1.0
 
 
 def prelayout_floating_devices(
@@ -266,7 +316,7 @@ def solve_prea_scene_split(
 
     # Phase 4: 串联 RLC 中点放置.
     constrained = place_series_rlc_on_tree(
-        artifact, positions, constrained, scene1_edges
+        artifact, positions, constrained, scene1_edges, edge_endpoint_overrides
     )
 
     # Phase 5: 场景 3 极简预布局.

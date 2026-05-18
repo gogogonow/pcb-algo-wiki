@@ -225,3 +225,32 @@ _seed_fixed_positions(artifact)
 - 渲染层（SVG 样式、颜色、标签）不做结构性变更
 - PhaseA/B/C 路由器不受影响
 - 其他测试文件不做无关修改
+
+---
+
+## 9. 2026-05-18 进度更新（场景化重构）
+
+新增 `src/solver/v2/prea_pipeline.py`，按用户三场景定义重新组织 PreA 求解：
+
+| 场景 | 描述 | 实现 |
+|------|------|------|
+| 1 | 固定 IC pin 出来的微带线树 + 串联 RLC | 复用 `_seed_fixed_positions` → `_apply_junction_templates` → `_propagate_constrained_edges`；串联 RLC 锚定 pin1=上游 microstrip 末端，pin2 = pin1 + 下游方向 × 封装 pitch |
+| 2 | 与微带线并联的 shunt UV RLC | PreA 不输出位置，由 PhaseB UV 吸附处理；外层用 `plan_xy` 兜底保 SVG 不缺位 |
+| 3 | 浮动器件间微带线 | BFS 沿方向极简外推，间距=`target_length` 或封装包络+`default_clearance` |
+
+**接入**：`_solve_pre_a_positions` 默认走 scene_split；通过 `PREA_PIPELINE=legacy` 显式回退到旧逻辑（暂保留约 600 行 inline 逻辑作为安全网，下个迭代清理）。
+
+**配套实现**：
+- `classify_edges()`（`src/solver/v2/prea_scenes.py`）含串联 UV RLC 闭包传导，避免 shunt 误判
+- `_pin_pitch()` 用封装长边作为两 pad 中心距估算（0805≈1.75mm, 0603≈1.6mm）
+- 复合端点 token 同步：`"C1.PIN_1,R1.PIN_1"` → `C1.PIN_1` + `R1.PIN_1` 同坐标
+
+**验证**：
+- 14 个新单测（分类器 6 + 流水线 8）全过
+- 全量 pytest 仍是 baseline 6 个 pre-existing failure，**零新增回归**
+- `PREA_PIPELINE=scene_split` 端到端 rf_layout_simplified.yaml：FEASIBLE 13/14, UV 9/9
+
+**未完成**：
+- 删除 legacy inline 600 行（`prea-remove-legacy`，独立 PR）
+- 场景 3 在合成 fixture 上的更完整测试覆盖
+- SVG 快照对比与历史规格回归
