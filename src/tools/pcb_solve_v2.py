@@ -1925,9 +1925,35 @@ def _solve_pre_a_positions(
     junction_templates: dict[str, UniversalJunctionTemplate] | None = None,
     branch_offset_u_tokens: dict[str, str] | None = None,
 ) -> tuple[dict[str, tuple[float, float]], dict[str, dict[str, tuple[float, float]]]]:
-    """Relax endpoint positions to satisfy target-length proportions before routing."""
+    """Relax endpoint positions to satisfy target-length proportions before routing.
+
+    若环境变量 ``PREA_PIPELINE=scene_split``，走 :mod:`solver.v2.prea_pipeline`
+    的场景化新流水线；否则保持 legacy 行为（默认）。
+    """
+    import os
+
     artifact = result.artifact
     plan_xy = dict(result.phase_a.plan.endpoint_xy)
+
+    if os.environ.get("PREA_PIPELINE", "").lower() == "scene_split":
+        from solver.v2.prea_pipeline import solve_prea_scene_split
+
+        positions, edge_endpoint_overrides = solve_prea_scene_split(
+            artifact,
+            plan_xy,
+            board_w=board_w,
+            board_h=board_h,
+            junction_templates=junction_templates,
+            branch_offset_u_tokens=branch_offset_u_tokens,
+            seed_fixed_positions=_seed_fixed_positions,
+            apply_junction_templates=_apply_junction_templates,
+            propagate_constrained_edges=_propagate_constrained_edges,
+        )
+        # 场景 2 端点 fallback：未输出位置的 UV pin 沿用 plan_xy.
+        for ep, xy in plan_xy.items():
+            positions.setdefault(ep, (float(xy[0]), float(xy[1])))
+        return positions, edge_endpoint_overrides
+
     endpoints: set[str] = set()
     for edge in artifact.edges.values():
         endpoints.update(edge.connections)
