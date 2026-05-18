@@ -186,9 +186,6 @@ def test_main_writes_pre_phase_a_yaml_connectivity_svg(scratch_dir: Path) -> Non
     r3_seg4 = by_edge["IC1_pin2_seg4"]["render_endpoint_positions_mm"]
     r3_chain = by_edge["IC1_pin2_seg5"]["render_endpoint_positions_mm"]
     assert abs(r3_chain["R3.PIN_2"]["x"] - r3_seg4["R3.PIN_1"]["x"]) > 0.8
-    pin2_seg5 = by_edge["IC1_pin2_seg5"]["render_endpoint_positions_mm"]
-    c4_pin1 = pin2_seg5["C4.PIN_1"]
-    assert c4_pin1["x"] == pytest.approx(pin2_seg5["C4.PIN_1"]["x"], abs=1e-6)
     pin1_seg4 = by_edge["IC1_pin1_seg4"]["render_endpoint_positions_mm"]
     pin2_seg6 = by_edge["IC1_pin2_seg6"]["render_endpoint_positions_mm"]
     seg4_a = pin1_seg4["IC1_pin1_seg1_universal_node"]

@@ -1723,6 +1723,7 @@ def _apply_junction_templates(
     Mutates positions in-place.
     """
     edge_endpoint_overrides: dict[str, dict[str, tuple[float, float]]] = {}
+    _ = branch_offset_u_tokens
     if not templates:
         return constrained_endpoints, edge_endpoint_overrides
 
@@ -1761,84 +1762,24 @@ def _apply_junction_templates(
                     )
                     continue
                 ux, uy = ref_u
-                nx_left, ny_left = -uy, ux
                 theta = math.radians(float(branch.angle_deg))
-                bdx = ux * math.cos(theta) - uy * math.sin(theta)
-                bdy = ux * math.sin(theta) + uy * math.cos(theta)
-                token = (branch_offset_u_tokens or {}).get(branch.edge_id, "").strip()
+                cos_t = math.cos(theta)
+                sin_t = math.sin(theta)
+                bdx = ux * cos_t - uy * sin_t
+                bdy = ux * sin_t + uy * cos_t
                 branch_edge = artifact.edges.get(branch.edge_id)
-                ref_w = (
-                    float(ref_edge.width)
-                    if ref_edge is not None and ref_edge.width is not None
-                    else 0.0
+                anchor = _clamp_board(
+                    (
+                        nx
+                        + float(branch.offset_u) * bdx
+                        + float(branch.signed_v) * (-bdy),
+                        ny
+                        + float(branch.offset_u) * bdy
+                        + float(branch.signed_v) * bdx,
+                    ),
+                    board_w,
+                    board_h,
                 )
-                branch_w = (
-                    float(branch_edge.width)
-                    if branch_edge is not None and branch_edge.width is not None
-                    else 0.0
-                )
-                if branch.signed_v_kind.value == "edge_front" and token in (
-                    "align_left",
-                    "align_right",
-                    "align_center",
-                ):
-                    lateral = 0.0
-                    if token == "align_left":
-                        lateral = (ref_w - branch_w) / 2.0
-                    elif token == "align_right":
-                        lateral = -(ref_w - branch_w) / 2.0
-                    anchor = _clamp_board(
-                        (nx + lateral * nx_left, ny + lateral * ny_left),
-                        board_w,
-                        board_h,
-                    )
-                elif branch.signed_v_kind.value == "edge_front" and token:
-                    try:
-                        lateral = float(token)
-                    except ValueError:
-                        lateral = float(branch.offset_u)
-                    anchor = _clamp_board(
-                        (nx + lateral * nx_left, ny + lateral * ny_left),
-                        board_w,
-                        board_h,
-                    )
-                elif branch.signed_v_kind.value in ("edge_left", "edge_right"):
-                    # Side tangency: one edge of branch touches the reference
-                    # side edge. In butt-cap rendering, branch start x/y is
-                    # the branch side edge location, so lateral center offset
-                    # must be Wref/2 (independent of branch width).
-                    if ref_w > 0.0:
-                        side_gap = ref_w / 2.0
-                    else:
-                        side_gap = abs(float(branch.signed_v))
-                    side_sign = (
-                        1.0 if branch.signed_v_kind.value == "edge_left" else -1.0
-                    )
-                    anchor = _clamp_board(
-                        (
-                            nx
-                            + float(branch.offset_u) * ux
-                            + side_sign * side_gap * nx_left,
-                            ny
-                            + float(branch.offset_u) * uy
-                            + side_sign * side_gap * ny_left,
-                        ),
-                        board_w,
-                        board_h,
-                    )
-                else:
-                    anchor = _clamp_board(
-                        (
-                            nx
-                            + float(branch.offset_u) * ux
-                            + float(branch.signed_v) * nx_left,
-                            ny
-                            + float(branch.offset_u) * uy
-                            + float(branch.signed_v) * ny_left,
-                        ),
-                        board_w,
-                        board_h,
-                    )
                 branch_len = 1.0
                 if branch_edge is not None and branch_edge.target_length is not None:
                     branch_len = max(float(branch_edge.target_length), 0.1)
