@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -371,23 +372,51 @@ def _minimal_orchestrator_result_for_prea() -> OrchestratorV2Result:
     )
 
 
-def test_emit_viewer_bundle_prea_uses_prea_positions_not_skeleton_only(
-    tmp_path,
-) -> None:
+def _result_with_seg4_branch() -> OrchestratorV2Result:
     result = _minimal_orchestrator_result_for_prea()
+    seg4 = TriagedEdge(
+        name="seg4",
+        edge_type="microstrip",
+        routing_class="rf_constrained_locked",
+        target_length=1.1,
+        width=1.1,
+        connections=("N1", "R1.PIN_2"),
+        net="$N1",
+    )
+    artifact = replace(result.artifact, edges={**result.artifact.edges, "seg4": seg4})
+    return replace(result, artifact=artifact)
+
+
+def _result_without_uv_component_index() -> OrchestratorV2Result:
+    result = _minimal_orchestrator_result_for_prea()
+    artifact = replace(result.artifact, uv_components={})
+    return replace(result, artifact=artifact)
+
+
+def test_emit_viewer_bundle_prea_emits_all_microstrip_branches(tmp_path) -> None:
+    result = _result_with_seg4_branch()
     out = _emit_viewer_bundle(result, tmp_path)
     data = json.loads(out.read_text())
     prea_edges = {e["edge_id"]: e for e in data["phases"]["preA"]["edges"]}
-    # seg2/seg3 should still be drawable even though skeleton.final_endpoint_um
-    # only carries seg1 endpoints in this fixture.
-    assert set(prea_edges["seg2"]["endpoint_positions_mm"]) == {"N1", "R1.PIN_1"}
-    assert set(prea_edges["seg3"]["endpoint_positions_mm"]) == {"N1", "C1.PIN_1"}
+
+    assert {"seg1", "seg2", "seg3", "seg4"}.issubset(prea_edges)
+    for edge_id in ("seg1", "seg2", "seg3", "seg4"):
+        assert len(prea_edges[edge_id]["endpoint_positions_mm"]) == 2
+
+    branch_starts = {
+        (
+            prea_edges[edge_id]["endpoint_positions_mm"]["N1"]["x"],
+            prea_edges[edge_id]["endpoint_positions_mm"]["N1"]["y"],
+        )
+        for edge_id in ("seg2", "seg3", "seg4")
+    }
+    assert len(branch_starts) == 3
 
 
-def test_emit_viewer_bundle_prea_includes_uv_placements(tmp_path) -> None:
-    result = _minimal_orchestrator_result_for_prea()
+def test_emit_viewer_bundle_prea_has_uv_placements(tmp_path) -> None:
+    result = _result_without_uv_component_index()
     out = _emit_viewer_bundle(result, tmp_path)
     data = json.loads(out.read_text())
+
     placements = data["phases"]["preA"]["uv_placements"]
-    refs = {p["ref"] for p in placements}
-    assert refs == {"R1", "C1"}
+    assert {p["ref"] for p in placements} == {"R1", "C1"}
